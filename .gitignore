@@ -207,3 +207,9 @@ marimo/_lsp/
 __marimo__/
 _/
 venv/
+
+# Huge Folders to Ignore
+_
+_/
+venv/
+sortphotos/
