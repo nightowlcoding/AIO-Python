@@ -1,0 +1,5 @@
+Dining option,Orders,Net sales,Discount amount,Gross sales,Tax amount
+Take Out,8,160.83,90.35,251.18,13.28
+No Dining Option,343,16423.02,94.01,16517.03,1353.6
+Dine In,1,0,0,0,0
+Total,352,16583.85,184.36,16768.21,1366.88

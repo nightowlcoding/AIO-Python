@@ -1,0 +1,5 @@
+# Requirements for Inventory Control Web App
+flask
+flask-wtf
+wtforms
+pandas

@@ -1,0 +1,14 @@
+{
+  "employeeInfo": {
+    "firstName": "Isaac",
+    "lastName": "Pena",
+    "dateOfHire": "2025-11-20",
+    "id": 1763625144381.2092
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

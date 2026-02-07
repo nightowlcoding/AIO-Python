@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Select Company - Manager App{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-building text-primary" style="font-size: 3rem;"></i>
+                        <h2 class="mt-3">Select Company</h2>
+                        <p class="text-muted">Choose which company you want to manage</p>
+                    </div>
+                    
+                    <div class="row g-3">
+                        {% for company in companies %}
+                        <div class="col-md-6">
+                            <a href="{{ url_for('set_company', company_id=company.id) }}" 
+                               class="card h-100 text-decoration-none company-card">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-building-fill text-primary mb-3" style="font-size: 3rem;"></i>
+                                    <h4 class="card-title">{{ company.name }}</h4>
+                                    <p class="card-text">
+                                        <span class="badge bg-primary">{{ company.role }}</span>
+                                    </p>
+                                    {% if company.address %}
+                                    <p class="text-muted small mb-0">
+                                        <i class="bi bi-geo-alt"></i> {{ company.address }}
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <a href="{{ url_for('create_company') }}" class="btn btn-outline-primary">
+                            <i class="bi bi-plus-circle"></i> Create New Company
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.company-card {
+    transition: all 0.3s;
+    border: 2px solid transparent;
+}
+
+.company-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--bs-primary);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+</style>
+{% endblock %}

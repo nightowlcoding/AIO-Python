@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Take Daily Inventory</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container mt-5">
+    <h1 class="mb-4">Take Daily Inventory</h1>
+    <div class="mb-3">
+        <label for="descSearch" class="form-label">Search Description:</label>
+        <input type="text" id="descSearch" class="form-control" placeholder="Type to search descriptions..." autocomplete="off" onkeyup="filterDescriptions()">
+        <div id="descPredict" class="list-group position-absolute" style="z-index:10; display:none;"></div>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form id="inventoryForm" method="POST">
+        <div class="mb-3 d-flex gap-2 align-items-center">
+            <a href="/inventory_report" class="btn btn-outline-info">Inventory Report</a>
+            <label for="inventory_date" class="form-label mb-0">Inventory Date:</label>
+            <input type="date" id="inventory_date" name="inventory_date" class="form-control" style="width:auto;" value="{{ default_date }}" onchange="switchToGetAndSubmit()">
+            <button type="submit" class="btn btn-success" onclick="switchToPost()">Save Inventory</button>
+            <button type="button" class="btn btn-danger" onclick="confirmClearInputs()">Clear All</button>
+            <a href="/" class="btn btn-secondary">Back</a>
+            <a href="/print_inventory" class="btn btn-primary" target="_blank">Printable Sheet</a>
+        </div>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Group Name</th>
+                    <th>Description</th>
+                    <th>Size</th>
+                    <th>UPP</th>
+                    <th>Quantity On Hand</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in reference_items %}
+                <tr class="desc-row">
+                    <td>
+                        {% set group_val = '' %}
+                        {% if 'Group Name' in item %}
+                            {% set group_val = item['Group Name'] %}
+                        {% elif 'group_name' in item %}
+                            {% set group_val = item['group_name'] %}
+                        {% elif item.group_name is defined %}
+                            {% set group_val = item.group_name %}
+                        {% endif %}
+                        {% if group_val is string and (group_val == 'nan' or group_val == 'NaN') %}
+                        {% elif group_val is not none and group_val|string != 'nan' and group_val|string != 'NaN' %}
+                            {{ group_val }}
+                        {% endif %}
+                    </td>
+                    <td class="desc-cell">{{ (item.description or item['description'])[:20] }}</td>
+                    <td>{{ item.package_size or item['package_size'] }}</td>
+                    <td>
+                        {% if item.UPP is defined %}{{ item.UPP }}{% elif item['UPP'] is defined %}{{ item['UPP'] }}{% else %}-{% endif %}
+                    </td>
+                    <td>
+                        <input type="number" name="qty_{{ loop.index0 }}" class="form-control" step="any" placeholder="0.0" autocomplete="off"
+                        value="{% if loaded_inventory and loaded_inventory[loop.index0] %}{{ loaded_inventory[loop.index0]['quantity_on_hand'] }}{% endif %}">
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <script>
+        function confirmClearInputs() {
+            if (confirm('Are you sure you want to clear all quantities? This cannot be undone.')) {
+                clearAllInputs();
+            }
+        }
+        function clearAllInputs() {
+            const qtyInputs = document.querySelectorAll('input[type="number"][name^="qty_"]');
+            qtyInputs.forEach(input => {
+                input.value = '';
+            });
+        }
+        </script>
+    <script>
+    // Collect all descriptions for predictive text
+    const descriptions = Array.from(document.querySelectorAll('.desc-cell')).map(td => td.textContent.trim());
+    function filterDescriptions() {
+        const input = document.getElementById('descSearch');
+        const filter = input.value.toLowerCase();
+        const rows = document.querySelectorAll('.desc-row');
+        let matches = [];
+        rows.forEach(row => {
+            const desc = row.querySelector('.desc-cell').textContent.toLowerCase();
+            if (desc.includes(filter)) {
+                row.style.display = '';
+                if (filter && desc.startsWith(filter)) matches.push(row.querySelector('.desc-cell').textContent);
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        // Predictive dropdown
+        const predictBox = document.getElementById('descPredict');
+        predictBox.innerHTML = '';
+        if (filter && matches.length > 0) {
+            predictBox.style.display = 'block';
+            matches.slice(0, 8).forEach(match => {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'list-group-item list-group-item-action';
+                item.textContent = match;
+                item.onclick = () => {
+                    input.value = match;
+                    filterDescriptions();
+                    predictBox.style.display = 'none';
+                };
+                predictBox.appendChild(item);
+            });
+        } else {
+            predictBox.style.display = 'none';
+        }
+    }
+    // Hide predictive box on click outside
+    document.addEventListener('click', function(e) {
+        if (!document.getElementById('descSearch').contains(e.target) && !document.getElementById('descPredict').contains(e.target)) {
+            document.getElementById('descPredict').style.display = 'none';
+        }
+    });
+    </script>
+
+        {% if loaded_inventory %}
+        <div class="mt-4">
+            <h5>Last Loaded Inventory ({{ loaded_date }})</h5>
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Package Size</th>
+                        <th>UPP</th>
+                        <th>Quantity On Hand</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for row in loaded_inventory %}
+                    <tr>
+                        <td>{{ row.description }}</td>
+                        <td>{{ row.package_size }}</td>
+                        <td>{% if row.UPP is defined %}{{ row.UPP }}{% elif row['UPP'] is defined %}{{ row['UPP'] }}{% else %}-{% endif %}</td>
+                        <td>{{ row.quantity_on_hand }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        </table>
+    </form>
+    <script>
+    function switchToGetAndSubmit() {
+        var form = document.getElementById('inventoryForm');
+        form.method = 'GET';
+        form.submit();
+    }
+    function switchToPost() {
+        var form = document.getElementById('inventoryForm');
+        form.method = 'POST';
+    }
+    </script>
+    <script>
+    function switchToGetAndSubmit() {
+        var form = document.getElementById('inventoryForm');
+        form.method = 'GET';
+        form.submit();
+    }
+    function switchToPost() {
+        var form = document.getElementById('inventoryForm');
+        form.method = 'POST';
+    }
+    </script>
+</div>
+</body>
+</html>

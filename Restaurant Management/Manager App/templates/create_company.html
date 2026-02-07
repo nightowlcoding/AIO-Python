@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Create Company - Manager App{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-building-add text-primary" style="font-size: 3rem;"></i>
+                        <h2 class="mt-3">Create New Company</h2>
+                        <p class="text-muted">Set up your restaurant or business</p>
+                    </div>
+                    
+                    <form method="POST" action="{{ url_for('create_company') }}">
+                        <h4 class="mb-3"><i class="bi bi-building"></i> Company Information</h4>
+                        
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Company Name *</label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   placeholder="My Restaurant" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Company Phone *</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" 
+                                   placeholder="(555) 123-4567" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Company Email</label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   placeholder="contact@myrestaurant.com">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="website" class="form-label">Company Website</label>
+                            <input type="url" class="form-control" id="website" name="website" 
+                                   placeholder="https://www.myrestaurant.com">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Company Address</label>
+                            <input type="text" class="form-control" id="address" name="address" 
+                                   placeholder="123 Main St, City, State ZIP">
+                        </div>
+                        
+                        <hr class="my-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0"><i class="bi bi-geo-alt"></i> Locations</h4>
+                            <button type="button" class="btn btn-success btn-sm" onclick="addNewLocation()">
+                                <i class="bi bi-plus-circle"></i> Add Location
+                            </button>
+                        </div>
+                        
+                        <!-- Locations List -->
+                        <div id="locationsList" class="mb-3">
+                            <!-- Locations will be added here -->
+                        </div>
+                        
+                        <!-- Hidden inputs for locations data -->
+                        <input type="hidden" name="locations_data" id="locations_data">
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Note:</strong> You will be set as the Business Administrator with full access. Each location will have its own daily logs, employees, and reports.
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100" onclick="return submitForm()">
+                            <i class="bi bi-plus-circle"></i> Create Company & Locations
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let locations = [];
+let editingIndex = null;
+
+function addNewLocation() {
+    // Show add/edit form
+    const html = `
+        <div class="card mb-3 border-success">
+            <div class="card-body">
+                <h6 class="text-success mb-3"><i class="bi bi-geo-alt-fill"></i> ${editingIndex !== null ? 'Edit' : 'New'} Location</h6>
+                <div class="mb-2">
+                    <label class="form-label">Location Name *</label>
+                    <input type="text" class="form-control" id="new_location_name" placeholder="Downtown Location" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Address</label>
+                    <input type="text" class="form-control" id="new_location_address" placeholder="123 Main St">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Phone</label>
+                    <input type="tel" class="form-control" id="new_location_phone" placeholder="(555) 123-4567">
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="saveLocation()">
+                        <i class="bi bi-check-circle"></i> Save
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="cancelLocation()">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('locationsList').innerHTML = renderLocations() + html;
+    
+    // If editing, populate fields
+    if (editingIndex !== null) {
+        const loc = locations[editingIndex];
+        document.getElementById('new_location_name').value = loc.name;
+        document.getElementById('new_location_address').value = loc.address || '';
+        document.getElementById('new_location_phone').value = loc.phone || '';
+    }
+}
+
+function saveLocation() {
+    const name = document.getElementById('new_location_name').value.trim();
+    const address = document.getElementById('new_location_address').value.trim();
+    const phone = document.getElementById('new_location_phone').value.trim();
+    
+    if (!name) {
+        alert('Location name is required');
+        return;
+    }
+    
+    const location = { name, address, phone };
+    
+    if (editingIndex !== null) {
+        locations[editingIndex] = location;
+        editingIndex = null;
+    } else {
+        locations.push(location);
+    }
+    
+    renderLocations();
+    document.getElementById('locationsList').innerHTML = renderLocations();
+}
+
+function cancelLocation() {
+    editingIndex = null;
+    document.getElementById('locationsList').innerHTML = renderLocations();
+}
+
+function editLocation(index) {
+    editingIndex = index;
+    addNewLocation();
+}
+
+function deleteLocation(index) {
+    if (confirm('Are you sure you want to remove this location?')) {
+        locations.splice(index, 1);
+        document.getElementById('locationsList').innerHTML = renderLocations();
+    }
+}
+
+function renderLocations() {
+    if (locations.length === 0) {
+        return `
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>No locations added yet.</strong> Click "Add Location" to create your first location.
+            </div>
+        `;
+    }
+    
+    return locations.map((loc, index) => `
+        <div class="card mb-2">
+            <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1"><i class="bi bi-geo-alt-fill text-primary"></i> ${loc.name}</h6>
+                        ${loc.address ? `<small class="text-muted d-block"><i class="bi bi-house"></i> ${loc.address}</small>` : ''}
+                        ${loc.phone ? `<small class="text-muted d-block"><i class="bi bi-telephone"></i> ${loc.phone}</small>` : ''}
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-primary" onclick="editLocation(${index})" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" onclick="deleteLocation(${index})" title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function submitForm() {
+    if (locations.length === 0) {
+        alert('Please add at least one location before creating the company.');
+        return false;
+    }
+    
+    // Store locations data in hidden input
+    document.getElementById('locations_data').value = JSON.stringify(locations);
+    return true;
+}
+
+// Initialize with empty state
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('locationsList').innerHTML = renderLocations();
+});
+</script>
+
+{% endblock %}

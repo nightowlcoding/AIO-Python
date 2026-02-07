@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome - Manager App{% endblock %}
+
+{% block content %}
+<div class="landing-page">
+    <!-- Hero Section -->
+    <section class="hero bg-primary text-white text-center py-5">
+        <div class="container">
+            <h1 class="display-3 fw-bold mb-4">
+                <i class="bi bi-shop"></i> Manager App
+            </h1>
+            <p class="lead fs-3 mb-4">Professional Restaurant Management System</p>
+            <p class="fs-5 mb-5">Streamline operations, manage cash flow, and grow your business</p>
+            <div class="d-flex gap-3 justify-content-center">
+                <a href="{{ url_for('register') }}" class="btn btn-light btn-lg px-5">
+                    <i class="bi bi-person-plus"></i> Get Started Free
+                </a>
+                <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg px-5">
+                    <i class="bi bi-box-arrow-in-right"></i> Login
+                </a>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Features Section -->
+    <section class="features py-5">
+        <div class="container">
+            <h2 class="text-center mb-5 fw-bold">Everything You Need to Manage Your Restaurant</h2>
+            
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="feature-card card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="feature-icon text-primary mb-3">
+                                <i class="bi bi-calendar-check" style="font-size: 3rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold">Daily Operations Log</h3>
+                            <p class="text-muted">Track daily sales, expenses, and employee hours in one place.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="feature-card card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="feature-icon text-success mb-3">
+                                <i class="bi bi-cash-stack" style="font-size: 3rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold">Cash Management</h3>
+                            <p class="text-muted">Monitor cash flow, deposits, and reconcile daily transactions.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="feature-card card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="feature-icon text-info mb-3">
+                                <i class="bi bi-people" style="font-size: 3rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold">Employee Management</h3>
+                            <p class="text-muted">Manage schedules, track performance, and handle payroll efficiently.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="feature-card card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="feature-icon text-warning mb-3">
+                                <i class="bi bi-graph-up" style="font-size: 3rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold">Reports & Analytics</h3>
+                            <p class="text-muted">Generate insights with detailed reports and visualizations.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="feature-card card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="feature-icon text-danger mb-3">
+                                <i class="bi bi-building" style="font-size: 3rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold">Multi-Location Support</h3>
+                            <p class="text-muted">Manage multiple restaurants from one central dashboard.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="feature-card card h-100 shadow-sm">
+                        <div class="card-body text-center">
+                            <div class="feature-icon text-primary mb-3">
+                                <i class="bi bi-shield-check" style="font-size: 3rem;"></i>
+                            </div>
+                            <h3 class="h5 fw-bold">Enterprise Security</h3>
+                            <p class="text-muted">Bank-grade encryption and GDPR-compliant data protection.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Security Features -->
+    <section class="security bg-light py-5">
+        <div class="container">
+            <h2 class="text-center mb-5 fw-bold">Built with Security in Mind</h2>
+            
+            <div class="row">
+                <div class="col-md-3 text-center mb-4">
+                    <i class="bi bi-lock-fill text-primary" style="font-size: 2.5rem;"></i>
+                    <h4 class="h6 mt-3">PBKDF2 Encryption</h4>
+                    <p class="small text-muted">100,000 iterations</p>
+                </div>
+                <div class="col-md-3 text-center mb-4">
+                    <i class="bi bi-clock-fill text-success" style="font-size: 2.5rem;"></i>
+                    <h4 class="h6 mt-3">Session Timeout</h4>
+                    <p class="small text-muted">30-minute inactivity</p>
+                </div>
+                <div class="col-md-3 text-center mb-4">
+                    <i class="bi bi-shield-fill-check text-info" style="font-size: 2.5rem;"></i>
+                    <h4 class="h6 mt-3">Account Lockout</h4>
+                    <p class="small text-muted">After 5 failed attempts</p>
+                </div>
+                <div class="col-md-3 text-center mb-4">
+                    <i class="bi bi-file-earmark-check text-warning" style="font-size: 2.5rem;"></i>
+                    <h4 class="h6 mt-3">GDPR Compliant</h4>
+                    <p class="small text-muted">Full data control</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- CTA Section -->
+    <section class="cta bg-primary text-white text-center py-5">
+        <div class="container">
+            <h2 class="mb-4">Ready to Transform Your Restaurant Management?</h2>
+            <p class="lead mb-4">Join hundreds of restaurants already using Manager App</p>
+            <a href="{{ url_for('register') }}" class="btn btn-light btn-lg px-5">
+                <i class="bi bi-rocket-takeoff"></i> Start Your Free Trial
+            </a>
+        </div>
+    </section>
+</div>
+
+<style>
+.hero {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+}
+
+.feature-card {
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+}
+
+.landing-page {
+    padding-bottom: 0;
+}
+</style>
+{% endblock %}

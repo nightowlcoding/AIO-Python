@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Dashboard</h2>
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card text-white bg-success mb-3">
+            <div class="card-header">Today's Sales</div>
+            <div class="card-body">
+                <h1 class="card-title">${{ "%.2f"|format(sales) }}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Daily Operations</h5>
+                <a href="{{ url_for('operations.daily_log') }}" class="btn btn-primary">Enter Daily Log</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

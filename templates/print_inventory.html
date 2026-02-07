@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Printable Inventory Sheet</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        @media print {
+            body { background: white !important; }
+            .no-print { display: none !important; }
+            .print-table th, .print-table td {
+                font-size: 10px !important;
+                padding: 2px 2px !important;
+                word-break: break-word;
+            }
+            .print-table {
+                page-break-inside: avoid;
+                width: 100%;
+                table-layout: fixed;
+            }
+            /* Force #, UPP, and blank columns to 0.25in (about 18px) for print */
+            .print-table th:nth-child(1), .print-table td:nth-child(1),
+            .print-table th:nth-child(3), .print-table td:nth-child(3),
+            .print-table th:nth-child(4), .print-table td:nth-child(4),
+            .print-table th:nth-child(5), .print-table td:nth-child(5),
+            .print-table th:nth-child(6), .print-table td:nth-child(6),
+            .print-table th:nth-child(7), .print-table td:nth-child(7) {
+                width: 0.25in !important;
+                min-width: 0.25in !important;
+                max-width: 0.25in !important;
+                overflow: hidden;
+            }
+            /* Description column minimum width for readability */
+            .print-table th:nth-child(2), .print-table td:nth-child(2) {
+                width: auto !important;
+                min-width: 2.2in !important;
+                max-width: 6in;
+                white-space: normal;
+            }
+            @page {
+                size: 8.5in 11in;
+                margin: 0.5cm;
+            }
+        }
+        /* Also force for screen preview */
+        .print-table th:nth-child(1), .print-table td:nth-child(1),
+        .print-table th:nth-child(3), .print-table td:nth-child(3),
+        .print-table th:nth-child(4), .print-table td:nth-child(4),
+        .print-table th:nth-child(5), .print-table td:nth-child(5),
+        .print-table th:nth-child(6), .print-table td:nth-child(6),
+        .print-table th:nth-child(7), .print-table td:nth-child(7) {
+            width: 0.25in !important;
+            min-width: 0.25in !important;
+            max-width: 0.25in !important;
+            overflow: hidden;
+        }
+        .print-table th, .print-table td {
+            font-size: 10px;
+            padding: 2px 2px;
+        }
+        .print-table {
+            width: 100%;
+            margin-bottom: 1rem;
+            table-layout: fixed;
+        }
+        .print-header { text-align: center; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+<div class="container mt-4">
+    <div class="print-header">
+        <h2>Printable Daily Inventory Sheet</h2>
+        <p>Date: {{ date }}</p>
+    </div>
+    <table class="table table-bordered print-table">
+        <thead>
+            <tr>
+                <th style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;">#</th>
+                <th style="width: 0.75in;in;white-space:normal;">Description</th>
+                <th style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;">UPP</th>
+                <th style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></th>
+                <th style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></th>
+                <th style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></th>
+                <th style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in reference_items %}
+            <tr>
+                <td style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;">{{ loop.index }}</td>
+                <td style="width:0.75in;white-space:normal;">{{ (item.description or item['description'])[:40] }}</td>
+                <td style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;">{% if item.UPP is defined %}{{ item.UPP }}{% elif item['UPP'] is defined %}{{ item['UPP'] }}{% else %}-{% endif %}</td>
+                <td style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></td>
+                <td style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></td>
+                <td style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></td>
+                <td style="width:0.25in;min-width:0.25in;max-width:0.25in;padding:0!important;overflow:hidden;text-overflow:clip!important;"></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <div class="no-print mt-3">
+        <button class="btn btn-primary" onclick="window.print()">Print</button>
+        <a href="/take_inventory" class="btn btn-secondary">Back</a>
+    </div>
+</div>
+</body>
+</html>
+app.run(host='0.0.0.0', port=5000, debug=True)

@@ -1,0 +1,118 @@
+    <a href="{{ url_for('take_inventory') }}" class="btn btn-primary mb-3">Take Daily Inventory</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Control System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container mt-5">
+            <div class="mb-3">
+                <a href="{{ url_for('order_results') }}" class="btn btn-info">Show Order Results</a>
+            </div>
+        <div class="mb-3">
+            <a href="{{ url_for('merge_usfoodorders') }}" class="btn btn-warning">Merge & Download US Foods Orders</a>
+        </div>
+    <h1 class="mb-4">Inventory Control System</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <div class="row">
+        <div class="col-md-6">
+            <h3>Manual Entry</h3>
+            <form method="POST">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ form.product.label(class="form-label") }}
+                    {{ form.product(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.package_size.label(class="form-label") }}
+                    {{ form.package_size(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.brand.label(class="form-label") }}
+                    {{ form.brand(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.cost.label(class="form-label") }}
+                    {{ form.cost(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.item_number.label(class="form-label") }}
+                    {{ form.item_number(class="form-control") }}
+                </div>
+                <div class="mb-3">
+                    {{ form.quantity.label(class="form-label") }}
+                    {{ form.quantity(class="form-control") }}
+                </div>
+                {{ form.submit(class="btn btn-primary") }}
+            </form>
+        </div>
+        <div class="col-md-6">
+            <h3>Import from CSV</h3>
+            <form method="POST" enctype="multipart/form-data">
+                {{ csv_form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ csv_form.file.label(class="form-label") }}
+                    {{ csv_form.file(class="form-control") }}
+                </div>
+                {{ csv_form.submit(class="btn btn-success") }}
+            </form>
+        </div>
+    </div>
+    <hr>
+    <h3>Current Inventory</h3>
+    <form method="POST" action="/save_reference_inventory" style="display:inline;">
+        {% if can_save %}
+        <button type="submit" class="btn btn-warning mb-2">Save as Reference Inventory</button>
+        {% endif %}
+    </form>
+    <form method="POST" action="/load_reference_inventory" style="display:inline;">
+        <button type="submit" class="btn btn-info mb-2">Load Reference Inventory for Daily Use</button>
+    </form>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Item Number</th>
+                <th>Description</th>
+                <th>Size</th>
+                <th>Brand</th>
+                <th>Group Name</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in inventory %}
+            <tr>
+                <td>{{ item.item_number or item['item_number'] }}</td>
+                <td>{{ (item.description or item['description'])[:20] }}</td>
+                <td>{{ item.package_size or item['package_size'] }}</td>
+                <td>{{ (item.brand or item['brand'])[:10] }}</td>
+                                <td>
+                                    {% if 'Group Name' in item %}
+                                        {{ item['Group Name'] }}
+                                    {% elif 'group_name' in item %}
+                                        {{ item['group_name'] }}
+                                    {% elif item.group_name is defined %}
+                                        {{ item.group_name }}
+                                    {% else %}
+                    
+                                    {% endif %}
+                                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

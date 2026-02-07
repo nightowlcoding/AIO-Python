@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Locations - {{ company.name }} - Manager App{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="bi bi-geo-alt"></i> Locations</h1>
+                    <p class="text-muted">Manage your company's locations</p>
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addLocationModal">
+                    <i class="bi bi-plus-circle"></i> Add Location
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {% if locations %}
+    <div class="row">
+        {% for location in locations %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-geo-alt-fill text-primary"></i> {{ location.name }}
+                        </h5>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#editLocationModal{{ location.id }}">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#deleteLocationModal{{ location.id }}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="location-details">
+                        {% if location.address %}
+                        <p class="mb-2">
+                            <i class="bi bi-house"></i> 
+                            <small>{{ location.address }}</small>
+                        </p>
+                        {% endif %}
+                        
+                        {% if location.phone %}
+                        <p class="mb-2">
+                            <i class="bi bi-telephone"></i> 
+                            <small>{{ location.phone }}</small>
+                        </p>
+                        {% endif %}
+                        
+                        {% if location.manager_name %}
+                        <p class="mb-2">
+                            <i class="bi bi-person-badge"></i> 
+                            <small><strong>Manager:</strong> {{ location.manager_name }}</small>
+                        </p>
+                        {% else %}
+                        <p class="mb-2">
+                            <i class="bi bi-person-badge"></i> 
+                            <small class="text-muted">No manager assigned</small>
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Location Modal -->
+        <div class="modal fade" id="editLocationModal{{ location.id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form method="POST" action="{{ url_for('edit_location', location_id=location.id) }}">
+                        <div class="modal-header">
+                            <h5 class="modal-title"><i class="bi bi-pencil"></i> Edit Location</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Location Name *</label>
+                                <input type="text" class="form-control" name="name" 
+                                       value="{{ location.name }}" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Address</label>
+                                <input type="text" class="form-control" name="address" 
+                                       value="{{ location.address or '' }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Phone</label>
+                                <input type="tel" class="form-control" name="phone" 
+                                       value="{{ location.phone or '' }}">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Manager</label>
+                                <select class="form-select" name="manager_user_id">
+                                    <option value="">No manager assigned</option>
+                                    {% for user in users %}
+                                    <option value="{{ user.id }}" 
+                                            {% if location.manager_user_id == user.id %}selected{% endif %}>
+                                        {{ user.full_name or user.username }} ({{ user.role }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle"></i> Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Location Modal -->
+        <div class="modal fade" id="deleteLocationModal{{ location.id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form method="POST" action="{{ url_for('delete_location', location_id=location.id) }}">
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Confirm Deletion</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Are you sure you want to deactivate the location <strong>"{{ location.name }}"</strong>?</p>
+                            <p class="text-muted small">This will not delete the location's data but will hide it from the active locations list.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-trash"></i> Deactivate Location
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        <strong>No locations yet.</strong> Click "Add Location" to create your first location.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add Location Modal -->
+<div class="modal fade" id="addLocationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('add_location') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Add New Location</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Location Name *</label>
+                        <input type="text" class="form-control" name="name" 
+                               placeholder="e.g., Downtown, North Location" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <input type="text" class="form-control" name="address" 
+                               placeholder="123 Main St, City, State ZIP">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" name="phone" 
+                               placeholder="(555) 123-4567">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Manager</label>
+                        <select class="form-select" name="manager_user_id">
+                            <option value="">No manager assigned</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">
+                                {{ user.full_name or user.username }} ({{ user.role }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Add Location
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.location-details {
+    margin-top: 15px;
+}
+
+.location-details p {
+    display: flex;
+    align-items: start;
+    gap: 8px;
+}
+
+.card {
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+</style>
+{% endblock %}

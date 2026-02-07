@@ -1,0 +1,7 @@
+deepface
+retina-face
+opencv-python
+matplotlib
+numpy
+pillow
+tensorflow

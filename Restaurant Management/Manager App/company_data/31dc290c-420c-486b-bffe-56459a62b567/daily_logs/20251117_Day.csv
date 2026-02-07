@@ -1,0 +1,40 @@
+Date,2025-11-17
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Clarissa Cantu,Day,Dining,15.14,31,-15.86,123.28,245.69,0,53.82,422.79,0,0,0,404.54,0
+Kassidy Pena,Day,Dining,0,78,-78,78.47,463.41,0,0,541.88,0,0,0,500.54,0
+Michaela Mireles,Day,Bar,296.55,64.47,232.08,205.56,102.87,0,0,308.43,33,9.8,0,516.05,0
+Nevaeh Solis,Day,Dining,161.04,51.62,109.41999999999999,189.73,152.17,0,0,341.9,0,24.75,0,439.86,0
+Victoria Cavazos,Day,Dining,90.73,82.75,7.980000000000004,230.93,263.3,0,0,494.23,29,0,0,511.38,0
+Noah Robledo,Night,Dining,156.93,35,121.93,161.21,81.41,0,0,242.62,30.7,34,0,304.42,0
+Lainey Pickard,Night,Bar,86.26,56,30.260000000000005,319.11,184.84,0,0,503.95000000000005,207.4,75,0,262.88,0
+Alejandro Gonzalez,Night,Dining,21.37,46.67,-25.3,108.29,86.32,0,0,194.61,4,0,0,195.52,0
+Elena Escudero,Night,Dining,42.18,67.83,-25.65,552.06,30.83,121.75,0,704.64,105.25,31.9,0,552.9,6.75
+Katie Arnold,Night,Dining,118.99,126,-7.010000000000005,507.79,148.13,0,0,655.9200000000001,74.5,10.75,0,630.76,8.75
+Isaac Pena,Night,Dining,10,47.39,-37.39,152.67,205.03,144.42,0,502.12,39.5,9.75,0,423.82,15.99
+David Barraza,Night,Bar,24.9,71.34,-46.440000000000005,276.42,214.99,26.76,0,518.1700000000001,128.25,145.85,0,227.64,0
+
+Cash Drawer Count
+Pennies,0.0
+Nickels,0.0
+Dimes,0.0
+Quarters,0.0
+Ones,0.0
+Fives,0.0
+Tens,0.0
+Twenties,0.0
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,0
+
+Cash Deductions
+gas,circle k ,90
+roll napkin,Walmart,25.11
+
+Deposit Summary
+Total Deductions,115.11
+Cash in Drawer,0
+DEPOSIT AMOUNT,0

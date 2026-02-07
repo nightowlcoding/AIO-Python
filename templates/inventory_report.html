@@ -1,0 +1,102 @@
+    {% if report %}
+        <details class="mb-3">
+            <summary>Debug: Reference Items</summary>
+            <pre>{{ reference_items }}</pre>
+        </details>
+        <details class="mb-3">
+            <summary>Debug: Daily Inventories</summary>
+            {% for inv in report.inventories %}
+                <strong>{{ inv.date }}</strong>
+                <pre>{{ inv.data }}</pre>
+            {% endfor %}
+        </details>
+    {% endif %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Report</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container mt-5">
+    <h1 class="mb-4">Inventory Report</h1>
+    <form method="POST" class="mb-4">
+        <div class="row g-3 align-items-center">
+            <div class="col-auto">
+                <label for="begin_date" class="col-form-label">Beginning Date:</label>
+            </div>
+            <div class="col-auto">
+                <input type="date" id="begin_date" name="begin_date" class="form-control" value="{{ begin_date or '' }}">
+            </div>
+            <div class="col-auto">
+                <label for="end_date" class="col-form-label">Ending Date:</label>
+            </div>
+            <div class="col-auto">
+                <input type="date" id="end_date" name="end_date" class="form-control" value="{{ end_date or '' }}">
+            </div>
+            <div class="col-auto d-flex align-items-center gap-2">
+                <button type="submit" class="btn btn-primary">Generate Report</button>
+                <a href="/" class="btn btn-secondary">Back to Home</a>
+            </div>
+        </div>
+    </form>
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    {% if report %}
+        <table class="table table-bordered table-sm">
+            <thead>
+                <tr>
+                    <th>Item Number</th>
+                    <th>Description</th>
+                    <th>Package Size</th>
+                    <th>UPP</th>
+                    {% for inv in report.inventories %}
+                        <th>{{ inv.date }}</th>
+                    {% endfor %}
+                    <th>Quantity Ordered</th>
+                    <th>3rd Party</th>
+                    <th>Usage</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for ref in reference_items %}
+                <tr>
+                    <td>{% if ref.item_number is defined %}{{ ref.item_number }}{% elif ref['item_number'] is defined %}{{ ref['item_number'] }}{% else %}-{% endif %}</td>
+                    <td>{{ ref.description }}</td>
+                    <td>{{ ref.package_size }}</td>
+                    <td>{% if ref.UPP is defined %}{{ ref.UPP }}{% elif ref['UPP'] is defined %}{{ ref['UPP'] }}{% else %}-{% endif %}</td>
+                    {% for inv in report.inventories %}
+                        {% set ns = namespace(qty=None) %}
+                        {% for row in inv.data %}
+                            {% set row_desc = (row.description | lower | trim) if row.description is defined else (row.get('description', '') | lower | trim) %}
+                            {% set ref_desc = ref.description | lower | trim %}
+                            {% if row_desc == ref_desc %}
+                                {% set ns.qty = row.quantity_on_hand %}
+                            {% endif %}
+                        {% endfor %}
+                        <td>{% if ns.qty is not none %}{{ ns.qty }}{% else %}-{% endif %}</td>
+                    {% endfor %}
+                    <td>
+                        {% set item_num = ref.item_number if ref.item_number is defined else ref['item_number'] if ref['item_number'] is defined else None %}
+                        {{ report.item_number_to_qty[item_num|string] if item_num and report.item_number_to_qty[item_num|string] is defined else '' }}
+                    </td>
+                    <td>
+                        {% set item_num = ref.item_number if ref.item_number is defined else ref['item_number'] if ref['item_number'] is defined else None %}
+                        <input type="number" step="any" min="0" name="third_party_{{ item_num }}" value="{{ report.third_party[item_num|string] if report.third_party and item_num and report.third_party[item_num|string] is defined else '' }}" class="form-control" style="width: 100px;">
+                    </td>
+                    <td>
+                        {% set item_num = ref.item_number if ref.item_number is defined else ref['item_number'] if ref['item_number'] is defined else None %}
+                        {{ '%.2f' % report.usage_dict[item_num|string] if item_num and report.usage_dict[item_num|string] is defined else '' }}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+    <!-- Option buttons moved to top -->
+</div>
+</body>
+</html>

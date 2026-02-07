@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Saved Order Invoices</h2>
+    {% if invoices %}
+    <ul class="list-group mt-3">
+        {% for invoice in invoices %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            {{ invoice }}
+            <a href="{{ url_for('download_order_invoice', filename=invoice) }}" class="btn btn-primary btn-sm">Download</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No saved order invoices found.</p>
+    {% endif %}
+</div>
+{% endblock %}

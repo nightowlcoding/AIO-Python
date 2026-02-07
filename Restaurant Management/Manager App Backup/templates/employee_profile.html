@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Employee Profile</h2>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h4 class="card-title">{{ employee.employeeInfo.firstName }} {{ employee.employeeInfo.lastName }}</h4>
+      <p><strong>Date of Hire:</strong> {{ employee.employeeInfo.dateOfHire }}</p>
+      <p><strong>ID:</strong> {{ employee.employeeInfo.id }}</p>
+    </div>
+  </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>Certifications</h5>
+      <ul>
+        <li><strong>TABC:</strong> {{ employee.certifications.TABC or 'N/A' }}</li>
+        <li><strong>Food Handlers:</strong> {{ employee.certifications.FoodHandlers or 'N/A' }}</li>
+        {% for cert in employee.certifications.Other %}
+        <li><strong>Other:</strong> {{ cert }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>Disciplinary Reports</h5>
+      {% if employee.disciplinaryReports %}
+        <ul>
+        {% for report in employee.disciplinaryReports %}
+          <li>{{ report }}</li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <p>No reports.</p>
+      {% endif %}
+    </div>
+  </div>
+  <a href="{{ url_for('employees') }}" class="btn btn-secondary">Back to Employees</a>
+</div>
+{% endblock %}

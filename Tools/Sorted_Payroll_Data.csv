@@ -1,0 +1,36 @@
+Employee,Job Title,Regular Hours,Overtime Hours,Declared Tips,Non-Cash Tips,Total Tips
+Abigail Vidal,Server,4.68,0.0,,114.22,114.22
+Alexis Bratten,Server,17.21,0.0,,151.86,151.86
+Alexis Silva,Server,5.13,0.0,,86.85,86.85
+Alysha Ramirez,Bartender,24.51,0.0,,294.9,294.9
+April Salinas,Bartender,25.05,0.0,,246.31,246.31
+April Salinas,Manager,13.24,0.0,,187.49,187.49
+Arnold Ramirez,General Manager,0.0,0.0,0.0,0.0,0.0
+Christopher Fernandez,Kitchen,39.98,0.0,,0.0,0.0
+Corando Trevino Jr.,Kitchen,40.0,2.73,,0.0,0.0
+David Barraza,Manager,26.090000000000003,0.0,0.0,0.0,0.0
+David Cantu,Kitchen,40.0,9.93,,0.0,0.0
+Destiny Pena,Bartender,14.04,0.0,,229.92,229.92
+Destiny Pena,Server,9.65,0.0,,170.94,170.94
+Erika Ortiz,Server,6.48,0.0,,54.11,54.11
+Genoveva Ann Salinas,Server,5.72,0.0,,54.35,54.35
+Jailyn Carabajal,Server,27.69,0.0,,380.0,380.0
+Johnathan Salinas,Kitchen,40.0,5.91,,0.0,0.0
+Lori Chavez,Server,13.16,0.0,,53.94,53.94
+Luis Mata,Kitchen,40.0,7.29,,0.0,0.0
+Madison Hernandez,Host,15.8,0.0,,17.5,17.5
+Maria Cortez,Server,13.78,0.0,,192.65,192.65
+Melanie Padron,Server,34.9,0.0,,364.4,364.4
+Michael Vasquez,Kitchen,40.0,7.390000000000001,,0.0,0.0
+Rebecca Otero,Server,13.56,0.0,,85.91,85.91
+Rebecca Otero,Bartender,4.58,0.0,,37.44,37.44
+Regeana Rochester,Server,6.65,0.0,,57.74,57.74
+Saleigh Ramos,Server,13.35,0.0,,142.73,142.73
+Samantha Ozuna,Bartender,6.85,0.0,,174.86,174.86
+Shelbie Ramos,Bartender,12.47,0.0,,359.3,359.3
+Victor Moreno,Director of Catering,0.0,0.0,0.0,0.0,0.0
+Total,587.82,554.57,33.25,0.0,3457.42,3457.42
+Kitchen Totals,46.48,239.98,33.25,0.0,0.0,0.0
+Server Totals,29.25,171.96,0.0,0.0,1909.6999999999998,1909.6999999999998
+Host Totals, 2.69,15.8,0.0,0.0,17.5,17.5
+Bar Totals,14.89,87.5,0.0,0.0,1342.73,1342.73

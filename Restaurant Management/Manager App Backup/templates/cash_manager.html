@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}Cash Manager - Manager App{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-cash-stack"></i> Cash Manager</h1>
+        <div>
+            <input type="date" id="dateSelector" class="form-control" value="{{ date }}" 
+                   onchange="window.location.href='{{ url_for('cash_manager') }}?date=' + this.value + '&tab={{ active_tab }}'">
+        </div>
+    </div>
+    
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'drawer' %}active{% endif %}" 
+               href="{{ url_for('cash_manager', date=date, tab='drawer') }}">
+                <i class="bi bi-cash"></i> Cash Drawer
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'deductions' %}active{% endif %}" 
+               href="{{ url_for('cash_manager', date=date, tab='deductions') }}">
+                <i class="bi bi-receipt"></i> Deductions
+            </a>
+        </li>
+    </ul>
+    
+    <!-- Cash Drawer Tab -->
+    {% if active_tab == 'drawer' %}
+    <form method="POST" action="{{ url_for('cash_manager') }}" id="cashDrawerForm">
+        <input type="hidden" name="action" value="save_drawer">
+        <input type="hidden" name="date" value="{{ date }}">
+        
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Shift Selection</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="shift" id="shiftDay" value="Day" checked>
+                            <label class="form-check-label" for="shiftDay">Day Shift</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="shift" id="shiftNight" value="Night">
+                            <label class="form-check-label" for="shiftNight">Night Shift</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-coin"></i> Coins</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">Pennies ($0.01)</label>
+                                <input type="number" class="form-control denomination" name="pennies" 
+                                       data-value="0.01" value="{{ drawer_data.pennies }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Nickels ($0.05)</label>
+                                <input type="number" class="form-control denomination" name="nickels" 
+                                       data-value="0.05" value="{{ drawer_data.nickels }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Dimes ($0.10)</label>
+                                <input type="number" class="form-control denomination" name="dimes" 
+                                       data-value="0.10" value="{{ drawer_data.dimes }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Quarters ($0.25)</label>
+                                <input type="number" class="form-control denomination" name="quarters" 
+                                       data-value="0.25" value="{{ drawer_data.quarters }}" onchange="calculateDrawerTotal()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Bills</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label">$1 Bills</label>
+                                <input type="number" class="form-control denomination" name="ones" 
+                                       data-value="1" value="{{ drawer_data.ones }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">$5 Bills</label>
+                                <input type="number" class="form-control denomination" name="fives" 
+                                       data-value="5" value="{{ drawer_data.fives }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">$10 Bills</label>
+                                <input type="number" class="form-control denomination" name="tens" 
+                                       data-value="10" value="{{ drawer_data.tens }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">$20 Bills</label>
+                                <input type="number" class="form-control denomination" name="twenties" 
+                                       data-value="20" value="{{ drawer_data.twenties }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">$50 Bills</label>
+                                <input type="number" class="form-control denomination" name="fifties" 
+                                       data-value="50" value="{{ drawer_data.fifties }}" onchange="calculateDrawerTotal()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">$100 Bills</label>
+                                <input type="number" class="form-control denomination" name="hundreds" 
+                                       data-value="100" value="{{ drawer_data.hundreds }}" onchange="calculateDrawerTotal()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-4 bg-primary text-white">
+                    <div class="card-body text-center">
+                        <h3 class="mb-0">Total: $<span id="drawerTotal">0.00</span></h3>
+                        <input type="hidden" name="total" id="drawerTotalInput" value="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi bi-save"></i> Save Count
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-lg" onclick="clearDrawer()">
+                <i class="bi bi-x-circle"></i> Clear
+            </button>
+            <button type="button" class="btn btn-outline-info btn-lg" onclick="window.print()">
+                <i class="bi bi-printer"></i> Print
+            </button>
+        </div>
+    </form>
+    {% endif %}
+    
+    <!-- Deductions Tab -->
+    {% if active_tab == 'deductions' %}
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Add Deduction</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('cash_manager') }}">
+                        <input type="hidden" name="action" value="save_deduction">
+                        <input type="hidden" name="date" value="{{ date }}">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <input type="text" class="form-control" name="description" 
+                                   placeholder="e.g., Paid out delivery" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Amount</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" name="amount" 
+                                       step="0.01" placeholder="0.00" required>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="bi bi-plus-circle"></i> Add Deduction
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0"><i class="bi bi-list"></i> Deductions List</h5>
+                </div>
+                <div class="card-body">
+                    {% if deductions %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th>Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for deduction in deductions %}
+                                    <tr>
+                                        <td>{{ deduction.description }}</td>
+                                        <td>${{ deduction.amount }}</td>
+                                        <td>
+                                            <form method="POST" action="{{ url_for('cash_manager') }}" style="display:inline;">
+                                                <input type="hidden" name="action" value="delete_deduction">
+                                                <input type="hidden" name="deduction_id" value="{{ deduction.id }}">
+                                                <input type="hidden" name="date" value="{{ date }}">
+                                                <button type="submit" class="btn btn-sm btn-danger" 
+                                                        onclick="return confirm('Delete this deduction?')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="fw-bold">
+                                        <td>Total Deductions:</td>
+                                        <td colspan="2">
+                                            ${{ deductions | sum(attribute='amount') | float | round(2) }}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center">No deductions for this date</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function calculateDrawerTotal() {
+    let total = 0;
+    document.querySelectorAll('.denomination').forEach(input => {
+        const count = parseFloat(input.value) || 0;
+        const value = parseFloat(input.dataset.value);
+        total += count * value;
+    });
+    
+    document.getElementById('drawerTotal').textContent = total.toFixed(2);
+    document.getElementById('drawerTotalInput').value = total.toFixed(2);
+}
+
+function clearDrawer() {
+    if (confirm('Clear all counts?')) {
+        document.querySelectorAll('.denomination').forEach(input => {
+            input.value = 0;
+        });
+        calculateDrawerTotal();
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    calculateDrawerTotal();
+});
+</script>
+
+<style>
+@media print {
+    .btn, .nav-tabs, .card-header { display: none !important; }
+    .card { border: 1px solid #000 !important; }
+}
+</style>
+{% endblock %}
+

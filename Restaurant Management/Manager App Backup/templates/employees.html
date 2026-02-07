@@ -1,0 +1,672 @@
+{% extends "base.html" %}
+
+{% block title %}Employees - Manager App{% endblock %}
+
+{% block content %}
+<script>
+    window.currentCompanyId = "{{ current_user.current_company_id }}";
+</script>
+<div class="container-fluid">
+    <h1 class="mb-4"><i class="bi bi-people"></i> Employee Management</h1>
+    
+    <!-- Employee Roster Dropdown Button -->
+    <div class="mb-4">
+        <div class="dropdown">
+            <button class="btn btn-primary btn-lg dropdown-toggle" type="button" id="employeeRosterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-list-ul"></i> Employee Roster
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="employeeRosterDropdown">
+                <li>
+                    <a class="dropdown-item" href="#" onclick="showEmployeeSection(); return false;">
+                        <i class="bi bi-person"></i> Employee
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="showImportSection(); return false;">
+                        <i class="bi bi-upload"></i> Import Employees
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="showRemoveSection(); return false;">
+                        <i class="bi bi-trash"></i> Remove Employees
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Employee Section -->
+    <div id="employeeSection" class="card mb-4" style="display: none;">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-person"></i> Employee List</h5>
+        </div>
+        <div class="card-body">
+            <!-- Quick Add Employee Form -->
+            <div class="card mb-3 border-success">
+                <div class="card-header bg-success bg-opacity-10">
+                    <h6 class="mb-0 text-success"><i class="bi bi-plus-circle"></i> Quick Add Employee</h6>
+                </div>
+                <div class="card-body">
+                    <form id="quickAddForm" onsubmit="addEmployee(event)">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label for="firstName" class="form-label">First Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="firstName" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="lastName" class="form-label">Last Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="lastName" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="dateOfHire" class="form-label">Date of Hire <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="dateOfHire" required>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-plus-lg"></i> Add Employee
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="clearQuickAddForm()">
+                                <i class="bi bi-x-lg"></i> Clear
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Employee List Table -->
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">
+                        <i class="bi bi-list-ul"></i> Employees 
+                        <span class="badge bg-primary" id="employeeCount">0</span>
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>First Name</th>
+                                    <th>Last Name</th>
+                                    <th>Date of Hire</th>
+                                    <th>Days Employed</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        No employees added yet. Use the Quick Add form above to get started.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import Employees Section -->
+    <div id="importSection" class="card mb-4" style="display: none;">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-upload"></i> Import Employees</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Import employees from CSV or Excel file. The file should contain columns for First Name, Last Name, and Date of Hire.</p>
+            
+            <div class="card border-primary mb-3">
+                <div class="card-header bg-primary bg-opacity-10">
+                    <h6 class="mb-0 text-primary"><i class="bi bi-file-earmark-arrow-up"></i> Upload File</h6>
+                </div>
+                <div class="card-body">
+                    <form id="importForm" onsubmit="importEmployees(event)">
+                        <div class="mb-3">
+                            <label for="employeeFile" class="form-label">Select CSV or Excel File</label>
+                            <input type="file" class="form-control" id="employeeFile" accept=".csv,.xlsx,.xls" required>
+                            <div class="form-text">Accepted formats: CSV, Excel (.xlsx, .xls)</div>
+                        </div>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-upload"></i> Import Employees
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                <strong>Expected File Format:</strong><br>
+                The file should contain columns with headers like: <code>First Name</code>, <code>Last Name</code>, <code>Date of Hire</code> (or similar variations).<br>
+                Duplicate names will be automatically skipped.
+            </div>
+
+            <div id="importResults" style="display: none;" class="alert alert-success">
+                <i class="bi bi-check-circle"></i>
+                <span id="importMessage"></span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Remove Employees Section -->
+    <div id="removeSection" class="card mb-4" style="display: none;">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-trash"></i> Removed Employees 
+                <span class="badge bg-light text-dark" id="removedEmployeeCount">0</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">View and restore previously removed employees.</p>
+            
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>First Name</th>
+                                    <th>Last Name</th>
+                                    <th>Date of Hire</th>
+                                    <th>Removed Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="removedEmployeeTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        No removed employees.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Employee list storage
+let employees = [];
+let removedEmployees = [];
+
+// Load from localStorage on startup
+try {
+    const stored = localStorage.getItem('employees');
+    if (stored) {
+        employees = JSON.parse(stored);
+        console.log('Loaded', employees.length, 'employees from localStorage');
+    }
+    
+    const storedRemoved = localStorage.getItem('removedEmployees');
+    if (storedRemoved) {
+        removedEmployees = JSON.parse(storedRemoved);
+        console.log('Loaded', removedEmployees.length, 'removed employees from localStorage');
+    }
+} catch (e) {
+    console.error('Error loading from localStorage:', e);
+}
+
+function showEmployeeSection() {
+    document.getElementById('employeeSection').style.display = 'block';
+    document.getElementById('importSection').style.display = 'none';
+    document.getElementById('removeSection').style.display = 'none';
+}
+
+function showImportSection() {
+    document.getElementById('employeeSection').style.display = 'none';
+    document.getElementById('importSection').style.display = 'block';
+    document.getElementById('removeSection').style.display = 'none';
+}
+
+function showRemoveSection() {
+    document.getElementById('employeeSection').style.display = 'none';
+    document.getElementById('importSection').style.display = 'none';
+    document.getElementById('removeSection').style.display = 'block';
+    updateRemovedEmployeeTable();
+}
+
+function addEmployee(event) {
+    event.preventDefault();
+    
+    const firstName = document.getElementById('firstName').value.trim();
+    const lastName = document.getElementById('lastName').value.trim();
+    const dateOfHire = document.getElementById('dateOfHire').value;
+    
+    if (!firstName || !lastName || !dateOfHire) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    // Check for duplicates
+    if (isDuplicate(firstName, lastName)) {
+        alert(`Employee ${firstName} ${lastName} already exists in the list.`);
+        return;
+    }
+    
+    const employee = {
+        id: Date.now(),
+        firstName: firstName,
+        lastName: lastName,
+        dateOfHire: dateOfHire
+    };
+    
+    employees.push(employee);
+    updateEmployeeTable();
+    saveAllData();
+    clearQuickAddForm();
+    
+    // Show success message
+    showToast('Success!', `${firstName} ${lastName} has been added to the employee list.`, 'success');
+}
+
+function clearQuickAddForm() {
+    document.getElementById('quickAddForm').reset();
+    document.getElementById('firstName').focus();
+}
+
+function updateEmployeeTable() {
+    const tbody = document.getElementById('employeeTableBody');
+    const countBadge = document.getElementById('employeeCount');
+    
+    countBadge.textContent = employees.length;
+    
+    if (employees.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    No employees added yet. Use the Quick Add form above to get started.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = employees.map((emp, index) => {
+        const daysEmployed = calculateDaysEmployed(emp.dateOfHire);
+        const companyId = window.currentCompanyId || '';
+        const empFileName = `${escapeHtml(emp.firstName)}_${escapeHtml(emp.lastName)}.json`;
+        const profileUrl = `/employee/${companyId}/${empFileName}`;
+        return `
+            <tr class="employee-row" style="cursor:pointer" onclick="window.open('${profileUrl}', '_blank')">
+                <td>${index + 1}</td>
+                <td>${escapeHtml(emp.firstName)}</td>
+                <td>${escapeHtml(emp.lastName)}</td>
+                <td>${emp.dateOfHire}</td>
+                <td>${daysEmployed} days</td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="window.open('${profileUrl}', '_blank'); event.stopPropagation();">View Profile</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function deleteEmployee(id) {
+    const employee = employees.find(emp => emp.id === id);
+    if (employee && confirm(`Are you sure you want to remove ${employee.firstName} ${employee.lastName} from the active list?`)) {
+        // Remove from active employees
+        employees = employees.filter(emp => emp.id !== id);
+        
+        // Add to removed employees with removal date
+        employee.removedDate = new Date().toISOString().split('T')[0];
+        removedEmployees.push(employee);
+        
+        // Update displays and save
+        updateEmployeeTable();
+        updateRemovedEmployeeTable();
+        saveAllData();
+        
+        showToast('Removed', `${employee.firstName} ${employee.lastName} has been moved to removed employees.`, 'warning');
+    }
+}
+
+function restoreEmployee(id) {
+    const employee = removedEmployees.find(emp => emp.id === id);
+    if (employee && confirm(`Restore ${employee.firstName} ${employee.lastName} to active employees?`)) {
+        // Remove from removed list
+        removedEmployees = removedEmployees.filter(emp => emp.id !== id);
+        
+        // Remove the removedDate property
+        delete employee.removedDate;
+        
+        // Add back to active employees
+        employees.push(employee);
+        
+        // Update displays and save
+        updateEmployeeTable();
+        updateRemovedEmployeeTable();
+        saveAllData();
+        
+        showToast('Restored', `${employee.firstName} ${employee.lastName} has been restored to active employees.`, 'success');
+    }
+}
+
+function permanentlyDeleteEmployee(id) {
+    const employee = removedEmployees.find(emp => emp.id === id);
+    if (employee && confirm(`Permanently delete ${employee.firstName} ${employee.lastName}? This cannot be undone.`)) {
+        removedEmployees = removedEmployees.filter(emp => emp.id !== id);
+        updateRemovedEmployeeTable();
+        saveAllData();
+        showToast('Deleted', 'Employee has been permanently deleted.', 'warning');
+    }
+}
+
+function updateRemovedEmployeeTable() {
+    const tbody = document.getElementById('removedEmployeeTableBody');
+    const countBadge = document.getElementById('removedEmployeeCount');
+    
+    countBadge.textContent = removedEmployees.length;
+    
+    if (removedEmployees.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    No removed employees.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = removedEmployees.map((emp, index) => {
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${escapeHtml(emp.firstName)}</td>
+                <td>${escapeHtml(emp.lastName)}</td>
+                <td>${emp.dateOfHire}</td>
+                <td>${emp.removedDate || 'N/A'}</td>
+                <td>
+                    <button class="btn btn-sm btn-success me-1" onclick="restoreEmployee(${emp.id})" title="Restore to active">
+                        <i class="bi bi-arrow-counterclockwise"></i> Restore
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="permanentlyDeleteEmployee(${emp.id})" title="Delete permanently">
+                        <i class="bi bi-trash-fill"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function calculateDaysEmployed(hireDate) {
+    const hire = new Date(hireDate);
+    const today = new Date();
+    const diffTime = Math.abs(today - hire);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(title, message, type) {
+    // Simple toast notification
+    const alertClass = type === 'success' ? 'alert-success' : type === 'warning' ? 'alert-warning' : 'alert-info';
+    const toast = document.createElement('div');
+    toast.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <strong>${title}</strong> ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function isDuplicate(firstName, lastName) {
+    return employees.some(emp => 
+        emp.firstName.toLowerCase() === firstName.toLowerCase() && 
+        emp.lastName.toLowerCase() === lastName.toLowerCase()
+    );
+}
+
+function importEmployees(event) {
+    event.preventDefault();
+    
+    const fileInput = document.getElementById('employeeFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file to import');
+        return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        const data = e.target.result;
+        let importedEmployees = [];
+        
+        if (file.name.endsWith('.csv')) {
+            importedEmployees = parseCSV(data);
+        } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+            // For Excel files, we need to send to backend
+            importExcelFile(file);
+            return;
+        }
+        
+        processImportedEmployees(importedEmployees);
+    };
+    
+    if (file.name.endsWith('.csv')) {
+        reader.readAsText(file);
+    }
+}
+
+function parseCSV(data) {
+    const lines = data.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    
+    // Find column indices
+    const firstNameIdx = headers.findIndex(h => 
+        h.includes('first') && h.includes('name') || h === 'firstname'
+    );
+    const lastNameIdx = headers.findIndex(h => 
+        h.includes('last') && h.includes('name') || h === 'lastname'
+    );
+    const dateOfHireIdx = headers.findIndex(h => 
+        h.includes('date') && h.includes('hire') || h.includes('hire') || h.includes('start')
+    );
+    
+    if (firstNameIdx === -1 || lastNameIdx === -1) {
+        alert('Could not find First Name or Last Name columns in the CSV file');
+        return [];
+    }
+    
+    const importedEmployees = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        
+        if (values.length > Math.max(firstNameIdx, lastNameIdx)) {
+            const firstName = values[firstNameIdx];
+            const lastName = values[lastNameIdx];
+            let dateOfHire = dateOfHireIdx !== -1 ? values[dateOfHireIdx] : new Date().toISOString().split('T')[0];
+            
+            // Try to parse date if it's in a different format
+            if (dateOfHire && !dateOfHire.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                const parsedDate = new Date(dateOfHire);
+                if (!isNaN(parsedDate.getTime())) {
+                    dateOfHire = parsedDate.toISOString().split('T')[0];
+                } else {
+                    dateOfHire = new Date().toISOString().split('T')[0];
+                }
+            }
+            
+            if (firstName && lastName) {
+                importedEmployees.push({
+                    firstName: firstName,
+                    lastName: lastName,
+                    dateOfHire: dateOfHire
+                });
+            }
+        }
+    }
+    
+    return importedEmployees;
+}
+
+function importExcelFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    fetch('/api/import-employees', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            processImportedEmployees(data.employees);
+        } else {
+            alert('Error importing Excel file: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error importing file. Please try again.');
+    });
+}
+
+function processImportedEmployees(importedEmployees) {
+    let added = 0;
+    let duplicates = 0;
+    
+    importedEmployees.forEach(emp => {
+        if (!isDuplicate(emp.firstName, emp.lastName)) {
+            employees.push({
+                id: Date.now() + Math.random(),
+                firstName: emp.firstName,
+                lastName: emp.lastName,
+                dateOfHire: emp.dateOfHire
+            });
+            added++;
+        } else {
+            duplicates++;
+        }
+    });
+    
+    updateEmployeeTable();
+    saveAllData();
+    
+    // Show results
+    const resultsDiv = document.getElementById('importResults');
+    const messageSpan = document.getElementById('importMessage');
+    
+    let message = `<strong>Import Complete!</strong><br>`;
+    message += `${added} employee(s) added successfully.`;
+    if (duplicates > 0) {
+        message += `<br>${duplicates} duplicate(s) skipped.`;
+    }
+    
+    messageSpan.innerHTML = message;
+    resultsDiv.style.display = 'block';
+    resultsDiv.className = added > 0 ? 'alert alert-success' : 'alert alert-warning';
+    
+    // Reset form
+    document.getElementById('importForm').reset();
+    
+    // Hide results after 5 seconds
+    setTimeout(() => {
+        resultsDiv.style.display = 'none';
+    }, 5000);
+    
+    showToast('Import Complete', `${added} employees added, ${duplicates} duplicates skipped`, 'success');
+}
+
+// Save all data (employees and removed employees)
+function saveAllData() {
+    // Save to localStorage immediately
+    try {
+        localStorage.setItem('employees', JSON.stringify(employees));
+        localStorage.setItem('removedEmployees', JSON.stringify(removedEmployees));
+        console.log('Auto-saved:', employees.length, 'active and', removedEmployees.length, 'removed employees');
+    } catch (e) {
+        console.error('Error saving to localStorage:', e);
+    }
+    
+    // Also save to backend
+    fetch('/api/save-employees', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            employees: employees,
+            removedEmployees: removedEmployees
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Saved to backend successfully');
+        } else {
+            console.error('Error saving to backend:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving to backend:', error);
+    });
+}
+
+// Backward compatibility
+function saveEmployeesToBackend() {
+    saveAllData();
+}
+
+// Load employees from backend on page load
+function loadEmployeesFromBackend() {
+    fetch('/api/employee-names')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.employees && data.employees.length > 0) {
+                    employees = data.employees;
+                    localStorage.setItem('employees', JSON.stringify(employees));
+                    console.log('Loaded', employees.length, 'employees from backend');
+                }
+                if (data.removedEmployees && data.removedEmployees.length > 0) {
+                    removedEmployees = data.removedEmployees;
+                    localStorage.setItem('removedEmployees', JSON.stringify(removedEmployees));
+                    console.log('Loaded', removedEmployees.length, 'removed employees from backend');
+                }
+                updateEmployeeTable();
+                updateRemovedEmployeeTable();
+            } else {
+                console.log('No employees in backend, using localStorage data');
+                updateEmployeeTable();
+                updateRemovedEmployeeTable();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading employees from backend:', error);
+            // Use localStorage data if backend fails
+            updateEmployeeTable();
+            updateRemovedEmployeeTable();
+        });
+}
+
+// Set today's date as default for hire date
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('dateOfHire').value = today;
+    
+    // Load existing employees
+    loadEmployeesFromBackend();
+    
+    // Update removed employee table
+    updateRemovedEmployeeTable();
+});
+</script>
+{% endblock %}
