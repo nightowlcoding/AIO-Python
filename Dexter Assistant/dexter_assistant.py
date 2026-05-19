@@ -8,6 +8,8 @@ import sys
 import threading
 import time
 import webbrowser
+from datetime import datetime
+from functools import wraps
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
@@ -15,12 +17,15 @@ from urllib.parse import urljoin
 from urllib.request import urlopen
 
 import requests
-from flask import Flask, Response, jsonify, redirect, render_template_string, request, send_file
+from flask import Flask, Response, jsonify, redirect, render_template_string, request, send_file, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "dexter_assistant_config.json"
 RUNTIME_LOG_DIR = ROOT / "runtime_logs"
 FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
+AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
+SESSION_USER_KEY = "dexter_user"
 
 
 DASHBOARD_HTML = """
@@ -130,6 +135,7 @@ DASHBOARD_HTML = """
       <button class="primary" onclick="act('/api/start-all')">Start All</button>
       <button class="warning" onclick="act('/api/stop-all')">Stop All</button>
       <button onclick="refreshState()">Refresh</button>
+            <a class="btn" href="/auth/logout">Logout</a>
     </div>
     <div id="grid" class="grid"></div>
     <div class="footer">Front door: {{ host }}:{{ port }}</div>
@@ -292,6 +298,7 @@ PORTAL_HOME_HTML = """
             <a href="/admin">Admin</a>
             <button class="primary" onclick="act('/api/start-all')">Start All</button>
             <button class="danger" onclick="act('/api/stop-all')">Stop All</button>
+            <a href="/auth/logout">Logout</a>
         </div>
     </div>
     <div class="wrap">
@@ -406,6 +413,7 @@ PORTAL_APP_HTML = """
             <a href="/portal/ic3">Inventory Control 3</a>
             <a href="/admin">Admin</a>
             <button class="primary" onclick="restart()">Restart This App</button>
+            <a href="/auth/logout">Logout</a>
         </div>
     </div>
     <div class="subbar">
@@ -429,9 +437,130 @@ PORTAL_APP_HTML = """
 """
 
 
+LOGIN_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dexter Assistant Login</title>
+    <style>
+        :root { --bg:#eef3ea; --panel:#fff; --ink:#1f2a1f; --muted:#5f6a60; --edge:#d7dfd3; --brand:#0f766e; --danger:#991b1b; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: "Segoe UI", "Trebuchet MS", sans-serif; color: var(--ink); background: var(--bg); }
+        .wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+        .card { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; padding: 20px; box-shadow: 0 10px 26px rgba(33, 48, 33, 0.08); }
+        h1 { margin: 0 0 8px; font-size: 28px; }
+        p { margin: 0 0 18px; color: var(--muted); }
+        label { display: block; margin: 10px 0 6px; font-size: 14px; }
+        input { width: 100%; padding: 10px 12px; border: 1px solid #c7d2c4; border-radius: 10px; font-size: 14px; }
+        button { margin-top: 14px; width: 100%; border: 1px solid #0b645e; background: var(--brand); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; }
+        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
+        .links { margin-top: 12px; font-size: 13px; color: var(--muted); }
+        .links a { color: #0b5a56; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <form class="card" method="post" action="{{ action_url }}">
+            <h1>Dexter Assistant</h1>
+            <p>Sign in to access app controls and protected routes.</p>
+            <label>Username</label>
+            <input type="text" name="username" required autofocus />
+            <label>Password</label>
+            <input type="password" name="password" required />
+            <button type="submit">Sign In</button>
+            {% if error %}<div class="error">{{ error }}</div>{% endif %}
+            <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a></div>
+        </form>
+    </div>
+</body>
+</html>
+"""
+
+
+REGISTER_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dexter Assistant Register</title>
+    <style>
+        :root { --bg:#eef3ea; --panel:#fff; --ink:#1f2a1f; --muted:#5f6a60; --edge:#d7dfd3; --brand:#166534; --danger:#991b1b; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: "Segoe UI", "Trebuchet MS", sans-serif; color: var(--ink); background: var(--bg); }
+        .wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+        .card { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; padding: 20px; box-shadow: 0 10px 26px rgba(33, 48, 33, 0.08); }
+        h1 { margin: 0 0 8px; font-size: 28px; }
+        p { margin: 0 0 18px; color: var(--muted); }
+        label { display: block; margin: 10px 0 6px; font-size: 14px; }
+        input { width: 100%; padding: 10px 12px; border: 1px solid #c7d2c4; border-radius: 10px; font-size: 14px; }
+        button { margin-top: 14px; width: 100%; border: 1px solid #14532d; background: var(--brand); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; }
+        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
+        .links { margin-top: 12px; font-size: 13px; color: var(--muted); }
+        .links a { color: #0b5a56; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <form class="card" method="post" action="{{ action_url }}">
+            <h1>Create Account</h1>
+            <p>Basic local auth for Dexter Assistant.</p>
+            <label>Username</label>
+            <input type="text" name="username" required minlength="3" autofocus />
+            <label>Password</label>
+            <input type="password" name="password" required minlength="8" />
+            <label>Confirm Password</label>
+            <input type="password" name="confirm_password" required minlength="8" />
+            <button type="submit">Register</button>
+            {% if error %}<div class="error">{{ error }}</div>{% endif %}
+            <div class="links">Already have an account? <a href="{{ login_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Sign in</a></div>
+        </form>
+    </div>
+</body>
+</html>
+"""
+
+
 def load_config() -> dict[str, Any]:
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_auth_users() -> dict[str, Any]:
+    if not AUTH_USERS_PATH.exists():
+        return {}
+    try:
+        with AUTH_USERS_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_auth_users(users: dict[str, Any]) -> None:
+    with AUTH_USERS_PATH.open("w", encoding="utf-8") as f:
+        json.dump(users, f, indent=2)
+
+
+def get_next_path(default_path: str = "/admin") -> str:
+    next_path = (request.args.get("next") or request.form.get("next") or "").strip()
+    if not next_path.startswith("/") or next_path.startswith("//"):
+        return default_path
+    return next_path
+
+
+def login_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if session.get(SESSION_USER_KEY):
+            return view_func(*args, **kwargs)
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "message": "Authentication required"}), 401
+        return redirect(url_for("auth_login", next=request.full_path.rstrip("?")))
+
+    return wrapped
 
 
 def is_port_open(host: str, port: int) -> bool:
@@ -626,6 +755,103 @@ class AppManager:
 CONFIG = load_config()
 MANAGER = AppManager(CONFIG)
 app = Flask(__name__, static_folder=None)
+app.secret_key = os.environ.get("DEXTER_SECRET_KEY") or os.environ.get("SECRET_KEY") or "dexter-assistant-local-secret"
+
+
+@app.before_request
+def require_auth_for_protected_routes() -> Response | None:
+    public_prefixes = (
+        "/auth/login",
+        "/auth/register",
+        "/favicon.ico",
+        "/api/status",
+    )
+    if request.path.startswith(public_prefixes):
+        return None
+    if session.get(SESSION_USER_KEY):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"ok": False, "message": "Authentication required"}), 401
+    return redirect(url_for("auth_login", next=request.full_path.rstrip("?")))
+
+
+@app.route("/auth/login", methods=["GET", "POST"])
+def auth_login() -> Response:
+    if session.get(SESSION_USER_KEY):
+        return redirect(get_next_path("/admin"))
+
+    error = ""
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        users = load_auth_users()
+        user = users.get(username)
+        if user and check_password_hash(str(user.get("password_hash", "")), password):
+            users[username]["last_login"] = datetime.now().isoformat(timespec="seconds")
+            save_auth_users(users)
+            session[SESSION_USER_KEY] = username
+            session.permanent = True
+            return redirect(get_next_path("/admin"))
+        error = "Invalid username or password."
+
+    return Response(
+        render_template_string(
+            LOGIN_HTML,
+            error=error,
+            next_path=request.args.get("next", ""),
+            action_url=url_for("auth_login"),
+            register_url=url_for("auth_register"),
+        )
+    )
+
+
+@app.route("/auth/register", methods=["GET", "POST"])
+def auth_register() -> Response:
+    if session.get(SESSION_USER_KEY):
+        return redirect(get_next_path("/admin"))
+
+    error = ""
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        confirm = request.form.get("confirm_password") or ""
+
+        if len(username) < 3:
+            error = "Username must be at least 3 characters."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters."
+        elif password != confirm:
+            error = "Passwords do not match."
+        else:
+            users = load_auth_users()
+            if username in users:
+                error = "Username already exists."
+            else:
+                users[username] = {
+                    "password_hash": generate_password_hash(password),
+                    "created_at": datetime.now().isoformat(timespec="seconds"),
+                    "last_login": None,
+                }
+                save_auth_users(users)
+                session[SESSION_USER_KEY] = username
+                session.permanent = True
+                return redirect(get_next_path("/admin"))
+
+    return Response(
+        render_template_string(
+            REGISTER_HTML,
+            error=error,
+            next_path=request.args.get("next", ""),
+            action_url=url_for("auth_register"),
+            login_url=url_for("auth_login"),
+        )
+    )
+
+
+@app.route("/auth/logout", methods=["POST", "GET"])
+def auth_logout() -> Response:
+    session.pop(SESSION_USER_KEY, None)
+    return redirect(url_for("auth_login"))
 
 
 @app.route("/favicon.ico")
@@ -636,6 +862,7 @@ def front_door_favicon() -> Response:
 
 
 @app.route("/")
+@login_required
 def index() -> str:
     fd = CONFIG.get("front_door", {})
     return render_template_string(
@@ -646,6 +873,7 @@ def index() -> str:
 
 
 @app.route("/admin")
+@login_required
 def admin() -> str:
     fd = CONFIG.get("front_door", {})
     return render_template_string(
@@ -656,6 +884,7 @@ def admin() -> str:
 
 
 @app.route("/portal/<name>")
+@login_required
 def portal_app(name: str) -> Response:
     if name not in CONFIG["apps"]:
         return jsonify({"ok": False, "message": f"Unknown app: {name}"}), 404
@@ -671,11 +900,13 @@ def portal_app(name: str) -> Response:
 
 
 @app.route("/productmix")
+@login_required
 def portal_productmix_alias() -> Response:
     return redirect("/portal/productmix")
 
 
 @app.route("/inventory")
+@login_required
 def portal_ic3_alias() -> Response:
     return redirect("/portal/ic3")
 
@@ -686,6 +917,7 @@ def api_status() -> Response:
 
 
 @app.route("/api/start-all", methods=["POST"])
+@login_required
 def api_start_all() -> Response:
     result = MANAGER.start_all()
     code = 200 if result.get("ok") else 409
@@ -693,11 +925,13 @@ def api_start_all() -> Response:
 
 
 @app.route("/api/stop-all", methods=["POST"])
+@login_required
 def api_stop_all() -> Response:
     return jsonify(MANAGER.stop_all())
 
 
 @app.route("/api/apps/<name>/start", methods=["POST"])
+@login_required
 def api_start(name: str) -> Response:
     result = MANAGER.start(name)
     code = 200 if result.get("ok") else 409
@@ -705,6 +939,7 @@ def api_start(name: str) -> Response:
 
 
 @app.route("/api/apps/<name>/stop", methods=["POST"])
+@login_required
 def api_stop(name: str) -> Response:
     result = MANAGER.stop(name)
     code = 200 if result.get("ok") else 409
@@ -712,6 +947,7 @@ def api_stop(name: str) -> Response:
 
 
 @app.route("/api/apps/<name>/restart", methods=["POST"])
+@login_required
 def api_restart(name: str) -> Response:
     result = MANAGER.restart(name)
     code = 200 if result.get("ok") else 409
@@ -780,6 +1016,7 @@ def _proxy(name: str, path: str) -> Response:
 
 
 @app.route("/app/<name>/")
+@login_required
 def app_root(name: str) -> Response:
     return _proxy(name, "")
 
@@ -793,11 +1030,13 @@ def app_proxy(name: str, path: str) -> Response:
 
 
 @app.route("/open/<name>")
+@login_required
 def open_app(name: str) -> Response:
     return redirect(f"/app/{name}/")
 
 
 @app.route("/static/<path:path>")
+@login_required
 def contextual_static_proxy(path: str) -> Response:
     # Embedded apps may request absolute /static/... URLs.
     referer = request.headers.get("Referer", "")
