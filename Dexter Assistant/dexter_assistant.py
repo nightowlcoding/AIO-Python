@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "dexter_assistant_config.json"
 RUNTIME_LOG_DIR = ROOT / "runtime_logs"
 FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
+BRANDING_LOGO_PATH = ROOT / "dexter_logo.png"
+LEGACY_BRANDING_LOGO_PATH = ROOT.parent / "Restaurant Management" / "Manager App" / "static" / "img" / "Dexter.png"
 AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
 SESSION_USER_KEY = "dexter_user"
 
@@ -91,6 +93,22 @@ DASHBOARD_HTML = """
                         font-weight: 800;
                         color: #0f172a;
                 }
+                .brand-mark {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    min-width: 0;
+                }
+                .brand-logo {
+                    width: 34px;
+                    height: 34px;
+                    object-fit: contain;
+                    border-radius: 8px;
+                    background: #fff;
+                    border: 1px solid #e5e7eb;
+                    padding: 2px;
+                    flex-shrink: 0;
+                }
                 .menu-btn {
                         border: 1px solid var(--edge);
                         background: #fff;
@@ -140,6 +158,10 @@ DASHBOARD_HTML = """
                 }
                 body.collapsed .brand {
                         display: none;
+                }
+                body.collapsed .brand-logo {
+                    width: 28px;
+                    height: 28px;
                 }
                 body.collapsed .primary-menu button {
                         font-size: 0;
@@ -362,7 +384,10 @@ DASHBOARD_HTML = """
         <div id="shell" class="shell">
                 <aside class="left-primary">
                         <div class="brand-row">
-                                <div class="brand">Dexter Ops</div>
+                        <div class="brand-mark">
+                            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+                            <div class="brand">Dexter Ops</div>
+                        </div>
                                 <button class="menu-btn" onclick="toggleCollapsed()">||</button>
                         </div>
                         <nav id="primaryNav" class="primary-menu">
@@ -560,11 +585,11 @@ DASHBOARD_HTML = """
                     rows.appendChild(row);
 
                     if (state.log_tail) {
-                        combinedLogs.push('=== ' + state.display_name + ' ===\n' + state.log_tail);
+                        combinedLogs.push('=== ' + state.display_name + ' ===\\n' + state.log_tail);
                     }
                 });
 
-                document.getElementById('opsLog').textContent = combinedLogs.length ? combinedLogs.join('\n\n') : 'No runtime log yet.';
+                document.getElementById('opsLog').textContent = combinedLogs.length ? combinedLogs.join('\\n\\n') : 'No runtime log yet.';
             }
 
             function renderStats(apps) {
@@ -637,6 +662,8 @@ PORTAL_HOME_HTML = """
             z-index: 5;
         }
         .brand { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+        .brand-wrap { display: flex; align-items: center; gap: 10px; }
+        .brand-logo { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; background: #fff; border: 1px solid #d8e2d7; padding: 2px; }
         .nav { display: flex; gap: 8px; flex-wrap: wrap; }
         .nav a, .nav button {
             border: 1px solid #c6d2c7;
@@ -693,7 +720,10 @@ PORTAL_HOME_HTML = """
 </head>
 <body>
     <div class="topbar">
-        <div class="brand">Dexter Assistant Portal</div>
+        <div class="brand-wrap">
+            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+            <div class="brand">Dexter Assistant Portal</div>
+        </div>
         <div class="nav">
             <a href="/">Home</a>
             <a href="/portal/productmix">ProductMix</a>
@@ -777,6 +807,8 @@ PORTAL_APP_HTML = """
             background: #f8fbf6;
         }
         .brand { font-size: 18px; font-weight: 700; }
+        .brand-wrap { display: flex; align-items: center; gap: 8px; }
+        .brand-logo { width: 24px; height: 24px; object-fit: contain; border-radius: 6px; background: #fff; border: 1px solid #d6dfd4; padding: 2px; }
         .nav { display: flex; gap: 8px; flex-wrap: wrap; }
         .nav a, .nav button {
             border: 1px solid #c6d2c7;
@@ -815,7 +847,10 @@ PORTAL_APP_HTML = """
 </head>
 <body>
     <div class="topbar">
-        <div class="brand">{{ app_title }}</div>
+        <div class="brand-wrap">
+            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+            <div class="brand">{{ app_title }}</div>
+        </div>
         <div class="nav">
             <a href="/">Home</a>
             <a class="primary" href="/">Main Page</a>
@@ -894,9 +929,14 @@ LOGIN_HTML = """
             padding: 32px 0 32px 0;
         }
         .logo {
-            width: 64px;
-            height: 64px;
+            width: 96px;
+            height: 96px;
             margin-bottom: 18px;
+            object-fit: contain;
+            border-radius: 14px;
+            border: 1px solid #d7dfd3;
+            background: #fff;
+            padding: 6px;
         }
         .hero-title {
             font-size: 2.2rem;
@@ -1010,7 +1050,7 @@ LOGIN_HTML = """
     <div class="wrap">
         <div class="container">
             <div class="marketing">
-                <img class="logo" src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/fastapi.svg" alt="Dexter Assistant Logo" />
+                <img class="logo" src="/branding/logo" alt="Dexter Assistant Logo" />
                 <div class="hero-title">Dexter Assistant</div>
                 <div class="hero-tagline">All your restaurant management apps, one secure dashboard.</div>
                 <ul class="features">
@@ -1087,6 +1127,8 @@ REGISTER_HTML = """
         body { margin: 0; font-family: "Segoe UI", "Trebuchet MS", sans-serif; color: var(--ink); background: var(--bg); }
         .wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
         .card { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; padding: 20px; box-shadow: 0 10px 26px rgba(33, 48, 33, 0.08); }
+        .brand-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .brand-logo { width: 34px; height: 34px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid #d7dfd3; padding: 2px; }
         h1 { margin: 0 0 8px; font-size: 28px; }
         p { margin: 0 0 18px; color: var(--muted); }
         label { display: block; margin: 10px 0 6px; font-size: 14px; }
@@ -1103,7 +1145,10 @@ REGISTER_HTML = """
 <body>
     <div class="wrap">
         <form class="card" method="post" action="{{ action_url }}">
-            <h1>Create Account</h1>
+            <div class="brand-head">
+                <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+                <h1>Create Account</h1>
+            </div>
             <p>Basic local auth for Dexter Assistant.</p>
             <label>Username</label>
             <input type="text" name="username" required minlength="3" autofocus />
@@ -1413,6 +1458,7 @@ def require_auth_for_protected_routes() -> Response | None:
     public_prefixes = (
         "/auth/login",
         "/auth/register",
+        "/branding/logo",
         "/favicon.ico",
         "/api/status",
     )
@@ -1518,6 +1564,17 @@ def auth_logout() -> Response:
 
 @app.route("/favicon.ico")
 def front_door_favicon() -> Response:
+    if FRONT_DOOR_FAVICON.exists():
+        return send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=3600)
+    return jsonify({"ok": False, "message": "Not found"}), 404
+
+
+@app.route("/branding/logo")
+def branding_logo() -> Response:
+    if BRANDING_LOGO_PATH.exists():
+        return send_file(BRANDING_LOGO_PATH, mimetype="image/png", max_age=3600)
+    if LEGACY_BRANDING_LOGO_PATH.exists():
+        return send_file(LEGACY_BRANDING_LOGO_PATH, mimetype="image/png", max_age=3600)
     if FRONT_DOOR_FAVICON.exists():
         return send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=3600)
     return jsonify({"ok": False, "message": "Not found"}), 404
