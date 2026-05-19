@@ -542,6 +542,9 @@ REGISTER_HTML = """
         p { margin: 0 0 18px; color: var(--muted); }
         label { display: block; margin: 10px 0 6px; font-size: 14px; }
         input { width: 100%; padding: 10px 12px; border: 1px solid #c7d2c4; border-radius: 10px; font-size: 14px; }
+        .row { display: flex; align-items: center; justify-content: flex-start; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+        .check input { width: auto; margin: 0; }
         button { margin-top: 14px; width: 100%; border: 1px solid #14532d; background: var(--brand); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; }
         .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
         .links { margin-top: 12px; font-size: 13px; color: var(--muted); }
@@ -556,14 +559,30 @@ REGISTER_HTML = """
             <label>Username</label>
             <input type="text" name="username" required minlength="3" autofocus />
             <label>Password</label>
-            <input type="password" name="password" required minlength="8" />
+            <input id="register-password" type="password" name="password" required minlength="8" autocomplete="new-password" />
             <label>Confirm Password</label>
-            <input type="password" name="confirm_password" required minlength="8" />
+            <input id="register-confirm-password" type="password" name="confirm_password" required minlength="8" autocomplete="new-password" />
+            <div class="row">
+                <label class="check"><input id="register-show-password" type="checkbox" /> Show password</label>
+            </div>
             <button type="submit">Register</button>
             {% if error %}<div class="error">{{ error }}</div>{% endif %}
             <div class="links">Already have an account? <a href="{{ login_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Sign in</a></div>
         </form>
     </div>
+    <script>
+        (function () {
+            const showPassword = document.getElementById('register-show-password');
+            const passwordInput = document.getElementById('register-password');
+            const confirmInput = document.getElementById('register-confirm-password');
+
+            showPassword.addEventListener('change', () => {
+                const nextType = showPassword.checked ? 'text' : 'password';
+                passwordInput.type = nextType;
+                confirmInput.type = nextType;
+            });
+        })();
+    </script>
 </body>
 </html>
 """
