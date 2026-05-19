@@ -2,6 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
+!Dexter Assistant/Inventory Control 3/app.pyc
 
 # C extensions
 *.so
