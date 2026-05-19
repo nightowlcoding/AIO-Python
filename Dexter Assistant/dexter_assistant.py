@@ -422,156 +422,176 @@ DASHBOARD_HTML = """
         </div>
 
         <script>
-                const subMenus = {
-                        overview: [
-                                { id: 'overview', label: 'Summary' },
-                                { id: 'apps', label: 'Quick App Cards' },
-                        ],
-                        apps: [
-                                { id: 'apps', label: 'All Applications' },
-                                { id: 'operations', label: 'Status Matrix' },
-                        ],
-                        operations: [
-                                { id: 'operations', label: 'Operations Board' },
-                                { id: 'apps', label: 'Card Controls' },
-                        ],
+            const subMenus = {
+                overview: [
+                    { id: 'overview', label: 'Summary' },
+                    { id: 'apps', label: 'Quick App Cards' }
+                ],
+                apps: [
+                    { id: 'apps', label: 'All Applications' },
+                    { id: 'operations', label: 'Status Matrix' }
+                ],
+                operations: [
+                    { id: 'operations', label: 'Operations Board' },
+                    { id: 'apps', label: 'Card Controls' }
+                ]
+            };
+
+            function htmlEscape(value) {
+                return String(value || '').replace(/[<>&]/g, function(m) {
+                    if (m === '<') return '&lt;';
+                    if (m === '>') return '&gt;';
+                    return '&amp;';
+                });
+            }
+
+            async function act(url, body) {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: body ? JSON.stringify(body) : '{}'
+                });
+                if (!res.ok) {
+                    const txt = await res.text();
+                    alert('Action failed: ' + txt);
+                }
+                await refreshState();
+            }
+
+            function badgeClass(state) {
+                if (state.running && state.healthy) return 'pill running';
+                if (state.running && !state.healthy) return 'pill error';
+                return 'pill stopped';
+            }
+
+            function badgeText(state) {
+                if (state.running && state.healthy) return 'Running';
+                if (state.running && !state.healthy) return 'Running (unhealthy)';
+                return 'Stopped';
+            }
+
+            function toggleCollapsed() {
+                document.body.classList.toggle('collapsed');
+            }
+
+            function toggleMobileMenu() {
+                document.getElementById('shell').classList.toggle('menu-open');
+            }
+
+            function setSection(section) {
+                document.querySelectorAll('#primaryNav button').forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.section === section);
+                });
+                document.querySelectorAll('.pane').forEach(function(pane) {
+                    pane.classList.toggle('active', pane.id === ('pane-' + section));
+                });
+
+                const title = document.getElementById('pageTitle');
+                const titles = {
+                    overview: 'Control Center',
+                    apps: 'Applications',
+                    operations: 'Operations'
                 };
+                title.textContent = titles[section] || 'Control Center';
+                renderSubmenu(section);
 
-                async function act(url, body) {
-                        const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : '{}'});
-                        if (!res.ok) {
-                                const txt = await res.text();
-                                alert('Action failed: ' + txt);
-                        }
-                        await refreshState();
+                if (window.innerWidth <= 980) {
+                    document.getElementById('shell').classList.remove('menu-open');
                 }
+            }
 
-                function badgeClass(state) {
-                        if (state.running && state.healthy) return 'pill running';
-                        if (state.running && !state.healthy) return 'pill error';
-                        return 'pill stopped';
-                }
+            function setPaneFromSubmenu(targetPane) {
+                const mapped = targetPane === 'operations' ? 'operations' : (targetPane === 'apps' ? 'apps' : 'overview');
+                setSection(mapped);
+            }
 
-                function badgeText(state) {
-                        if (state.running && state.healthy) return 'Running';
-                        if (state.running && !state.healthy) return 'Running (unhealthy)';
-                        return 'Stopped';
-                }
+            function renderSubmenu(section) {
+                const nav = document.getElementById('subNav');
+                nav.innerHTML = '';
+                (subMenus[section] || []).forEach(function(item) {
+                    const btn = document.createElement('button');
+                    btn.textContent = item.label;
+                    btn.classList.toggle('active', item.id === section);
+                    btn.onclick = function() { setPaneFromSubmenu(item.id); };
+                    nav.appendChild(btn);
+                });
+            }
 
-                function toggleCollapsed() {
-                        document.body.classList.toggle('collapsed');
-                }
+            function renderCard(name, state) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const safeLog = htmlEscape(state.log_tail || '');
+                const pid = state.pid || 'n/a';
+                const disabledStart = state.running ? 'disabled' : '';
+                const disabledStop = state.running ? '' : 'disabled';
 
-                function toggleMobileMenu() {
-                        document.getElementById('shell').classList.toggle('menu-open');
-                }
+                card.innerHTML =
+                    '<div class="row">' +
+                        '<div class="name">' + htmlEscape(state.display_name) + '</div>' +
+                        '<div class="' + badgeClass(state) + '">' + badgeText(state) + '</div>' +
+                    '</div>' +
+                    '<div class="meta">key: ' + htmlEscape(name) + ' | url: ' + htmlEscape(state.base_url) + ' | pid: ' + htmlEscape(pid) + '</div>' +
+                    '<div class="btns">' +
+                        '<button class="primary" onclick="act(\'/api/apps/' + htmlEscape(name) + '/start\')" ' + disabledStart + '>Start</button>' +
+                        '<button onclick="act(\'/api/apps/' + htmlEscape(name) + '/restart\')">Restart</button>' +
+                        '<button class="warning" onclick="act(\'/api/apps/' + htmlEscape(name) + '/stop\')" ' + disabledStop + '>Stop</button>' +
+                        '<a class="btn secondary" href="/portal/' + htmlEscape(name) + '">Open</a>' +
+                        '<a class="btn" href="/app/' + htmlEscape(name) + '/" target="_blank" rel="noopener">Raw</a>' +
+                    '</div>' +
+                    '<pre>' + (safeLog || 'No runtime log yet.') + '</pre>';
 
-                function setSection(section) {
-                        document.querySelectorAll('#primaryNav button').forEach((b) => {
-                                b.classList.toggle('active', b.dataset.section === section);
-                        });
-                        document.querySelectorAll('.pane').forEach((pane) => {
-                                pane.classList.toggle('active', pane.id === `pane-${section}`);
-                        });
+                return card;
+            }
 
-                        const title = document.getElementById('pageTitle');
-                        const titles = {
-                                overview: 'Control Center',
-                                apps: 'Applications',
-                                operations: 'Operations',
-                        };
-                        title.textContent = titles[section] || 'Control Center';
-                        renderSubmenu(section);
+            function renderOpsRows(apps) {
+                const rows = document.getElementById('opsRows');
+                rows.innerHTML = '';
+                const combinedLogs = [];
 
-                        if (window.innerWidth <= 980) {
-                                document.getElementById('shell').classList.remove('menu-open');
-                        }
-                }
+                Object.entries(apps).forEach(function(entry) {
+                    const name = entry[0];
+                    const state = entry[1];
+                    const row = document.createElement('div');
+                    row.className = 'list-row';
+                    row.innerHTML =
+                        '<div><strong>' + htmlEscape(state.display_name) + '</strong><br/><span style="color:#64748b">' + htmlEscape(name) + '</span></div>' +
+                        '<div><span class="' + badgeClass(state) + '">' + badgeText(state) + '</span></div>' +
+                        '<div>' + htmlEscape(state.base_url) + '</div>';
+                    rows.appendChild(row);
 
-                function setPaneFromSubmenu(targetPane) {
-                        const mapped = targetPane === 'operations' ? 'operations' : (targetPane === 'apps' ? 'apps' : 'overview');
-                        setSection(mapped);
-                }
+                    if (state.log_tail) {
+                        combinedLogs.push('=== ' + state.display_name + ' ===\n' + state.log_tail);
+                    }
+                });
 
-                function renderSubmenu(section) {
-                        const nav = document.getElementById('subNav');
-                        nav.innerHTML = '';
-                        (subMenus[section] || []).forEach((item) => {
-                                const btn = document.createElement('button');
-                                btn.textContent = item.label;
-                                btn.classList.toggle('active', item.id === section);
-                                btn.onclick = () => setPaneFromSubmenu(item.id);
-                                nav.appendChild(btn);
-                        });
-                }
+                document.getElementById('opsLog').textContent = combinedLogs.length ? combinedLogs.join('\n\n') : 'No runtime log yet.';
+            }
 
-                function renderCard(name, state) {
-                        const c = document.createElement('div');
-                        c.className = 'card';
-                        const safeLog = (state.log_tail || '').replace(/[<>&]/g, (m) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
-                        c.innerHTML = `
-                                <div class="row">
-                                        <div class="name">${state.display_name}</div>
-                                        <div class="${badgeClass(state)}">${badgeText(state)}</div>
-                                </div>
-                                <div class="meta">key: ${name} | url: ${state.base_url} | pid: ${state.pid || 'n/a'}</div>
-                                <div class="btns">
-                                        <button class="primary" onclick="act('/api/apps/${name}/start')" ${state.running ? 'disabled' : ''}>Start</button>
-                                        <button onclick="act('/api/apps/${name}/restart')">Restart</button>
-                                        <button class="warning" onclick="act('/api/apps/${name}/stop')" ${state.running ? '' : 'disabled'}>Stop</button>
-                                        <a class="btn secondary" href="/portal/${name}">Open</a>
-                                        <a class="btn" href="/app/${name}/" target="_blank" rel="noopener">Raw</a>
-                                </div>
-                                <pre>${safeLog || 'No runtime log yet.'}</pre>
-                        `;
-                        return c;
-                }
+            function renderStats(apps) {
+                const values = Object.values(apps);
+                document.getElementById('statTotal').textContent = String(values.length);
+                document.getElementById('statRunning').textContent = String(values.filter(function(s) { return s.running; }).length);
+                document.getElementById('statHealthy').textContent = String(values.filter(function(s) { return s.running && s.healthy; }).length);
+                document.getElementById('statUnhealthy').textContent = String(values.filter(function(s) { return s.running && !s.healthy; }).length);
+            }
 
-                function renderOpsRows(apps) {
-                        const rows = document.getElementById('opsRows');
-                        rows.innerHTML = '';
-                        const combinedLogs = [];
-                        Object.entries(apps).forEach(([name, state]) => {
-                                const row = document.createElement('div');
-                                row.className = 'list-row';
-                                row.innerHTML = `
-                                        <div><strong>${state.display_name}</strong><br/><span style="color:#64748b">${name}</span></div>
-                                        <div><span class="${badgeClass(state)}">${badgeText(state)}</span></div>
-                                        <div>${state.base_url}</div>
-                                `;
-                                rows.appendChild(row);
-                                if (state.log_tail) {
-                                        combinedLogs.push(`=== ${state.display_name} ===\n${state.log_tail}`);
-                                }
-                        });
-                        document.getElementById('opsLog').textContent = combinedLogs.length ? combinedLogs.join('\n\n') : 'No runtime log yet.';
-                }
+            async function refreshState() {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const apps = data.apps || {};
+                const grid = document.getElementById('grid');
+                grid.innerHTML = '';
+                Object.entries(apps).forEach(function(entry) {
+                    grid.appendChild(renderCard(entry[0], entry[1]));
+                });
+                renderStats(apps);
+                renderOpsRows(apps);
+            }
 
-                function renderStats(apps) {
-                        const values = Object.values(apps);
-                        document.getElementById('statTotal').textContent = String(values.length);
-                        document.getElementById('statRunning').textContent = String(values.filter((s) => s.running).length);
-                        document.getElementById('statHealthy').textContent = String(values.filter((s) => s.running && s.healthy).length);
-                        document.getElementById('statUnhealthy').textContent = String(values.filter((s) => s.running && !s.healthy).length);
-                }
-
-                async function refreshState() {
-                        const res = await fetch('/api/status');
-                        const data = await res.json();
-                        const apps = data.apps || {};
-
-                        const grid = document.getElementById('grid');
-                        grid.innerHTML = '';
-                        Object.entries(apps).forEach(([name, state]) => grid.appendChild(renderCard(name, state)));
-
-                        renderStats(apps);
-                        renderOpsRows(apps);
-                }
-
-                renderSubmenu('overview');
-                setSection('overview');
-                refreshState();
-                setInterval(refreshState, 2500);
+            renderSubmenu('overview');
+            setSection('overview');
+            refreshState();
+            setInterval(refreshState, 2500);
         </script>
 </body>
 </html>
