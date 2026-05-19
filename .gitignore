@@ -214,3 +214,5 @@ _
 _/
 venv/
 sortphotos/
+
+!Dexter Assistant/Inventory Control 3/*.pyc
