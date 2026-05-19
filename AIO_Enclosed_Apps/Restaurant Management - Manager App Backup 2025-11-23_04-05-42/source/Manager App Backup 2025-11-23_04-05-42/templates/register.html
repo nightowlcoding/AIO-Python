@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Register - Manager App{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-person-plus text-primary" style="font-size: 3rem;"></i>
+                        <h2 class="mt-3">Create Account</h2>
+                        <p class="text-muted">Get started with Manager App</p>
+                    </div>
+                    
+                    <form method="POST" action="{{ url_for('register') }}" id="registerForm">
+                        <div class="mb-3">
+                            <label for="full_name" class="form-label">Full Name</label>
+                            <input type="text" class="form-control" id="full_name" name="full_name" 
+                                   placeholder="John Doe" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" 
+                                   placeholder="Choose a username" required minlength="3">
+                            <div class="form-text">At least 3 characters</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   placeholder="you@example.com" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" 
+                                   placeholder="Create a strong password" required>
+                            <div class="form-text">
+                                Must be 8+ characters with uppercase, lowercase, and number
+                            </div>
+                            <div id="passwordStrength" class="mt-2"></div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">Confirm Password</label>
+                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" 
+                                   placeholder="Confirm your password" required>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100 mb-3">
+                            <i class="bi bi-rocket-takeoff"></i> Create Account
+                        </button>
+                        
+                        <div class="text-center">
+                            <small>
+                                Already have an account? 
+                                <a href="{{ url_for('login') }}">Login here</a>
+                            </small>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('password').addEventListener('input', function() {
+    const password = this.value;
+    const strengthDiv = document.getElementById('passwordStrength');
+    
+    let strength = 0;
+    let feedback = [];
+    
+    if (password.length >= 8) strength++;
+    else feedback.push('8+ characters');
+    
+    if (/[A-Z]/.test(password)) strength++;
+    else feedback.push('uppercase letter');
+    
+    if (/[a-z]/.test(password)) strength++;
+    else feedback.push('lowercase letter');
+    
+    if (/[0-9]/.test(password)) strength++;
+    else feedback.push('number');
+    
+    const colors = ['danger', 'warning', 'info', 'success'];
+    const labels = ['Weak', 'Fair', 'Good', 'Strong'];
+    
+    if (password.length > 0) {
+        strengthDiv.innerHTML = `
+            <div class="progress" style="height: 5px;">
+                <div class="progress-bar bg-${colors[strength-1]}" style="width: ${strength*25}%"></div>
+            </div>
+            <small class="text-${colors[strength-1]}">${labels[strength-1] || 'Very Weak'}</small>
+            ${feedback.length > 0 ? `<small class="text-muted d-block">Missing: ${feedback.join(', ')}</small>` : ''}
+        `;
+    } else {
+        strengthDiv.innerHTML = '';
+    }
+});
+</script>
+{% endblock %}

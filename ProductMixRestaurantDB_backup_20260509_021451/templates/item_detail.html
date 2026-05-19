@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block content %}
+{% set ATTR_COLS = ['B','C','I','J','L','N','O','P'] %}
+<div class="row g-4">
+
+  <!-- Header -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header gradient-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-box-seam me-2"></i>{{ item.item_name }}</span>
+        <a class="btn btn-sm btn-light" href="{{ url_for('reports_page') }}">
+          <i class="bi bi-arrow-left me-1"></i>Back to Reports
+        </a>
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-0">
+          {{ records | length }} import date{{ 's' if records | length != 1 else '' }} tracked
+          {% if records %}
+          &mdash; from
+          <strong>{{ records[-1].report_start_date or '?' }}</strong>
+          to
+          <strong>{{ records[0].report_end_date or '?' }}</strong>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  {% if not records %}
+  <div class="col-12">
+    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No data records found for this item yet.</div>
+  </div>
+  {% endif %}
+
+  <!-- Summary card (aggregates across all dates) -->
+  {% if summary %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bar-chart-line-fill me-2"></i>All-Time Summary</span>
+        <span class="badge text-bg-primary status-badge">{{ records | length }} date{{ 's' if records | length != 1 else '' }}</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead class="table-light">
+              <tr>
+                {% for letter in ATTR_COLS %}
+                <th>{{ col_headers.get(letter, 'Col ' ~ letter) }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {% for letter in ATTR_COLS %}
+                {% set col_key = 'col_' ~ letter | lower %}
+                <td>
+                  {% set val = summary.get(col_key, 0) %}
+                  {% if letter == 'J' %}
+                    <span title="Average across {{ records | length }} date(s)">{{ "%.2f"|format(val) }} <small class="text-muted">avg</small></span>
+                  {% else %}
+                    {{ "%.2f"|format(val) }} <small class="text-muted">total</small>
+                  {% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Per-date history table -->
+  {% if records %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <i class="bi bi-calendar3 me-2"></i>History by Import Date
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover table-striped table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Date Range</th>
+                <th>Source File</th>
+                {% for letter in ATTR_COLS %}
+                <th>{{ col_headers.get(letter, 'Col ' ~ letter) }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+            {% for rec in records %}
+              <tr>
+                <td class="text-nowrap">
+                  {% if rec.report_start_date == rec.report_end_date %}
+                    {{ rec.report_start_date or '—' }}
+                  {% else %}
+                    {{ rec.report_start_date or '—' }} – {{ rec.report_end_date or '—' }}
+                  {% endif %}
+                </td>
+                <td class="text-muted small">{{ rec.filename }}</td>
+                {% for letter in ATTR_COLS %}
+                {% set col_key = 'col_' ~ letter | lower %}
+                <td>{{ "%.2f"|format(rec.get(col_key) or 0) }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

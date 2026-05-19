@@ -1,0 +1,7 @@
+﻿App enclosure created from directory app.
+
+Original app directory: C:\Users\arnol\OneDrive\Desktop\AIO-Python\dexter
+Relative path: dexter
+Mode: FullCopy
+
+This enclosure is additive and does not delete or move any originals.

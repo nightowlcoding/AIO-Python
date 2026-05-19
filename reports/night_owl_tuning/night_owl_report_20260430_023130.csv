@@ -1,0 +1,32 @@
+section,key,value
+meta,timestamp,2026-04-30T02:31:30.991614
+meta,action,Open Windows Update
+meta,action_status,success
+meta,action_error,
+system,hostname,LilChicoLaptop
+system,os,Windows-11-10.0.26200-SP0
+system,uptime,3d 16h 0m
+storage,c_total_gb,924.55
+storage,c_used_gb,647.78
+storage,c_free_gb,276.76
+storage,c_free_pct,29.93
+tuning,power_plan,Power Scheme GUID: db6638c8-3605-4d77-aa4d-df84a49947ac  (PD Performance)
+tuning,game_mode,ERROR: ERROR: The system was unable to find the specified registry key or value.
+tuning,defender_realtime_protection,True
+tuning,startup_count,11
+process,name,pid,memory
+process,Memory Compression,4848,"2,724,952 K"
+process,Code.exe,35480,"1,754,780 K"
+process,Code.exe,28020,"1,653,836 K"
+process,chrome.exe,34732,"999,432 K"
+process,OneDrive.exe,43448,"911,904 K"
+process,bambu-studio.exe,21908,"533,756 K"
+process,msedgewebview2.exe,10564,"509,232 K"
+process,Code.exe,49324,"500,380 K"
+process,Code.exe,49236,"486,968 K"
+process,WorkloadsSessionHost.exe,36404,"423,396 K"
+process,snapmaker-orca.exe,47340,"422,040 K"
+process,Secure System,332,"416,860 K"
+process,explorer.exe,41624,"413,776 K"
+process,MsMpEng.exe,6600,"304,400 K"
+process,chrome.exe,38356,"297,656 K"

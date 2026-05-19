@@ -1,0 +1,155 @@
+scope,newest_change,last_modified,created_time,path
+mirror-copy,2026-04-26T13:38:28,2026-04-26T13:38:28,2026-04-23T00:36:12,AIO_Enclosed_Apps/ProductMixRestaurantDB/source/ProductMixRestaurantDB/app.py
+mirror-copy,2026-04-26T13:38:28,2026-04-26T13:38:28,2026-04-23T00:36:12,AIO_Consolidated_Full/ProductMixRestaurantDB/source/ProductMixRestaurantDB/app.py
+mirror-copy,2026-04-26T13:38:28,2026-04-26T13:38:28,2026-04-23T00:36:12,AIO_Consolidated_Clean/ProductMixRestaurantDB/source/ProductMixRestaurantDB/app.py
+main-workspace,2026-04-26T13:38:28,2026-04-26T13:38:28,2026-04-23T00:36:12,ProductMixRestaurantDB/app.py
+mirror-copy,2026-04-25T17:05:49,2026-04-25T17:05:49,2026-04-24T15:10:22,AIO_Enclosed_Apps/ProductMixRestaurantDB/source/app.py
+main-workspace,2026-04-25T00:15:02,2026-04-25T00:15:02,2026-04-24T13:32:26,Restaurant Management/Inventory Control 3/app.py
+mirror-copy,2026-04-24T16:31:24,2026-04-24T16:31:24,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 2/source/Inventory Control 2/app.py
+mirror-copy,2026-04-24T16:31:24,2026-04-24T16:31:24,2026-04-24T15:10:22,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 2/source/app.py
+mirror-copy,2026-04-24T16:31:24,2026-04-24T16:31:24,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Inventory Control 2/source/Inventory Control 2/app.py
+main-workspace,2026-04-24T16:31:24,2026-04-24T16:31:24,2026-02-07T04:22:32,Restaurant Management/Inventory Control 2/app.py
+mirror-copy,2026-04-24T16:31:24,2026-04-24T16:31:24,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 2/source/Inventory Control 2/app.py
+main-workspace,2026-04-24T16:21:14,2026-04-24T16:21:14,2026-04-24T13:32:26,Restaurant Management/Inventory Control 3/inventory_control3_launcher.py
+main-workspace,2026-04-24T16:12:57,2026-04-24T16:12:57,2026-04-24T16:03:09,Restaurant Management/Inventory Control 3/tools/order_csv_renamer_gui.py
+main-workspace,2026-04-24T16:05:35,2026-04-24T16:05:35,2026-04-24T16:04:17,Restaurant Management/Inventory Control 3/Order CSV Renamer/order_csv_renamer_gui.py
+mirror-copy,2026-04-24T15:34:57,2026-03-03T05:22:24,2026-04-24T15:34:57,AIO_Consolidated_Clean/railway_manager_app/source/railway_manager_app.py
+mirror-copy,2026-04-24T15:34:57,2026-02-25T03:44:25,2026-04-24T15:34:57,AIO_Consolidated_Clean/Automate_Report_gui/source/Automate_Report_gui.py
+mirror-copy,2026-04-24T15:34:56,2026-02-07T04:22:32,2026-04-24T15:34:56,AIO_Consolidated_Clean/app/source/app.py
+mirror-copy,2026-04-24T15:33:46,2026-03-03T05:22:24,2026-04-24T15:33:46,AIO_Consolidated_Full/railway_manager_app/source/railway_manager_app.py
+mirror-copy,2026-04-24T15:33:45,2026-02-25T03:44:25,2026-04-24T15:33:45,AIO_Consolidated_Full/Automate_Report_gui/source/Automate_Report_gui.py
+mirror-copy,2026-04-24T15:33:45,2026-02-07T04:22:32,2026-04-24T15:33:45,AIO_Consolidated_Full/app/source/app.py
+mirror-copy,2026-04-24T15:33:45,2026-02-07T04:22:32,2026-04-24T15:33:45,AIO_Consolidated_Full/AIO_Consolidated_Full - app - source/source/source/app.py
+mirror-copy,2026-04-24T15:14:47,2026-03-03T05:22:24,2026-04-24T15:14:47,AIO_Tidy/tidy_run_2026-04-24_15-14-47/Loose_Top_Level_Py/railway_manager_app.py
+mirror-copy,2026-04-24T15:14:47,2026-03-03T05:22:24,2026-04-24T15:14:47,AIO_Enclosed_Apps/AIO_Tidy - tidy_run_2026-04-24_15-14-47 - Loose_Top_Level_Py/source/Loose_Top_Level_Py/railway_manager_app.py
+mirror-copy,2026-04-24T15:14:47,2026-03-03T05:22:24,2026-04-24T15:14:47,AIO_Consolidated_Full/AIO_Tidy - tidy_run_2026-04-24_15-14-47 - Loose_Top_Level_Py/source/Loose_Top_Level_Py/railway_manager_app.py
+mirror-copy,2026-04-24T15:14:47,2026-02-25T03:44:25,2026-04-24T15:14:47,AIO_Tidy/tidy_run_2026-04-24_15-14-47/Loose_Top_Level_Py/Automate_Report_gui.py
+mirror-copy,2026-04-24T15:14:47,2026-02-25T03:44:25,2026-04-24T15:14:47,AIO_Enclosed_Apps/AIO_Tidy - tidy_run_2026-04-24_15-14-47 - Loose_Top_Level_Py/source/Loose_Top_Level_Py/Automate_Report_gui.py
+mirror-copy,2026-04-24T15:14:47,2026-02-25T03:44:25,2026-04-24T15:14:47,AIO_Consolidated_Full/AIO_Tidy - tidy_run_2026-04-24_15-14-47 - Loose_Top_Level_Py/source/Loose_Top_Level_Py/Automate_Report_gui.py
+mirror-copy,2026-04-24T15:14:47,2026-02-07T04:22:32,2026-04-24T15:14:47,AIO_Tidy/tidy_run_2026-04-24_15-14-47/Loose_Top_Level_Py/app.py
+mirror-copy,2026-04-24T15:14:47,2026-02-07T04:22:32,2026-04-24T15:14:47,AIO_Enclosed_Apps/AIO_Tidy - tidy_run_2026-04-24_15-14-47 - Loose_Top_Level_Py/source/Loose_Top_Level_Py/app.py
+mirror-copy,2026-04-24T15:14:47,2026-02-07T04:22:32,2026-04-24T15:14:47,AIO_Consolidated_Full/AIO_Tidy - tidy_run_2026-04-24_15-14-47 - Loose_Top_Level_Py/source/Loose_Top_Level_Py/app.py
+mirror-copy,2026-04-24T15:10:23,2026-03-03T05:12:36,2026-04-24T15:10:23,AIO_Enclosed_Apps/venv - Lib - site-packages - gunicorn - dirty/source/app.py
+mirror-copy,2026-04-24T15:10:23,2026-02-07T12:32:10,2026-04-24T15:10:23,AIO_Enclosed_Apps/venv - Lib - site-packages - flask - sansio/source/app.py
+mirror-copy,2026-04-24T15:10:23,2026-02-07T12:32:10,2026-04-24T15:10:23,AIO_Enclosed_Apps/venv - Lib - site-packages - flask/source/app.py
+mirror-copy,2026-04-24T15:10:23,2026-02-07T04:22:32,2026-04-24T15:10:23,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup - Manager App/source/app.py
+mirror-copy,2026-04-24T15:10:23,2026-02-07T04:22:32,2026-04-24T15:10:23,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-03-20T14:19:28,2026-04-24T15:10:22,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3 - venv - Lib - site-packages - flask - sansio/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-03-20T14:19:28,2026-04-24T15:10:22,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3 - venv - Lib - site-packages - flask/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-04-24T14:14:24,2026-04-24T15:10:22,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-04-24T15:02:17,2026-04-24T15:10:22,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-03-20T14:19:28,2026-04-24T15:10:22,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 2 - venv - Lib - site-packages - flask - sansio/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-03-20T14:19:28,2026-04-24T15:10:22,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 2 - venv - Lib - site-packages - flask/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-02-07T04:22:32,2026-04-24T15:10:22,AIO_Enclosed_Apps/instagram-image-downloader - src/source/app.py
+mirror-copy,2026-04-24T15:10:22,2026-02-07T04:22:32,2026-04-24T15:10:22,AIO_Enclosed_Apps/AIO_Enclosed_Apps - app - source/source/app.py
+mirror-copy,2026-04-24T15:09:41,2026-03-03T05:22:24,2026-04-24T15:09:41,AIO_Enclosed_Apps/railway_manager_app/source/railway_manager_app.py
+mirror-copy,2026-04-24T15:09:41,2026-02-25T03:44:25,2026-04-24T15:09:41,AIO_Enclosed_Apps/Automate_Report_gui/source/Automate_Report_gui.py
+mirror-copy,2026-04-24T15:09:41,2026-02-07T04:22:32,2026-04-24T15:09:41,AIO_Enclosed_Apps/app/source/app.py
+mirror-copy,2026-04-24T15:02:17,2026-04-24T15:02:17,2026-04-24T13:32:26,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/inventory_control3_launcher.py
+mirror-copy,2026-04-24T15:02:17,2026-04-24T15:02:17,2026-04-24T13:32:26,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/app.py
+mirror-copy,2026-04-24T15:02:17,2026-04-24T15:02:17,2026-04-24T13:32:26,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/inventory_control3_launcher.py
+mirror-copy,2026-04-24T15:02:17,2026-04-24T15:02:17,2026-04-24T13:32:26,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/app.py
+mirror-copy,2026-04-24T15:02:17,2026-04-24T15:02:17,2026-04-24T13:32:26,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/inventory_control3_launcher.py
+mirror-copy,2026-04-24T15:02:17,2026-04-24T15:02:17,2026-04-24T13:32:26,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/app.py
+main-workspace,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,Restaurant Management/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher_reconstructed.py
+main-workspace,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,Restaurant Management/Inventory Control 3/recovered_source_attempts/app_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/app_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/inventory_control3_launcher_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/app_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/app_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/inventory_control3_launcher_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/app_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/app_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/inventory_control3_launcher_reconstructed.py
+mirror-copy,2026-04-24T14:15:17,2026-04-24T14:15:17,2026-04-24T14:15:17,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/app_reconstructed.py
+main-workspace,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,Restaurant Management/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/inventory_control3_launcher.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/inventory_control3_launcher.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/inventory_control3_launcher.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/inventory_control3_launcher.py
+main-workspace,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,Restaurant Management/Inventory Control 3/recovered_source_attempts/app.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/app.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/app.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/app.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/app.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/recovered_source_attempts/app.py
+mirror-copy,2026-04-24T14:14:24,2026-04-24T14:14:24,2026-04-24T14:14:24,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3 - recovered_source_attempts/source/recovered_source_attempts/app.py
+main-workspace,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,Restaurant Management/Inventory Control 3/inventory_control3_launcher_wrapper_fallback.py
+main-workspace,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,Restaurant Management/Inventory Control 3/app_wrapper_fallback.py
+mirror-copy,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/inventory_control3_launcher_wrapper_fallback.py
+mirror-copy,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 3/source/Inventory Control 3/app_wrapper_fallback.py
+mirror-copy,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/inventory_control3_launcher_wrapper_fallback.py
+mirror-copy,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,AIO_Consolidated_Full/Restaurant Management - Inventory Control 3/source/Inventory Control 3/app_wrapper_fallback.py
+mirror-copy,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/inventory_control3_launcher_wrapper_fallback.py
+mirror-copy,2026-04-24T13:40:52,2026-04-24T13:32:26,2026-04-24T13:40:52,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 3/source/Inventory Control 3/app_wrapper_fallback.py
+main-workspace,2026-04-22T04:09:36,2026-04-22T04:09:36,2026-02-07T04:22:32,Restaurant Management/employeegrading_gui.py
+main-workspace,2026-03-03T05:22:24,2026-03-03T05:22:24,2026-02-07T04:22:32,Restaurant Management/Manager App/manager_app.py
+main-workspace,2026-03-03T05:22:24,2026-03-03T05:22:24,2026-03-03T05:04:10,railway_manager_app.py
+main-workspace,2026-02-25T03:44:25,2026-02-25T03:44:25,2026-02-08T16:45:12,Automate_Report_gui.py
+main-workspace,2026-02-10T15:47:01,2026-02-10T15:47:01,2026-02-10T15:27:38,Tools/application.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,instagram-image-downloader/src/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/instagram-image-downloader - src/source/src/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/instagram-image-downloader - src/source/src/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/instagram-image-downloader - src/source/src/app.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,app.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Tools/newsorterapp.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Tools/facesort_gui.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Tools/billaverage_gui.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Sorting App/AIO_File_Organizer_GUI.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/app_web.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Payrollauto3_gui.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App/static/js/app.js
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App/login_app.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App/app_config.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App/CashManager.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup/static/js/app.js
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup/app_config.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup/Manager App/static/js/app.js
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup - Manager App/source/Manager App/static/js/app.js
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup - Manager App/source/Manager App/static/js/app.js
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup - Manager App/source/Manager App/static/js/app.js
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup/Manager App/login_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup - Manager App/source/Manager App/login_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup - Manager App/source/Manager App/login_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup - Manager App/source/Manager App/login_app.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup/Manager App/app_config.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup/Manager App/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup - Manager App/source/Manager App/app_config.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup - Manager App/source/Manager App/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup - Manager App/source/Manager App/app_config.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup - Manager App/source/Manager App/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup - Manager App/source/Manager App/app_config.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup - Manager App/source/Manager App/app.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup/Manager App/CashManager.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup - Manager App/source/Manager App/CashManager.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup - Manager App/source/Manager App/CashManager.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup - Manager App/source/Manager App/CashManager.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup 2025-11-23_04-05-42/static/js/app.js
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/static/js/app.js
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/static/js/app.js
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/static/js/app.js
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup 2025-11-23_04-05-42/login_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/login_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/login_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/login_app.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup 2025-11-23_04-05-42/app_config.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup 2025-11-23_04-05-42/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/app_config.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/app_config.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/app_config.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/app.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Manager App Backup 2025-11-23_04-05-42/CashManager.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/CashManager.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/CashManager.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Manager App Backup 2025-11-23_04-05-42/source/Manager App Backup 2025-11-23_04-05-42/CashManager.py
+main-workspace,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,Restaurant Management/Inventory Control 2/test_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Enclosed_Apps/Restaurant Management - Inventory Control 2/source/Inventory Control 2/test_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Full/Restaurant Management - Inventory Control 2/source/Inventory Control 2/test_app.py
+mirror-copy,2026-02-07T04:22:32,2026-02-07T04:22:32,2026-02-07T04:22:32,AIO_Consolidated_Clean/Restaurant Management - Inventory Control 2/source/Inventory Control 2/test_app.py

@@ -1,0 +1,15 @@
+risk_score,flags,source_file,employee,check_id,datetime,location,action,reason,amount,void_amount,discount_amount,comp_amount,refund_amount
+38,High refund amount ($55.00); Keyword detected: refund,toast_ticket_capture_sample.csv,John Doe,100,"3/7/2026, 2:20 AM",Bar,refund,Guest complaint,65.00,0.00,0.00,0.00,55.00
+35,High discount amount ($96.69); High discount percentage (56.5%),Thursday - Tuesday.csv,Unknown,,,,,,171.01,0.00,96.69,0.00,0.00
+35,High discount amount ($43.95); High discount percentage (52.6%),Thursday - Tuesday.csv,Unknown,,,,,,83.51,0.00,43.95,0.00,0.00
+35,High discount amount ($96.69); High discount percentage (47.9%),Tuesday - Tuesday.csv,Unknown,,,,,,201.80,0.00,96.69,0.00,0.00
+35,High discount amount ($43.95); High discount percentage (47.6%),Tuesday - Tuesday.csv,Unknown,,,,,,92.31,0.00,43.95,0.00,0.00
+35,High discount amount ($55.23); High discount percentage (58.3%),Sunday - Thursday.csv,Unknown,,,,,,94.68,0.00,55.23,0.00,0.00
+35,High discount amount ($263.70); High discount percentage (48.4%),Thursday - Tuesday.csv,Unknown,,,,,,544.59,0.00,263.70,0.00,0.00
+35,High discount amount ($158.22); High discount percentage (49.3%),Thursday - Tuesday.csv,Unknown,,,,,,320.84,0.00,158.22,0.00,0.00
+35,High discount amount ($52.74); High discount percentage (70.6%),Thursday - Tuesday.csv,Unknown,,,,,,74.72,0.00,52.74,0.00,0.00
+35,High discount amount ($63.12); High discount percentage (42.1%),Thursday - Tuesday.csv,Unknown,,,,,,149.91,0.00,63.12,0.00,0.00
+35,High discount amount ($263.70); High discount percentage (45.2%),Tuesday - Tuesday.csv,Unknown,,,,,,583.74,0.00,263.70,0.00,0.00
+35,High discount amount ($158.22); High discount percentage (45.6%),Tuesday - Tuesday.csv,Unknown,,,,,,347.21,0.00,158.22,0.00,0.00
+35,High discount amount ($52.74); High discount percentage (70.6%),Tuesday - Tuesday.csv,Unknown,,,,,,74.72,0.00,52.74,0.00,0.00
+35,High discount amount ($63.12); High discount percentage (36.4%),Tuesday - Tuesday.csv,Unknown,,,,,,173.58,0.00,63.12,0.00,0.00

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Manager App{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="bi bi-speedometer2"></i> Dashboard
+                <small class="text-muted">{{ company.name }}</small>
+            </h1>
+        </div>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Today's Sales</h6>
+                            <h3 class="card-title mb-0">${{ "%.2f"|format(today_sales) }}</h3>
+                        </div>
+                        <i class="bi bi-currency-dollar" style="font-size: 3rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Active Employees</h6>
+                            <h3 class="card-title mb-0">{{ user_count }}</h3>
+                        </div>
+                        <i class="bi bi-people" style="font-size: 3rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Cash on Hand</h6>
+                            <h3 class="card-title mb-0">${{ "%.2f"|format(cash_on_hand) }}</h3>
+                        </div>
+                        <i class="bi bi-cash-stack" style="font-size: 3rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-subtitle mb-2">Pending Tasks</h6>
+                            <h3 class="card-title mb-0">0</h3>
+                        </div>
+                        <i class="bi bi-list-check" style="font-size: 3rem; opacity: 0.5;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <a href="{{ url_for('daily_log') }}" class="btn btn-outline-primary w-100 py-3">
+                                <i class="bi bi-calendar-check d-block mb-2" style="font-size: 2rem;"></i>
+                                Daily Log
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('cash_manager') }}" class="btn btn-outline-success w-100 py-3">
+                                <i class="bi bi-cash-stack d-block mb-2" style="font-size: 2rem;"></i>
+                                Cash Manager
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('employees') }}" class="btn btn-outline-info w-100 py-3">
+                                <i class="bi bi-people d-block mb-2" style="font-size: 2rem;"></i>
+                                Manage Employees
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('reports') }}" class="btn btn-outline-warning w-100 py-3">
+                                <i class="bi bi-graph-up d-block mb-2" style="font-size: 2rem;"></i>
+                                View Reports
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Activity -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-activity"></i> Recent Activity</h5>
+                    <a href="{{ url_for('audit_log') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Time</th>
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if recent_logs %}
+                                    {% for log in recent_logs %}
+                                    <tr>
+                                        <td><small>{{ log['timestamp'][:19] if log.get('timestamp') else log.get('created_at', '')[:19] }}</small></td>
+                                        <td>{{ log.get('username', 'System') }}</td>
+                                        <td>
+                                            <span class="badge bg-info">{{ log['action'] }}</span>
+                                        </td>
+                                        <td><small class="text-muted">{{ log.get('details', '-') }}</small></td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-4">
+                                            No recent activity
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Company Info -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-building"></i> Company Info</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Name:</dt>
+                        <dd class="col-sm-8">{{ company.name }}</dd>
+                        
+                        <dt class="col-sm-4">Address:</dt>
+                        <dd class="col-sm-8">{{ company.address or 'Not set' }}</dd>
+                        
+                        <dt class="col-sm-4">Phone:</dt>
+                        <dd class="col-sm-8">{{ company.phone or 'Not set' }}</dd>
+                        
+                        <dt class="col-sm-4">Email:</dt>
+                        <dd class="col-sm-8">{{ company.email or 'Not set' }}</dd>
+                        
+                        <dt class="col-sm-4">Your Role:</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge bg-primary">{{ current_user.current_role }}</span>
+                        </dd>
+                    </dl>
+                    
+                    {% if current_user.current_role == 'business_admin' %}
+                    <a href="{{ url_for('settings') }}" class="btn btn-primary w-100 mt-3">
+                        <i class="bi bi-gear"></i> Manage Settings
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

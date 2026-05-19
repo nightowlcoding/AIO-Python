@@ -1,0 +1,33 @@
+section,key,value
+meta,timestamp,2026-04-30T01:57:11.348024
+meta,action,Run Disk Cleanup
+meta,action_status,success
+meta,action_error,
+system,hostname,GamingPcARJ
+system,os,Windows-11-10.0.26200-SP0
+system,uptime,0d 2h 22m
+storage,c_total_gb,928.67
+storage,c_used_gb,529.59
+storage,c_free_gb,399.08
+storage,c_free_pct,42.97
+tuning,power_plan,Power Scheme GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (High performance)
+tuning,game_mode,"HKEY_CURRENT_USER\Software\Microsoft\GameBar
+    AutoGameModeEnabled    REG_DWORD    0x1"
+tuning,defender_realtime_protection,True
+tuning,startup_count,9
+process,name,pid,memory
+process,Code.exe,25292,"2,312,536 K"
+process,Code.exe,8956,"653,280 K"
+process,explorer.exe,5464,"521,796 K"
+process,OneDrive.exe,6148,"516,288 K"
+process,steamwebhelper.exe,11632,"488,536 K"
+process,chrome.exe,1760,"435,740 K"
+process,Code.exe,23416,"414,548 K"
+process,XboxPcApp.exe,14924,"399,332 K"
+process,MsMpEng.exe,5456,"335,984 K"
+process,SteelSeriesSonar.exe,14716,"325,140 K"
+process,chrome.exe,3032,"284,812 K"
+process,steamwebhelper.exe,16172,"236,252 K"
+process,MicrosoftSecurityApp.exe,17072,"204,016 K"
+process,chrome.exe,21036,"203,780 K"
+process,RazerAppEngine.exe,17144,"197,444 K"

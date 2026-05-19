@@ -1,0 +1,32 @@
+section,key,value
+meta,timestamp,2026-04-30T02:56:57.462957
+meta,action,Upgrade Installed Apps (winget)
+meta,action_status,success
+meta,action_error,
+system,hostname,LilChicoLaptop
+system,os,Windows-11-10.0.26200-SP0
+system,uptime,0d 0h 24m
+storage,c_total_gb,924.55
+storage,c_used_gb,632.85
+storage,c_free_gb,291.70
+storage,c_free_pct,31.55
+tuning,power_plan,Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+tuning,game_mode,ERROR: ERROR: The system was unable to find the specified registry key or value.
+tuning,defender_realtime_protection,True
+tuning,startup_count,11
+process,name,pid,memory
+process,WorkloadsSessionHost.exe,19660,"4,258,584 K"
+process,Code.exe,16032,"1,373,676 K"
+process,Code.exe,25000,"1,261,556 K"
+process,WorkloadsSessionHost.exe,32124,"870,628 K"
+process,dllhost.exe,33440,"482,928 K"
+process,GoogleDriveFS.exe,24828,"456,288 K"
+process,WorkloadsSessionHost.exe,13260,"414,576 K"
+process,MsMpEng.exe,7336,"398,336 K"
+process,explorer.exe,13712,"378,028 K"
+process,WorkloadsSessionHost.exe,16764,"317,944 K"
+process,ollama.exe,28048,"297,600 K"
+process,Code.exe,15252,"294,376 K"
+process,PowerToys.Settings.exe,29316,"253,216 K"
+process,ChatGPT.exe,5708,"242,728 K"
+process,Code.exe,23052,"241,880 K"

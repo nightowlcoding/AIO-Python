@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{{ merchant }} — Budget Detail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --green: #00FF41;
+    --green-dim: #00aa2a;
+    --green-dark: #003B00;
+    --green-glow: rgba(0,255,65,0.25);
+    --bg: #0a0a0a;
+    --surface: #0f0f0f;
+    --surface2: #151515;
+    --amber: #FFB300;
+    --red: #FF3B3B;
+    --cyan: #00E5FF;
+    --purple: #CC66FF;
+    --border: 1px solid var(--green-dim);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    min-height: 100vh;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    top:0; left:0; width:100%; height:100%;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+  header {
+    background: #050505;
+    border-bottom: 1px solid var(--green);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 0 18px var(--green-glow);
+  }
+  header h1 { font-size: 1rem; letter-spacing: 3px; text-shadow: 0 0 10px var(--green); }
+  .back-btn {
+    background: transparent;
+    border: 1px solid var(--green-dim);
+    color: var(--green-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    padding: 5px 14px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .back-btn:hover { border-color: var(--green); color: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--surface);
+    border: var(--border);
+    padding: 16px;
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+  .card .label { font-size: 0.68rem; letter-spacing: 2px; color: var(--green-dim); margin-bottom: 6px; }
+  .card .value { font-size: 1.4rem; }
+  .card.green .value { color: var(--green); text-shadow: 0 0 8px var(--green); }
+  .card.amber .value { color: var(--amber); text-shadow: 0 0 8px var(--amber); }
+  .card.red .value { color: var(--red); text-shadow: 0 0 8px var(--red); }
+  .card.cyan .value { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
+  .section-title {
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    color: var(--green-dim);
+    border-bottom: var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+    margin-top: 24px;
+  }
+  .chart-wrap {
+    background: var(--surface);
+    border: var(--border);
+    padding: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+  .chart-wrap canvas { max-height: 280px; }
+  .table-wrap {
+    background: var(--surface);
+    border: var(--border);
+    overflow-x: auto;
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--green-dim); }
+  thead th { padding: 10px 12px; text-align: left; letter-spacing: 1px; color: var(--green); font-weight: normal; }
+  tbody tr { border-bottom: 1px solid #1a1a1a; }
+  tbody tr:hover { background: var(--green-dark); }
+  tbody td { padding: 8px 12px; vertical-align: middle; }
+  .amount-neg { color: var(--red); }
+  .amount-pos { color: var(--green); }
+  .trend-up { color: var(--red); font-size: 1.4rem; }
+  .trend-down { color: var(--green); font-size: 1.4rem; }
+  .trend-flat { color: var(--green-dim); font-size: 1.4rem; }
+  .badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+    padding: 2px 7px;
+    border: 1px solid;
+    border-radius: 2px;
+  }
+  .badge-deposit { color: var(--green); border-color: var(--green); }
+  .badge-recurring { color: var(--amber); border-color: var(--amber); }
+  .badge-mortgage { color: var(--cyan); border-color: var(--cyan); }
+  .badge-transfer { color: var(--purple); border-color: var(--purple); }
+  .badge-expense { color: #888; border-color: #444; }
+  .loading { padding: 30px; text-align: center; color: var(--green-dim); letter-spacing: 3px; animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .change-label {
+    display: inline-block;
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    margin-left: 6px;
+  }
+  .change-up { color: var(--red); }
+  .change-down { color: var(--green); }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="back-btn" href="/">&lt; BACK</a>
+  <h1>&gt; EXPENSE DETAIL: {{ merchant|upper }}</h1>
+</header>
+
+<main>
+  <div class="cards" id="stat-cards"><div class="loading">LOADING...</div></div>
+
+  <div class="section-title">MONTHLY TREND — {{ merchant|upper }}</div>
+  <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
+
+  <div class="section-title">MONTH-OVER-MONTH CHANGE</div>
+  <div class="table-wrap" style="margin-bottom:24px;">
+    <table>
+      <thead><tr><th>MONTH</th><th>AMOUNT</th><th>CHANGE</th><th>% CHANGE</th></tr></thead>
+      <tbody id="mom-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">ALL TRANSACTIONS</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>DATE</th><th>AMOUNT</th><th>CATEGORY</th><th>DESCRIPTION</th></tr></thead>
+      <tbody id="tx-tbody"><tr><td colspan="4" class="loading">LOADING...</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+const MERCHANT = {{ merchant|tojson }};
+const SLUG = {{ slug|tojson }};
+const fmt = v => '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+function badge(cat) {
+  return `<span class="badge badge-${cat}">${cat.toUpperCase()}</span>`;
+}
+
+let trendChart = null;
+
+async function load() {
+  const res = await fetch('/api/expense/' + SLUG);
+  const data = await res.json();
+  if (data.error) {
+    document.getElementById('stat-cards').innerHTML = '<div style="color:var(--red);padding:20px">ERROR: ' + data.error + '</div>';
+    return;
+  }
+
+  const s = data.stats;
+  const trendClass = s.trend === '↑' ? 'red' : s.trend === '↓' ? 'green' : 'amber';
+  document.getElementById('stat-cards').innerHTML = `
+    <div class="card green"><div class="label">MONTHLY AVG</div><div class="value">${fmt(s.avg)}</div></div>
+    <div class="card green"><div class="label">LOWEST MONTH</div><div class="value">${fmt(s.min)}</div></div>
+    <div class="card red"><div class="label">HIGHEST MONTH</div><div class="value">${fmt(s.max)}</div></div>
+    <div class="card ${trendClass}"><div class="label">TREND</div><div class="value">${s.trend}</div></div>
+    <div class="card amber"><div class="label">MONTHS ON RECORD</div><div class="value">${data.months.length}</div></div>
+    <div class="card cyan"><div class="label">TOTAL PAID</div><div class="value">${fmt(data.amounts.reduce((a,b)=>a+b,0))}</div></div>
+  `;
+
+  // Line chart
+  const ctx = document.getElementById('trend-chart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.months,
+      datasets: [{
+        label: MERCHANT,
+        data: data.amounts,
+        borderColor: '#00FF41',
+        backgroundColor: 'rgba(0,255,65,0.07)',
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#00FF41',
+        pointRadius: 5,
+        pointHoverRadius: 8,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#00aa2a', font:{family:'Share Tech Mono'} } },
+        tooltip: {
+          bodyFont: {family:'Share Tech Mono'},
+          titleFont: {family:'Share Tech Mono'},
+          callbacks: { label: ctx => ' $' + ctx.raw.toFixed(2) },
+        },
+      },
+      scales: {
+        x: { ticks:{color:'#00aa2a',font:{family:'Share Tech Mono'}}, grid:{color:'#1a1a1a'} },
+        y: { ticks:{color:'#00aa2a',font:{family:'Share Tech Mono'},callback:v=>'$'+v}, grid:{color:'#1a1a1a'} },
+      },
+    },
+  });
+
+  // Month-over-month table
+  const momTbody = document.getElementById('mom-tbody');
+  if (data.months.length < 2) {
+    momTbody.innerHTML = '<tr><td colspan="4" style="color:var(--green-dim);padding:12px">NEED AT LEAST 2 MONTHS OF DATA</td></tr>';
+  } else {
+    momTbody.innerHTML = data.months.map((m, i) => {
+      if (i === 0) return `<tr><td>${m}</td><td>${fmt(data.amounts[0])}</td><td>—</td><td>—</td></tr>`;
+      const prev = data.amounts[i-1];
+      const curr = data.amounts[i];
+      const diff = curr - prev;
+      const pct = prev === 0 ? 0 : (diff / prev * 100);
+      const cls = diff > 0 ? 'change-up' : diff < 0 ? 'change-down' : '';
+      const sign = diff > 0 ? '+' : '';
+      return `<tr>
+        <td>${m}</td>
+        <td>${fmt(curr)}</td>
+        <td class="${cls}">${sign}${fmt(diff)}</td>
+        <td class="${cls}">${sign}${pct.toFixed(1)}%</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Transactions table
+  const txTbody = document.getElementById('tx-tbody');
+  txTbody.innerHTML = data.transactions.map(r =>
+    `<tr>
+      <td>${r.date}</td>
+      <td class="${r.amount>=0?'amount-pos':'amount-neg'}">${r.amount>=0?'+':''}${fmt(r.amount)}</td>
+      <td>${badge(r.category)}</td>
+      <td style="font-size:0.7rem;color:var(--green-dim)">${r.description||''}</td>
+    </tr>`
+  ).join('') || '<tr><td colspan="4" style="color:var(--green-dim);padding:12px">NO TRANSACTIONS</td></tr>';
+}
+
+load();
+</script>
+</body>
+</html>

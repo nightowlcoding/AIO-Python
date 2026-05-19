@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log - Manager App{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">
+        <i class="bi bi-file-text"></i> Audit Log
+        <button class="btn btn-outline-primary float-end" onclick="exportTableToCSV('auditTable', 'audit_log.csv')">
+            <i class="bi bi-download"></i> Export CSV
+        </button>
+    </h1>
+    
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover" id="auditTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>IP Address</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td><small>{{ log.created_at }}</small></td>
+                            <td>{{ log.username }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if 'login' in log.action %}bg-success
+                                    {% elif 'delete' in log.action or 'logout' in log.action %}bg-danger
+                                    {% elif 'create' in log.action %}bg-primary
+                                    {% elif 'update' in log.action %}bg-warning
+                                    {% else %}bg-info{% endif %}">
+                                    {{ log.action }}
+                                </span>
+                            </td>
+                            <td><small class="text-muted">{{ log.ip_address or '-' }}</small></td>
+                            <td><small>{{ log.details or '-' }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDataTable('auditTable');
+});
+</script>
+{% endblock %}

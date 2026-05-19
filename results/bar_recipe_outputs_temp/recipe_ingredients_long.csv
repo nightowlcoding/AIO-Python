@@ -1,0 +1,231 @@
+recipe_name,ingredient_slot,ingredient,quantity,additional_instructions,additional_type,quality_flag,source_row
+Adios MotherFer,1,Vodka,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,2,Gin,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,3,Rum,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,4,Tequila,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,5,Blue Curacao,.5oz,Fill with sweet and sour top with sprite,,,2
+Amaretto Sour,1,Amaretto,1oz,Build over ice and Garnish with Cherries,,,3
+Amaretto Sour,2,Sweet & Sour,4oz,Build over ice and Garnish with Cherries,,,3
+Bahama Mama,1,Cap Morgan,1oz,Shake and Strain. Mix with Grenadine,,,4
+Bahama Mama,2,Amaretto,1oz,Shake and Strain. Mix with Grenadine,,,4
+Bahama Mama,3,Banana Liquor,1oz,Shake and Strain. Mix with Grenadine,,,4
+Bahama Mama,4,Orange Juice,1.5oz,Shake and Strain. Mix with Grenadine,,,4
+Bahama Mama,5,Pineapple,1.5oz,Shake and Strain. Mix with Grenadine,,,4
+Bebecita,1,x-rated,1oz,Shaken and Stirred,,,5
+Bebecita,2,Whipped Cream,Orange Juice,Shaken and Stirred,,quantity_maybe_shifted,5
+Bebecita,3,1oz,Pineapple,Shaken and Stirred,,quantity_maybe_shifted,5
+Bebecita,4,1oz,Grenadine,Shaken and Stirred,,quantity_maybe_shifted,5
+Bebecita,5,1oz,,Shaken and Stirred,,missing_quantity,5
+BHB Pineapple,1,Amaretto,1oz,"Fill with pineapple, top with grenadine. Garnish: Orange and Cherries",,,6
+BHB Pineapple,2,Peach Schn,1oz,"Fill with pineapple, top with grenadine. Garnish: Orange and Cherries",,,6
+BHB Pineapple,3,So Comfort,1oz,"Fill with pineapple, top with grenadine. Garnish: Orange and Cherries",,,6
+BHB Vozul Spritz,1,Vozul Tequila,1.5oz,Garish with Chamoy and tajin,,,7
+BHB Vozul Spritz,2,Grapefruit Juce,2oz,Garish with Chamoy and tajin,,,7
+BHB Vozul Spritz,3,Orange Juice,2oz,Garish with Chamoy and tajin,,,7
+BHB Vozul Spritz,4,Sweet,1oz,Garish with Chamoy and tajin,,,7
+BHB Vozul Spritz,5,Squirt,Top Off,Garish with Chamoy and tajin,,,7
+Big House Tea,1,Vodka,2.5oz,Squeeze half a lemon and Garnish with lemon wedge,,,8
+Big House Tea,2,Peach Tree,.25oz,Squeeze half a lemon and Garnish with lemon wedge,,,8
+Big House Tea,3,Sugar Water,Fill,Squeeze half a lemon and Garnish with lemon wedge,,,8
+Bloody Kiss,1,Peach Schnapps,1oz,Sprinkle glass with grenadine,,,9
+Bloody Kiss,2,Gin,1oz,Sprinkle glass with grenadine,,,9
+Bloody Kiss,3,Hawaiian Punch,1oz,Sprinkle glass with grenadine,,,9
+Bloody Kiss,4,7up,.5oz,Sprinkle glass with grenadine,,,9
+Bloody Maria,1,Tequila,1.5oz,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,10
+Bloody Maria,2,Olive Juice,Splash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,10
+Bloody Maria,3,Worcestershire,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,10
+Bloody Maria,4,Tobaso,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,10
+Bloody Maria,5,Pepper,Dash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,10
+Bloody Maria,6,Clamato,Fill,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,10
+Bloody Mary,1,Vodka,1.5oz,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,11
+Bloody Mary,2,Olive Juice,Splash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,11
+Bloody Mary,3,Worcestershire,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,11
+Bloody Mary,4,Tobaso,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,11
+Bloody Mary,5,Pepper,Dash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,11
+Bloody Mary,6,Clamato,Fill,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,11
+Blue Hawaiian,1,Malibu,1oz,Shake & Serve over ice. Garnish with Orange and Cherries,,,12
+Blue Hawaiian,2,Blue Curacao,.5oz,Shake & Serve over ice. Garnish with Orange and Cherries,,,12
+Blue Hawaiian,3,Pineapple,3oz,Shake & Serve over ice. Garnish with Orange and Cherries,,,12
+Bruised Apple,1,Jaeger,1oz,,,,13
+Bruised Apple,2,Apple Puckers,1oz,,,,13
+Bruised Apple,3,Cranberry,Splash,,,,13
+Bull Blaster,1,Jaeger,1oz,,,,14
+Bull Blaster,2,Red Bull,2oz,,,,14
+Cape Code,1,Vodka,1.5oz,Build over ice Garnish with Lime,,,15
+Cape Code,2,Cranberry,Fill,Build over ice Garnish with Lime,,,15
+Cherry Vodka Sour,1,Vodka,1oz,Build over ice,,,16
+Cherry Vodka Sour,2,Sweet & Sour,1oz,Build over ice,,,16
+Cherry Vodka Sour,3,Grenadine,.5oz,Build over ice,,,16
+Classic House Margarita,1,Vozul Tequila,1.5oz,Garnish with salt and fruit.,,,17
+Classic House Margarita,2,Lime Juice - Fresh,1oz,Garnish with salt and fruit.,,,17
+Classic House Margarita,3,Simple Syrup,.5oz,Garnish with salt and fruit.,,,17
+Classic House Margarita,4,Orange Juice,Splash,Garnish with salt and fruit.,,,17
+Classic House Margarita,5,Grand Marnier,Float,Garnish with salt and fruit.,,quantity_maybe_shifted,17
+Coconut Mojito,1,Rasta Bob Rum,1.5oz,Muddle mint and the simple syrup. Ganish with Mint Leaves,,,18
+Coconut Mojito,2,Mint Leaves,3-4leaves,Muddle mint and the simple syrup. Ganish with Mint Leaves,,,18
+Coconut Mojito,3,Simple Syrup,.5oz,Muddle mint and the simple syrup. Ganish with Mint Leaves,,,18
+Coconut Mojito,4,Coco Lopez,.5oz,Muddle mint and the simple syrup. Ganish with Mint Leaves,,,18
+Coconut Mojito,5,Topo Chico,Top Off,Muddle mint and the simple syrup. Ganish with Mint Leaves,,,18
+Cosmopolitan,1,Vodka,1.25oz,Shake & Strain. Garnish with Lemon Twist,,,19
+Cosmopolitan,2,Triple Sec,.75oz,Shake & Strain. Garnish with Lemon Twist,,,19
+Cosmopolitan,3,Cranberry,2oz,Shake & Strain. Garnish with Lemon Twist,,,19
+Cosmopolitan,4,Sweet&Sour,1oz,Shake & Strain. Garnish with Lemon Twist,,,19
+Electric Eel,1,Ciroc Apple,1oz,Sour Apple & Blue Curacao Shaken seperately layered on top,,,20
+Electric Eel,2,Midori,1oz,Sour Apple & Blue Curacao Shaken seperately layered on top,,,20
+Electric Eel,3,Sweet&Sour,1oz,Sour Apple & Blue Curacao Shaken seperately layered on top,,,20
+Foley's Red Apple,1,Malibu,.5oz,Shake and Strain,Shot,,21
+Foley's Red Apple,2,Apple Puckers,.5oz,Shake and Strain,Shot,,21
+Foley's Red Apple,3,Cranberry,.5oz,Shake and Strain,Shot,,21
+Georgia Tea,1,Vodka,1oz,Fill with sweet and sour top off with cranberry,,,22
+Georgia Tea,2,Gin,1oz,Fill with sweet and sour top off with cranberry,,,22
+Georgia Tea,3,Light Rum,1oz,Fill with sweet and sour top off with cranberry,,,22
+Georgia Tea,4,Peach Schnapps,1oz,Fill with sweet and sour top off with cranberry,,,22
+Green Bean,1,3 Olive Vodka,1oz,Make like a bull blaster,,,23
+Green Bean,2,Red Bull,Fill,Make like a bull blaster,,,23
+Green Bean,3,Cranberry,Splash,Make like a bull blaster,,,23
+Hurricane,1,Light Rum,.5oz,Shake&Serve over ice. Garnish with Cherries,,,24
+Hurricane,2,Dark Rum,.5oz,Shake&Serve over ice. Garnish with Cherries,,,24
+Hurricane,3,Orange Juice,1oz,Shake&Serve over ice. Garnish with Cherries,,,24
+Hurricane,4,Pineapple,3oz,Shake&Serve over ice. Garnish with Cherries,,,24
+Hurricane,5,Grenadine,.5oz,Shake&Serve over ice. Garnish with Cherries,,,24
+Jolly Rancher,1,Watermelon,.5oz,,Shot,,25
+Jolly Rancher,2,Apple Puckers,.5oz,,Shot,,25
+Jolly Rancher,3,Sweet&Sour,.5oz,,Shot,,25
+Jolly Rancher,4,7up,.5oz,,Shot,,25
+Jolly Rancher,5,Grenadine,splash,,Shot,,25
+Kamikaze,1,Vodka,1oz,Shake and Strain,,,26
+Kamikaze,2,Triple Sec,.5oz,Shake and Strain,,,26
+Kamikaze,3,Sweet&Sour,.5oz,Shake and Strain,,,26
+Liquid Marijuana,1,Cap Morgan,.5oz,,Shot,,27
+Liquid Marijuana,2,Blue Curacao,.5oz,,Shot,,27
+Liquid Marijuana,3,Malibu,.5oz,,Shot,,27
+Liquid Marijuana,4,Midori,.5oz,,Shot,,27
+Liquid Marijuana,5,Pineapple,Fill,,Shot,,27
+Liquid Marijuana,6,Sweet&Sour,Splash,,Shot,,27
+Liquid Marijuana (Shot),1,Malibu,.25oz,Shake and Strain,,,28
+Liquid Marijuana (Shot),2,Blue Curacao,.25oz,Shake and Strain,,,28
+Liquid Marijuana (Shot),3,Cap Morgan,.25oz,Shake and Strain,,,28
+Liquid Marijuana (Shot),4,Midori,.25oz,Shake and Strain,,,28
+Liquid Marijuana (Shot),5,Pineapple,Splash,Shake and Strain,,,28
+Liquid Marijuana (Shot),6,Sweet&Sour,Splash,Shake and Strain,,,28
+Mai Tai,1,Light Rum,.5oz,,,,29
+Mai Tai,2,Amaretto,.5oz,,,,29
+Mai Tai,3,Sweet&Sour,1oz,,,,29
+Mai Tai,4,Pineapple,3oz,,,,29
+Mai Tai,5,Grand Marnier,.5oz,,,,29
+Mai Tai,6,Grenadine,.5oz,,,,29
+Margarita Citron,1,Patron,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,30
+Margarita Citron,2,Patron Citron,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,30
+Margarita Citron,3,Lime Juice,2oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,30
+Margarita Citron,4,Orange Juice,Fill,Build over Ice. Rim with salt. Garnish with lime and oranges,,,30
+Margarita Melon,1,Watermelon,2 parts,Served on the rocks Garnish with Limes,,,31
+Margarita Melon,2,Tequila,1 part,Served on the rocks Garnish with Limes,,,31
+Margarita Melon,3,Sweet&Sour,2 Parts,Served on the rocks Garnish with Limes,,,31
+Margarita Patron,1,Patron,1.5oz,Salt the rim of the glass. Garnish with Lime,,,32
+Margarita Patron,2,Orange Liqueur,1oz,Salt the rim of the glass. Garnish with Lime,,,32
+Margarita Patron,3,Lime Juice,Half,Salt the rim of the glass. Garnish with Lime,,quantity_maybe_shifted,32
+Margarita Patron,4,Sweet&Sour,Half,Salt the rim of the glass. Garnish with Lime,,quantity_maybe_shifted,32
+Margarita Patron,5,Grand Marnier,Float,Salt the rim of the glass. Garnish with Lime,,quantity_maybe_shifted,32
+Margarita WELL,1,Tequila,1.5oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,33
+Margarita WELL,2,Triple Sec,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,33
+Margarita WELL,3,Sweet&Sour,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,33
+Margarita WELL,4,Lime Juice,2oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,33
+Martini Dry,1,Gin,1oz,Garnish with lemon twist,,,34
+Martini Dry,2,Dry Vermouth,1oz,Garnish with lemon twist,,,34
+Martini Mexican,1,Tequila,2oz,Garnish with Olives,,,35
+Martini Mexican,2,Cointreau,1.5oz,Garnish with Olives,,,35
+Martini Mexican,3,Lime Juice,2oz,Garnish with Olives,,,35
+Martini Mexican,4,Orange Juice,2oz,Garnish with Olives,,,35
+Martini Mexican,5,Olive Juice,Splash,Garnish with Olives,,,35
+Martini Mexican,6,7up,Splash,Garnish with Olives,,,35
+Midori Splice,1,Malibu,1.5oz,Top with wipe cream,,,36
+Midori Splice,2,Midori,1oz,Top with wipe cream,,,36
+Midori Splice,3,Pineapple,4oz,Top with wipe cream,,,36
+Mighty Tasty,1,Crown,.5oz,,Shot,,37
+Mighty Tasty,2,Jager,.5oz,,Shot,,37
+Paradise Dream,1,Malibu,1oz,Layed grenadine at bottom. Blue & Island Puckers Mixed,,,38
+Paradise Dream,2,Peach Schn,1oz,Layed grenadine at bottom. Blue & Island Puckers Mixed,,,38
+Paradise Dream,3,Pineapple,1/2 way,Layed grenadine at bottom. Blue & Island Puckers Mixed,,,38
+Pineapple Express,1,Vodka,.75oz,Shake and Strain,Shot,,39
+Pineapple Express,2,Blue Curacao,.25oz,Shake and Strain,Shot,,39
+Pineapple Express,3,Pineapple,Splash,Shake and Strain,Shot,,39
+Pineapple Express,4,Red Bull,Splash,Shake and Strain,Shot,,39
+Purple Gecko,1,Tequila,.75oz,Shake and Strain,Shot,,40
+Purple Gecko,2,Blue Curacao,.25oz,Shake and Strain,Shot,,40
+Purple Gecko,3,Cranberry,Splash,Shake and Strain,Shot,,40
+Purple Gecko,4,Sweet&Sour,Splash,Shake and Strain,Shot,,40
+Pussy Juice,1,Malibu,1oz,,,,41
+Pussy Juice,2,Vodka,1oz,,,,41
+Pussy Juice,3,Red bull,splash,,,,41
+Pussy Juice,4,Grenadine,Splash,,,,41
+Rasta Punch,1,Rasta Bob Rum,1.5oz,"Garnish with a sugar rim, Pineapple Slice, and a cheery",,,42
+Rasta Punch,2,Peacetree,1oz,"Garnish with a sugar rim, Pineapple Slice, and a cheery",,,42
+Rasta Punch,3,Sweet&Sour,.5oz,"Garnish with a sugar rim, Pineapple Slice, and a cheery",,,42
+Rasta Punch,4,Pineapple,2oz,"Garnish with a sugar rim, Pineapple Slice, and a cheery",,,42
+Rasta Punch,5,Grenadine,Dash,"Garnish with a sugar rim, Pineapple Slice, and a cheery",,,42
+Red Headed Slut,1,Crown,1oz,Shake and strain,,,43
+Red Headed Slut,2,Peach Schn,.5oz,Shake and strain,,,43
+Red Headed Slut,3,Jaeger,1oz,Shake and strain,,,43
+Red Headed Slut,4,Cranberry,Splash,Shake and strain,,,43
+Red Snapper,1,Crown,1oz,Shake and strain,Shot,,44
+Red Snapper,2,Amaretto,1oz,Shake and strain,Shot,,44
+Red Snapper,3,Cranberry,splash,Shake and strain,Shot,,44
+Sex on the Beach,1,Vodka,1oz,Shake and Strain,,,45
+Sex on the Beach,2,Peach Snapps,.5oz,Shake and Strain,,,45
+Sex on the Beach,3,Pineapple,.5oz,Shake and Strain,,,45
+Sex on the Beach,4,Cranberry,.25oz,Shake and Strain,,,45
+Shark Bite,1,Bacardi Limon,.5oz,,,,46
+Shark Bite,2,Vodka,.5oz,,,,46
+Shark Bite,3,Blue Curacao,.25oz,,,,46
+Shark Bite,4,Sweet&Sour,Splash,,,,46
+Shark Bite,5,Grenadine,Splash,,,,46
+Six Gage,1,Crown,.25oz,Shake and Serve,Shot,,47
+Six Gage,2,Cap Morgan,.25oz,Shake and Serve,Shot,,47
+Six Gage,3,Malibu,.25oz,Shake and Serve,Shot,,47
+Six Gage,4,Peach,.25oz,Shake and Serve,Shot,,47
+Six Gage,5,Amaretto,.25oz,Shake and Serve,Shot,,47
+Six Gage,6,Pineapple,Splash,Shake and Serve,Shot,,47
+Six Gage,7,Cranberry,Splash,Shake and Serve,Shot,,47
+Sour Patch Kid,1,Tito's,1oz,,,,48
+Sour Patch Kid,2,Watermelon,.5oz,,,,48
+Sour Patch Kid,3,Apple,.5oz,,,,48
+Sour Patch Kid,4,Sweet&Sour,Fill,,,,48
+Sour Skittles,1,Vodka,1oz,,,,49
+Sour Skittles,2,Blue Curacao,1oz,,,,49
+Sour Skittles,3,Razzmatazz,1oz,,,,49
+Sour Skittles,4,Sweet&Sour,2oz,,,,49
+Spicy Strawberry Margarita,1,Vozul Tequila,1.5oz,Muddle 2 Japapeno Slices and 3 strawberries,,,50
+Spicy Strawberry Margarita,2,Grand Marnier,.5oz,Muddle 2 Japapeno Slices and 3 strawberries,,,50
+Spicy Strawberry Margarita,3,Jalapeno Slices,2,Muddle 2 Japapeno Slices and 3 strawberries,,,50
+Spicy Strawberry Margarita,4,Strawberries,3,Muddle 2 Japapeno Slices and 3 strawberries,,,50
+Spicy Strawberry Margarita,5,Simple Syrup,1oz,Muddle 2 Japapeno Slices and 3 strawberries,,,50
+Stardust,1,Citron Vodka,.5oz,,Shot,,51
+Stardust,2,Peachtree,.5oz,,Shot,,51
+Stardust,3,Blue Curacao,.5oz,,Shot,,51
+Stardust,4,Sweet&Sour,1oz,,Shot,,51
+Stardust,5,Pineapple,1oz,,Shot,,51
+Stardust,6,Grenadine,Splash,,Shot,,51
+Tequila Sunrise,1,Tequila,1.5oz,Build over ice Garnish with Cherries,,,52
+Tequila Sunrise,2,Grenadine,.5oz,Build over ice Garnish with Cherries,,,52
+Tequila Sunrise,3,Orange Juice,4oz,Build over ice Garnish with Cherries,,,52
+Vegas Bomb,1,Crown,1oz,Shake and Strain,,,53
+Vegas Bomb,2,Peach Snapps,.5oz,Shake and Strain,,,53
+Vegas Bomb,3,Malibu,.5oz,Shake and Strain,,,53
+Vegas Bomb,4,Red Bull,Splash,Shake and Strain,,,53
+Vodka Fresca,1,Dragon Berry,1oz,Shaken with Fresh Fruit,,,54
+Vodka Fresca,2,Lemonade,1/2 cup,Shaken with Fresh Fruit,,,54
+Vodka Fresca,3,Sprite,splash,Shaken with Fresh Fruit,,,54
+Vodka Sour,1,Vodka,2oz,Build over Ice Garnish Lemon and Cherries,,,55
+Vodka Sour,2,Lime Juice,1oz,Build over Ice Garnish Lemon and Cherries,,,55
+Vozul Ranch Water,1,Vozul Tequila,1.5oz,Tajin Rim and garnish with a lime,,,56
+Vozul Ranch Water,2,Lime  Juice,1oz,Tajin Rim and garnish with a lime,,,56
+Vozul Ranch Water,3,Beer Salt,Sprinkle,Tajin Rim and garnish with a lime,,quantity_maybe_shifted,56
+Vozul Ranch Water,4,Topo Chico,Top Off,Tajin Rim and garnish with a lime,,,56
+Washington Apple,1,Crown,1oz,Shake and strain,,,57
+Washington Apple,2,Apple Puckers,.5oz,Shake and strain,,,57
+Washington Apple,3,Cranberry,.5oz,Shake and strain,,,57
+Water Moccasin,1,Crown,1oz,Shake and Strain,,,58
+Water Moccasin,2,Peach Snapps,.5oz,Shake and Strain,,,58
+Water Moccasin,3,Sweet&Sour,.5oz,Shake and Strain,,,58
+Whiskey Sour,1,Whiskey,2oz,Build  over ice. Garnish with Lemon and Cherries,,,59
+Whiskey Sour,2,Lime Juice,1oz,Build  over ice. Garnish with Lemon and Cherries,,,59

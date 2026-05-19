@@ -1,0 +1,39 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run ProductMix App",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": [
+        "${workspaceFolder}\\ProductMixRestaurantDB\\app.py"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run ProductMix App (Production Mode)",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": [
+        "${workspaceFolder}\\ProductMixRestaurantDB\\app.py"
+      ],
+      "options": {
+        "env": {
+          "PM_DEBUG": "0"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Night Owl Tuning",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": [
+        "${workspaceFolder}\\Tools\\night_owl_tuning.py"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

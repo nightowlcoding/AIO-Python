@@ -1,0 +1,3 @@
+ASUS G14 Tune-Up Session 20260508_140043
+[14:00:45][T:MainThread] Session log file: C:\Users\arnol\OneDrive\Desktop\AIO-Python\reports\asus_g14_tuning\session_20260508_140043.txt
+[14:00:52][T:MainThread] Admin relaunch requested from: C:\Users\arnol\OneDrive\Desktop\AIO-Python\Tools\asusg14tuneuptool.py

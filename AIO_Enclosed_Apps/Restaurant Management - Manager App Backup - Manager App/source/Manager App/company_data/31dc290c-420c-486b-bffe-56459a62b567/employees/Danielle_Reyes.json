@@ -1,0 +1,14 @@
+{
+  "employeeInfo": {
+    "firstName": "Danielle",
+    "lastName": "Reyes",
+    "dateOfHire": "2025-11-20",
+    "id": 1763625144381.8335
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

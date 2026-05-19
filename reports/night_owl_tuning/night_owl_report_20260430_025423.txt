@@ -1,0 +1,43 @@
+Night Owl Tuning - Health Report
+============================================
+Timestamp: 2026-04-30T02:54:23.684009
+Action: Run Disk Cleanup
+Action status: success
+
+System
+--------------------------------------------
+Hostname: LilChicoLaptop
+OS: Windows-11-10.0.26200-SP0
+Uptime: 0d 0h 22m
+
+Storage
+--------------------------------------------
+C: Total GB: 924.55
+C: Used GB: 635.48
+C: Free GB: 289.07
+C: Free %: 31.27
+
+Tuning Status
+--------------------------------------------
+Power plan query: Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+Game mode query: ERROR: ERROR: The system was unable to find the specified registry key or value.
+Defender realtime protection: True
+Startup item count: 11
+
+Top Processes by Memory
+--------------------------------------------
+WorkloadsSessionHost.exe       PID= 19660  MEM=4,259,312 K
+Code.exe                       PID= 16032  MEM=1,374,964 K
+Code.exe                       PID= 25000  MEM=1,261,648 K
+WorkloadsSessionHost.exe       PID= 32124  MEM=870,864 K
+GoogleDriveFS.exe              PID= 24828  MEM=453,756 K
+WorkloadsSessionHost.exe       PID= 13260  MEM=415,328 K
+MsMpEng.exe                    PID=  7336  MEM=346,044 K
+WorkloadsSessionHost.exe       PID= 16764  MEM=318,676 K
+explorer.exe                   PID= 13712  MEM=302,664 K
+ollama.exe                     PID= 28048  MEM=297,584 K
+Code.exe                       PID= 15252  MEM=295,980 K
+Code.exe                       PID= 23052  MEM=250,896 K
+ChatGPT.exe                    PID=  5708  MEM=242,768 K
+MicrosoftSecurityApp.exe       PID= 27388  MEM=226,084 K
+dwm.exe                        PID=  2852  MEM=207,872 K

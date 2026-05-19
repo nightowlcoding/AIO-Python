@@ -1,0 +1,44 @@
+Night Owl Tuning - Health Report
+============================================
+Timestamp: 2026-04-30T01:57:11.348024
+Action: Run Disk Cleanup
+Action status: success
+
+System
+--------------------------------------------
+Hostname: GamingPcARJ
+OS: Windows-11-10.0.26200-SP0
+Uptime: 0d 2h 22m
+
+Storage
+--------------------------------------------
+C: Total GB: 928.67
+C: Used GB: 529.59
+C: Free GB: 399.08
+C: Free %: 42.97
+
+Tuning Status
+--------------------------------------------
+Power plan query: Power Scheme GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (High performance)
+Game mode query: HKEY_CURRENT_USER\Software\Microsoft\GameBar
+    AutoGameModeEnabled    REG_DWORD    0x1
+Defender realtime protection: True
+Startup item count: 9
+
+Top Processes by Memory
+--------------------------------------------
+Code.exe                       PID= 25292  MEM=2,312,536 K
+Code.exe                       PID=  8956  MEM=653,280 K
+explorer.exe                   PID=  5464  MEM=521,796 K
+OneDrive.exe                   PID=  6148  MEM=516,288 K
+steamwebhelper.exe             PID= 11632  MEM=488,536 K
+chrome.exe                     PID=  1760  MEM=435,740 K
+Code.exe                       PID= 23416  MEM=414,548 K
+XboxPcApp.exe                  PID= 14924  MEM=399,332 K
+MsMpEng.exe                    PID=  5456  MEM=335,984 K
+SteelSeriesSonar.exe           PID= 14716  MEM=325,140 K
+chrome.exe                     PID=  3032  MEM=284,812 K
+steamwebhelper.exe             PID= 16172  MEM=236,252 K
+MicrosoftSecurityApp.exe       PID= 17072  MEM=204,016 K
+chrome.exe                     PID= 21036  MEM=203,780 K
+RazerAppEngine.exe             PID= 17144  MEM=197,444 K

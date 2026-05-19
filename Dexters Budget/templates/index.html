@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DEXTER'S BUDGET TRACKER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --green: #00FF41;
+    --green-dim: #00aa2a;
+    --green-dark: #003B00;
+    --green-glow: rgba(0,255,65,0.25);
+    --bg: #0a0a0a;
+    --surface: #0f0f0f;
+    --surface2: #151515;
+    --amber: #FFB300;
+    --red: #FF3B3B;
+    --cyan: #00E5FF;
+    --purple: #CC66FF;
+    --border: 1px solid var(--green-dim);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ─── Header ─── */
+  header {
+    background: #050505;
+    border-bottom: 1px solid var(--green);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 0 18px var(--green-glow);
+  }
+  header h1 {
+    font-size: 1.2rem;
+    letter-spacing: 4px;
+    text-shadow: 0 0 10px var(--green);
+    color: var(--green);
+  }
+  header .blink { animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ─── Upload bar ─── */
+  #upload-bar {
+    background: var(--surface);
+    border-bottom: var(--border);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  #upload-bar label { font-size: 0.8rem; color: var(--green-dim); }
+  .btn {
+    background: transparent;
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: inherit;
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .btn:hover { background: var(--green-dark); box-shadow: 0 0 8px var(--green-glow); }
+  .btn-amber { border-color: var(--amber); color: var(--amber); }
+  .btn-amber:hover { background: rgba(255,179,0,0.1); }
+  #upload-status { font-size: 0.75rem; color: var(--green-dim); }
+  #import-history-list { font-size: 0.7rem; color: var(--green-dim); margin-left: auto; }
+
+  /* ─── Tabs ─── */
+  nav#tabs {
+    background: var(--surface);
+    border-bottom: var(--border);
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  nav#tabs::-webkit-scrollbar { display: none; }
+  nav#tabs button {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--green-dim);
+    font-family: inherit;
+    font-size: 0.78rem;
+    letter-spacing: 2px;
+    padding: 12px 20px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  nav#tabs button:hover { color: var(--green); }
+  nav#tabs button.active {
+    color: var(--green);
+    border-bottom-color: var(--green);
+    text-shadow: 0 0 8px var(--green);
+  }
+
+  /* ─── Main ─── */
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ─── Cards ─── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--surface);
+    border: var(--border);
+    padding: 16px;
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+  .card .label { font-size: 0.68rem; letter-spacing: 2px; color: var(--green-dim); margin-bottom: 6px; }
+  .card .value { font-size: 1.45rem; }
+  .card.cyan .value { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
+  .card.amber .value { color: var(--amber); text-shadow: 0 0 8px var(--amber); }
+  .card.red .value { color: var(--red); text-shadow: 0 0 8px var(--red); }
+  .card.purple .value { color: var(--purple); text-shadow: 0 0 8px var(--purple); }
+  .card.green .value { color: var(--green); text-shadow: 0 0 8px var(--green); }
+
+  /* ─── Section titles ─── */
+  .section-title {
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    color: var(--green-dim);
+    border-bottom: var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+    margin-top: 24px;
+  }
+
+  /* ─── Charts ─── */
+  .chart-wrap {
+    background: var(--surface);
+    border: var(--border);
+    padding: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+  .chart-wrap canvas { max-height: 260px; }
+
+  /* ─── Tables ─── */
+  .table-wrap {
+    background: var(--surface);
+    border: var(--border);
+    overflow-x: auto;
+    box-shadow: 0 0 6px var(--green-glow);
+    margin-bottom: 24px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--green-dim); }
+  thead th { padding: 10px 12px; text-align: left; letter-spacing: 1px; color: var(--green); font-weight: normal; }
+  tbody tr { border-bottom: 1px solid #1a1a1a; }
+  tbody tr:hover { background: var(--green-dark); }
+  tbody td { padding: 8px 12px; vertical-align: middle; }
+  .total-row td {
+    border-top: 1px solid var(--green-dim);
+    background: #0b140b;
+    font-weight: bold;
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+    padding: 2px 7px;
+    border: 1px solid;
+    border-radius: 2px;
+  }
+  .badge-deposit { color: var(--green); border-color: var(--green); }
+  .badge-recurring { color: var(--amber); border-color: var(--amber); }
+  .badge-mortgage { color: var(--cyan); border-color: var(--cyan); }
+  .badge-transfer { color: var(--purple); border-color: var(--purple); }
+  .badge-expense { color: #888; border-color: #444; }
+
+  .trend-up { color: var(--red); }
+  .trend-down { color: var(--green); }
+  .trend-flat { color: var(--green-dim); }
+
+  .amount-pos { color: var(--green); }
+  .amount-neg { color: var(--red); }
+
+  a.merchant-link { color: var(--cyan); text-decoration: none; }
+  a.merchant-link:hover { text-shadow: 0 0 6px var(--cyan); text-decoration: underline; }
+
+  /* ─── Filters ─── */
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .filters select, .filters input {
+    background: var(--surface2);
+    border: var(--border);
+    color: var(--green);
+    font-family: inherit;
+    font-size: 0.75rem;
+    padding: 5px 10px;
+    outline: none;
+  }
+  .filters select:focus, .filters input:focus { box-shadow: 0 0 6px var(--green-glow); }
+
+  /* ─── Manual Entry Form ─── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 0.7rem; letter-spacing: 1px; color: var(--green-dim); }
+  .form-group input, .form-group select, .form-group textarea {
+    background: var(--surface2);
+    border: var(--border);
+    color: var(--green);
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 8px 10px;
+    outline: none;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+
+  #form-result { font-size: 0.78rem; margin-top: 10px; min-height: 20px; }
+  #form-result.ok { color: var(--green); }
+  #form-result.err { color: var(--red); }
+
+  /* ─── Transfer In/Out split ─── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Scrollable table bodies */
+  .table-scroll { max-height: 380px; overflow-y: auto; }
+
+  /* Loading */
+  .loading { padding: 30px; text-align: center; color: var(--green-dim); letter-spacing: 3px; animation: blink 1s step-end infinite; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&gt; DEXTER'S BUDGET TRACKER <span class="blink">_</span></h1>
+  <span style="font-size:0.7rem;color:var(--green-dim);letter-spacing:2px;" id="header-date"></span>
+</header>
+
+<!-- Upload Bar -->
+<div id="upload-bar">
+  <label>IMPORT CSV:</label>
+  <input type="file" id="csv-input" accept=".csv" style="display:none"/>
+  <button class="btn" onclick="document.getElementById('csv-input').click()">[ SELECT FILE ]</button>
+  <button class="btn" id="upload-btn" disabled>[ UPLOAD ]</button>
+  <span id="upload-status"></span>
+  <div id="import-history-list"></div>
+</div>
+
+<!-- Tabs -->
+<nav id="tabs">
+  <button class="active" data-tab="overview">OVERVIEW</button>
+  <button data-tab="recurring">RECURRING BILLS</button>
+  <button data-tab="mortgage">MORTGAGE</button>
+  <button data-tab="transfers">TRANSFERS</button>
+  <button data-tab="expenses">EXPENSES</button>
+  <button data-tab="income-savings">INCOME &amp; SAVINGS</button>
+  <button data-tab="all">ALL TRANSACTIONS</button>
+  <button data-tab="add-entry">+ ADD ENTRY</button>
+</nav>
+
+<main>
+
+  <!-- ══════════════════ OVERVIEW ══════════════════ -->
+  <div class="tab-panel active" id="tab-overview">
+    <div class="cards" id="summary-cards">
+      <div class="loading">LOADING...</div>
+    </div>
+    <div id="overview-income-plan" style="margin:20px 0;"></div>
+    <div class="section-title">MONTHLY EXPENSES COMPOSITION</div>
+    <div class="chart-wrap"><canvas id="monthly-expenses-composition-chart"></canvas></div>
+    <div class="section-title">MONTHLY SPENDING BREAKDOWN</div>
+    <div class="chart-wrap"><canvas id="monthly-chart"></canvas></div>
+  </div>
+
+  <!-- ══════════════════ RECURRING BILLS ══════════════════ -->
+  <div class="tab-panel" id="tab-recurring">
+    <div class="section-title">RECURRING BILLS &amp; SUBSCRIPTIONS</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>MERCHANT</th>
+            <th>MONTHLY AVG</th>
+            <th>LAST AMOUNT</th>
+            <th>TREND</th>
+            <th>MONTHS (SPARKLINE)</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody id="recurring-tbody"><tr><td colspan="6" class="loading">LOADING...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════ MORTGAGE ══════════════════ -->
+  <div class="tab-panel" id="tab-mortgage">
+    <div class="section-title">MORTGAGE PAYMENTS</div>
+    <div class="cards" id="mortgage-cards"></div>
+    <div class="chart-wrap"><canvas id="mortgage-chart"></canvas></div>
+    <div class="section-title">PAYMENT HISTORY</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>DATE</th><th>AMOUNT</th><th>DESCRIPTION</th></tr></thead>
+        <tbody id="mortgage-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════ TRANSFERS ══════════════════ -->
+  <div class="tab-panel" id="tab-transfers">
+    <div class="section-title">TRANSFERS</div>
+    <div class="two-col">
+      <div>
+        <div class="section-title" style="color:var(--green)">INBOUND ▼</div>
+        <div class="table-wrap table-scroll">
+          <table>
+            <thead><tr><th>DATE</th><th>AMOUNT</th><th>DESCRIPTION</th></tr></thead>
+            <tbody id="transfers-in-tbody"></tbody>
+          </table>
+        </div>
+        <div style="font-size:0.8rem;padding:8px;color:var(--green)">TOTAL IN: <span id="transfer-in-total" style="text-shadow:0 0 6px var(--green)">$0.00</span></div>
+      </div>
+      <div>
+        <div class="section-title" style="color:var(--red)">OUTBOUND ▲</div>
+        <div class="table-wrap table-scroll">
+          <table>
+            <thead><tr><th>DATE</th><th>AMOUNT</th><th>DESCRIPTION</th></tr></thead>
+            <tbody id="transfers-out-tbody"></tbody>
+          </table>
+        </div>
+        <div style="font-size:0.8rem;padding:8px;color:var(--red)">TOTAL OUT: <span id="transfer-out-total" style="text-shadow:0 0 6px var(--red)">$0.00</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ EXPENSES ══════════════════ -->
+  <div class="tab-panel" id="tab-expenses">
+    <div class="section-title">MISC EXPENSES</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>DATE</th><th>MERCHANT</th><th>AMOUNT</th><th>DESCRIPTION</th><th>DETAIL</th></tr></thead>
+        <tbody id="expenses-tbody"><tr><td colspan="5" class="loading">LOADING...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════ INCOME & SAVINGS ══════════════════ -->
+  <div class="tab-panel" id="tab-income-savings">
+    <div class="section-title">INCOME CONTROLLER (BILLS 60/40 + HYBRID BUCKETS)</div>
+    <div style="background:var(--surface);border:var(--border);padding:20px;box-shadow:0 0 6px var(--green-glow);margin-bottom:20px;">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>PERSON 1 INCOME</label>
+          <input type="number" id="inc-income-1" step="0.01" placeholder="4500"/>
+        </div>
+        <div class="form-group">
+          <label>PERSON 2 INCOME</label>
+          <input type="number" id="inc-income-2" step="0.01" placeholder="3500"/>
+        </div>
+        <div class="form-group">
+          <label>PERSON 1 BALANCE</label>
+          <input type="number" id="inc-balance-1" step="0.01" placeholder="300"/>
+        </div>
+        <div class="form-group">
+          <label>PERSON 2 BALANCE</label>
+          <input type="number" id="inc-balance-2" step="0.01" placeholder="200"/>
+        </div>
+        <div class="form-group">
+          <label>BILLS SPLIT % - PERSON 1</label>
+          <input type="number" id="inc-split-1" step="0.01" value="60"/>
+        </div>
+        <div class="form-group">
+          <label>BILLS SPLIT % - PERSON 2</label>
+          <input type="number" id="inc-split-2" step="0.01" value="40"/>
+        </div>
+        <div class="form-group">
+          <label>SINKING %</label>
+          <input type="number" id="inc-sinking-pct" step="0.01" value="15"/>
+        </div>
+        <div class="form-group">
+          <label>GROWTH/TOOLS %</label>
+          <input type="number" id="inc-growth-pct" step="0.01" value="10"/>
+        </div>
+        <div class="form-group">
+          <label>FUN %</label>
+          <input type="number" id="inc-fun-pct" step="0.01" value="75"/>
+        </div>
+        <div class="form-group">
+          <label>BUFFER GOAL</label>
+          <input type="number" id="inc-buffer-goal" step="0.01" value="1000"/>
+        </div>
+        <div class="form-group">
+          <label>RUN MONTH</label>
+          <input type="month" id="inc-run-month"/>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>NOTES (SAVE ONLY)</label>
+          <textarea id="inc-notes" placeholder="Optional notes for this run..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn" onclick="calculateIncomePlan()">[ CALCULATE ]</button>
+        <button class="btn" onclick="saveIncomePlan()">[ SAVE RUN ]</button>
+        <button class="btn btn-amber" onclick="resetIncomeDefaults()">[ RESET DEFAULTS ]</button>
+      </div>
+      <div id="income-status" style="font-size:0.78rem;min-height:20px;margin-top:10px;color:var(--green-dim);"></div>
+    </div>
+
+    <div class="cards" id="income-results-cards"></div>
+
+    <div class="section-title">BUCKET ALLOCATION (PREVIEW)</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>PERSON</th><th>LEFTOVER</th><th>BUFFER</th><th>SINKING</th><th>GROWTH</th><th>FUN</th></tr></thead>
+        <tbody id="income-buckets-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title">SAVINGS DISTRIBUTION PIE</div>
+    <div class="chart-wrap" style="display:flex;justify-content:center;align-items:center;min-height:340px;">
+      <img id="savings-pie" alt="Savings pie chart" style="max-width:100%;max-height:320px;display:none;border:1px solid var(--green-dim);box-shadow:0 0 8px var(--green-glow);"/>
+      <div id="savings-pie-empty" style="color:var(--green-dim);">SAVE A RUN TO VIEW PIE CHART</div>
+    </div>
+
+    <div class="section-title">SAVINGS HISTORY</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>RUN MONTH</th><th>EXPENSES</th><th>INCOME 1</th><th>INCOME 2</th><th>LEFTOVER 1</th><th>LEFTOVER 2</th><th>VIEW PIE</th><th>LOAD</th></tr></thead>
+        <tbody id="savings-history-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════ ALL TRANSACTIONS ══════════════════ -->
+  <div class="tab-panel" id="tab-all">
+    <div class="filters">
+      <select id="filter-cat">
+        <option value="">ALL CATEGORIES</option>
+        <option value="mortgage">MORTGAGE</option>
+        <option value="recurring">RECURRING</option>
+        <option value="transfer">TRANSFER</option>
+        <option value="deposit">DEPOSIT</option>
+        <option value="expense">EXPENSE</option>
+      </select>
+      <select id="filter-month"><option value="">ALL MONTHS</option></select>
+      <input type="text" id="filter-search" placeholder="SEARCH..." style="min-width:160px"/>
+      <button class="btn" onclick="loadAll()">[ FILTER ]</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>DATE</th><th>MERCHANT</th><th>AMOUNT</th><th>CATEGORY</th><th>DESCRIPTION</th>
+          </tr>
+        </thead>
+        <tbody id="all-tbody"><tr><td colspan="5" class="loading">LOADING...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════ ADD ENTRY ══════════════════ -->
+  <div class="tab-panel" id="tab-add-entry">
+    <div class="section-title">ADD MANUAL ENTRY</div>
+    <div style="background:var(--surface);border:var(--border);padding:20px;box-shadow:0 0 6px var(--green-glow);max-width:800px;">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>DATE</label>
+          <input type="date" id="me-date"/>
+        </div>
+        <div class="form-group">
+          <label>AMOUNT (negative = expense)</label>
+          <input type="number" id="me-amount" step="0.01" placeholder="-150.00"/>
+        </div>
+        <div class="form-group">
+          <label>MERCHANT / PAYEE</label>
+          <input type="text" id="me-merchant" placeholder="Utility Company"/>
+        </div>
+        <div class="form-group">
+          <label>CATEGORY</label>
+          <select id="me-category">
+            <option value="expense">EXPENSE</option>
+            <option value="recurring">RECURRING</option>
+            <option value="mortgage">MORTGAGE</option>
+            <option value="transfer">TRANSFER</option>
+            <option value="deposit">DEPOSIT</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>TYPE</label>
+          <select id="me-type">
+            <option value="expense">EXPENSE</option>
+            <option value="transfer">TRANSFER</option>
+            <option value="deposit">DEPOSIT</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>NOTES</label>
+          <textarea id="me-notes" placeholder="Optional notes..."></textarea>
+        </div>
+      </div>
+      <button class="btn" onclick="submitManual()">[ SAVE ENTRY ]</button>
+      <div id="form-result"></div>
+    </div>
+
+    <div class="section-title" style="margin-top:32px;">MANUAL ENTRIES</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>DATE</th><th>MERCHANT</th><th>AMOUNT</th><th>CATEGORY</th><th>NOTES</th><th>DEL</th></tr></thead>
+        <tbody id="manual-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─── Helpers ───
+const $ = id => document.getElementById(id);
+const fmt = v => '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtSigned = v => (v >= 0 ? '+' : '') + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+function badge(cat) {
+  return `<span class="badge badge-${cat}">${cat.toUpperCase()}</span>`;
+}
+
+function trendClass(t) {
+  if (t === '↑') return 'trend-up';
+  if (t === '↓') return 'trend-down';
+  return 'trend-flat';
+}
+
+function sparkline(months, amounts) {
+  if (!amounts.length) return '';
+  const max = Math.max(...amounts);
+  const min = Math.min(...amounts);
+  const h = 24, w = 6;
+  let pts = amounts.map((a, i) => {
+    const x = i * w;
+    const y = max === min ? h / 2 : h - ((a - min) / (max - min)) * h;
+    return `${x},${y.toFixed(1)}`;
+  }).join(' ');
+  const totalW = (amounts.length - 1) * w;
+  return `<svg width="${totalW}" height="${h}" style="vertical-align:middle;margin-left:8px;">
+    <polyline points="${pts}" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+    ${amounts.map((a,i)=>`<circle cx="${i*w}" cy="${(max===min?h/2:h-((a-min)/(max-min))*h).toFixed(1)}" r="2" fill="var(--green)"/>`).join('')}
+  </svg>`;
+}
+
+// ─── Header date ───
+$('header-date').textContent = new Date().toLocaleDateString('en-US', {weekday:'short',year:'numeric',month:'short',day:'numeric'});
+
+// ─── Tabs ───
+document.querySelectorAll('#tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'overview') loadOverview();
+    if (btn.dataset.tab === 'recurring') loadRecurring();
+    if (btn.dataset.tab === 'mortgage') loadMortgage();
+    if (btn.dataset.tab === 'transfers') loadTransfers();
+    if (btn.dataset.tab === 'expenses') loadExpenses();
+    if (btn.dataset.tab === 'income-savings') loadIncomeSavings();
+    if (btn.dataset.tab === 'all') loadAll();
+    if (btn.dataset.tab === 'add-entry') loadManualList();
+  });
+});
+
+// ─── Upload ───
+let selectedFile = null;
+$('csv-input').addEventListener('change', e => {
+  selectedFile = e.target.files[0];
+  if (selectedFile) {
+    $('upload-btn').disabled = false;
+    $('upload-status').textContent = selectedFile.name;
+  }
+});
+$('upload-btn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+  $('upload-status').textContent = 'UPLOADING...';
+  const fd = new FormData();
+  fd.append('csvfile', selectedFile);
+  const res = await fetch('/upload', {method:'POST', body:fd});
+  const data = await res.json();
+  if (data.error) {
+    $('upload-status').textContent = 'ERROR: ' + data.error;
+  } else {
+    $('upload-status').textContent = `OK: ${data.inserted} inserted, ${data.duplicates} duplicates skipped`;
+    loadOverview();
+    loadImportHistory();
+  }
+  $('upload-btn').disabled = true;
+  selectedFile = null;
+  $('csv-input').value = '';
+});
+
+async function loadImportHistory() {
+  const res = await fetch('/api/summary');
+  const data = await res.json();
+  const el = $('import-history-list');
+  if (!data.imports || !data.imports.length) { el.textContent = ''; return; }
+  el.textContent = 'IMPORTS: ' + data.imports.slice(0,3).map(i => i.filename).join(' | ');
+}
+
+// ─── Overview Income Plan ───
+function renderOverviewIncomePlan(monthlyExpenses, run) {
+  const el = $('overview-income-plan');
+  if (!run) {
+    el.innerHTML = `<div style="color:var(--green-dim);font-size:0.78rem;padding:14px;border:var(--border);margin-top:8px;">
+      NO SAVED INCOME RUN — GO TO <strong style="color:var(--green)">INCOME &amp; SAVINGS</strong> TAB, ENTER INCOMES AND CLICK [ SAVE RUN ]
+    </div>`;
+    return;
+  }
+
+  const income1    = run.income_1;
+  const income2    = run.income_2;
+  const totalInc   = income1 + income2;
+  const pct1       = 60;
+  const pct2       = 40;
+  const contrib1   = Number((monthlyExpenses * 0.60).toFixed(2));
+  const contrib2   = Number((monthlyExpenses * 0.40).toFixed(2));
+  const remainder1 = income1 - contrib1;
+  const remainder2 = income2 - contrib2;
+  const buckets1 = calculateBucketsPreview(
+    Number(run.current_balance_1 || 0),
+    remainder1,
+    Number(run.buffer_goal || 1000),
+    Number(run.sinking_pct || 15),
+    Number(run.growth_pct || 10),
+    Number(run.fun_pct || 75)
+  );
+  const buckets2 = calculateBucketsPreview(
+    Number(run.current_balance_2 || 0),
+    remainder2,
+    Number(run.buffer_goal || 1000),
+    Number(run.sinking_pct || 15),
+    Number(run.growth_pct || 10),
+    Number(run.fun_pct || 75)
+  );
+
+  const hContrib    = contrib1 + contrib2;
+  const hRemainder  = remainder1 + remainder2;
+  const hSinking    = buckets1.sinking + buckets2.sinking;
+  const hGrowth     = buckets1.growth + buckets2.growth;
+  const hFun        = buckets1.fun + buckets2.fun;
+
+  const tbl = (rows, head) => `
+    <div class="table-wrap" style="margin-bottom:20px;">
+      <table>
+        <thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:20px 0 12px;">
+      <div class="section-title" style="margin:0;">INCOME PLAN — ${run.run_month}</div>
+      <button class="btn" style="font-size:0.65rem;padding:4px 14px" onclick="loadLatestRunIntoForm()">[ LOAD INTO FORM ]</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div class="card amber" style="margin:0"><div class="label">MONTHLY EXPENSES</div><div class="value">${fmt(monthlyExpenses)}</div></div>
+      <div class="card green" style="margin:0"><div class="label">TOTAL INCOME</div><div class="value">${fmt(totalInc)}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div class="card purple" style="margin:0"><div class="label">P1 CONTRIBUTION (${pct1}%)</div><div class="value">${fmt(contrib1)}</div></div>
+      <div class="card purple" style="margin:0"><div class="label">P2 CONTRIBUTION (${pct2}%)</div><div class="value">${fmt(contrib2)}</div></div>
+    </div>
+
+    <div class="section-title">PERSON 1</div>
+    ${tbl(`<tr>
+      <td class="amount-pos">${fmt(income1)}</td>
+      <td class="amount-neg">-${fmt(contrib1)}</td>
+      <td class="${remainder1>=0?'amount-pos':'amount-neg'}">${fmtSigned(remainder1)}</td>
+      <td>${fmt(buckets1.sinking)}</td>
+      <td>${fmt(buckets1.growth)}</td>
+      <td>${fmt(buckets1.fun)}</td>
+    </tr>`, ['TOTAL INCOME','EXPENSE CONTRIBUTION','REMAINDER','SINKING','GROWTH','FUN'])}
+
+    <div class="section-title">PERSON 2</div>
+    ${tbl(`<tr>
+      <td class="amount-pos">${fmt(income2)}</td>
+      <td class="amount-neg">-${fmt(contrib2)}</td>
+      <td class="${remainder2>=0?'amount-pos':'amount-neg'}">${fmtSigned(remainder2)}</td>
+      <td>${fmt(buckets2.sinking)}</td>
+      <td>${fmt(buckets2.growth)}</td>
+      <td>${fmt(buckets2.fun)}</td>
+    </tr>`, ['TOTAL INCOME','EXPENSE CONTRIBUTION','REMAINDER','SINKING','GROWTH','FUN'])}
+
+    <div class="section-title">HOUSEHOLD COMBINED</div>
+    ${tbl(`<tr>
+      <td class="amount-pos">${fmt(totalInc)}</td>
+      <td class="amount-neg">-${fmt(hContrib)}</td>
+      <td class="${hRemainder>=0?'amount-pos':'amount-neg'}">${fmtSigned(hRemainder)}</td>
+      <td>${fmt(hSinking)}</td>
+      <td>${fmt(hGrowth)}</td>
+      <td>${fmt(hFun)}</td>
+    </tr>`, ['TOTAL INCOME','TOTAL EXPENSES','COMBINED REMAINDER','SINKING','GROWTH','FUN'])}
+  `;
+}
+
+let _latestRun = null;
+async function loadLatestRunIntoForm() {
+  if (!_latestRun) {
+    const res = await fetch('/api/savings/history');
+    const hist = await res.json();
+    if (!hist.length) return;
+    _latestRun = hist[0];
+  }
+  const r = _latestRun;
+  $('inc-income-1').value       = r.income_1;
+  $('inc-income-2').value       = r.income_2;
+  $('inc-balance-1').value      = r.current_balance_1;
+  $('inc-balance-2').value      = r.current_balance_2;
+  $('inc-split-1').value        = r.split_pct_1;
+  $('inc-split-2').value        = r.split_pct_2;
+  $('inc-sinking-pct').value    = r.sinking_pct;
+  $('inc-growth-pct').value     = r.growth_pct;
+  $('inc-fun-pct').value        = r.fun_pct;
+  $('inc-buffer-goal').value    = r.buffer_goal;
+  $('inc-run-month').value      = r.run_month;
+  // Switch to income tab
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector('[data-tab="income-savings"]');
+  if (btn) { btn.classList.add('active'); $('tab-income-savings').classList.add('active'); }
+  renderIncomeResult(mapSavedRunToIncomeResult(r));
+  showSavingsPie(r.id);
+  $('income-status').textContent = `LOADED RUN #${r.id} (${r.run_month})`;
+}
+
+// ─── Monthly Chart ───
+let monthlyChart = null;
+let monthlyExpensesCompositionChart = null;
+async function loadOverview() {
+  const [sumRes, bkRes, histRes] = await Promise.all([fetch('/api/summary'), fetch('/api/monthly_breakdown'), fetch('/api/savings/history')]);
+  const sum = await sumRes.json();
+  const bk = await bkRes.json();
+  const hist = await histRes.json();
+
+  $('summary-cards').innerHTML = `
+    <div class="card amber"><div class="label">MONTHLY EXPENSES</div><div class="value">${fmt(sum.monthly_expenses_avg || 0)}</div></div>
+    <div class="card green"><div class="label">TOTAL INCOME</div><div class="value">${fmt(sum.total_income || 0)}</div></div>
+    <div class="card red"><div class="label">EXPENSE PAID YTD</div><div class="value">${fmt(sum.expense_paid_ytd || 0)}</div></div>
+    <div class="card amber"><div class="label">MISC EXPENSES</div><div class="value">${fmt(sum.expenses)}</div></div>
+    <div class="card ${sum.net >= 0 ? 'green' : 'red'}"><div class="label">NET CASH FLOW</div><div class="value">${fmtSigned(sum.net)}</div></div>
+  `;
+
+  renderOverviewIncomePlan(sum.monthly_expenses_avg || 0, hist.length ? hist[0] : null);
+
+  const mecCtx = $('monthly-expenses-composition-chart').getContext('2d');
+  if (monthlyExpensesCompositionChart) monthlyExpensesCompositionChart.destroy();
+  monthlyExpensesCompositionChart = new Chart(mecCtx, {
+    type: 'pie',
+    data: {
+      labels: ['Recurring Bills', 'Mortgage', 'Expense'],
+      datasets: [{
+        data: [sum.recurring || 0, sum.mortgage || 0, sum.expenses || 0],
+        backgroundColor: ['#FFB300', '#00E5FF', '#888888'],
+        borderColor: '#0f0f0f',
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#00aa2a', font: { family: 'Share Tech Mono' } } },
+        tooltip: {
+          bodyFont: { family: 'Share Tech Mono' },
+          titleFont: { family: 'Share Tech Mono' },
+          callbacks: {
+            label: ctx => `${ctx.label}: $${Number(ctx.raw || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`,
+          },
+        },
+      },
+    },
+  });
+
+  const colors = {mortgage:'#00E5FF', recurring:'#FFB300', transfer:'#CC66FF', expense:'#888888'};
+  const ctx = $('monthly-chart').getContext('2d');
+  if (monthlyChart) monthlyChart.destroy();
+  monthlyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: bk.months,
+      datasets: bk.categories.map(cat => ({
+        label: cat.toUpperCase(),
+        data: bk.data[cat],
+        backgroundColor: colors[cat] || '#00FF41',
+      })),
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#00aa2a', font: { family: 'Share Tech Mono' } } },
+        tooltip: { bodyFont: { family: 'Share Tech Mono' }, titleFont: { family: 'Share Tech Mono' } },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#00aa2a', font:{family:'Share Tech Mono'} }, grid: { color: '#1a1a1a' } },
+        y: { stacked: true, ticks: { color: '#00aa2a', font:{family:'Share Tech Mono'}, callback: v => '$'+v }, grid: { color: '#1a1a1a' } },
+      },
+    },
+  });
+}
+
+// ─── Recurring ───
+async function loadRecurring() {
+  const res = await fetch('/api/recurring');
+  const data = await res.json();
+  const tbody = $('recurring-tbody');
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;color:var(--green-dim)">NO DATA — IMPORT A CSV FIRST</td></tr>'; return; }
+  const recurringTotal = data.reduce((acc, r) => acc + (Number(r.last) || 0), 0);
+  tbody.innerHTML = data.map(r => {
+    const tc = trendClass(r.trend);
+    const sp = sparkline(r.months, r.amounts);
+    return `<tr>
+      <td><a class="merchant-link" href="/expense/${r.slug}">${r.merchant}</a></td>
+      <td>${fmt(r.avg)}</td>
+      <td>${fmt(r.last)}</td>
+      <td class="${tc}" style="font-size:1.1rem">${r.trend}</td>
+      <td>${sp}<span style="font-size:0.65rem;color:var(--green-dim);margin-left:6px">${r.months.join(' ')}</span></td>
+      <td><button class="btn btn-amber" style="font-size:0.65rem;padding:3px 8px" onclick="editRecurringBill('${encodeURIComponent(r.slug)}')">EDIT</button></td>
+    </tr>`;
+  }).join('') + `
+    <tr class="total-row">
+      <td>TOTAL</td>
+      <td></td>
+      <td>${fmt(recurringTotal)}</td>
+      <td></td>
+      <td style="color:var(--green-dim);font-size:0.72rem;">SUM OF LATEST AMOUNTS</td>
+      <td></td>
+    </tr>`;
+}
+
+let _editEntry = null;
+
+async function editRecurringBill(encodedSlug) {
+  const slug = decodeURIComponent(encodedSlug);
+  const res = await fetch('/api/recurring/' + encodeURIComponent(slug) + '/entries');
+  const payload = await res.json();
+
+  if (!res.ok || payload.error) {
+    $('edit-bill-status').textContent = 'Unable to load entries: ' + (payload.error || 'Unknown error');
+    return;
+  }
+  if (!payload.entries || !payload.entries.length) {
+    $('edit-bill-status').textContent = 'No recurring/mortgage entries found for this merchant.';
+    openEditBillModal();
+    return;
+  }
+
+  const entry = payload.entries[0];
+  _editEntry = entry;
+
+  $('edit-bill-title').textContent = 'EDIT — ' + payload.merchant.toUpperCase();
+  $('edit-bill-date').value = entry.date || '';
+  $('edit-bill-amount').value = entry.amount != null ? entry.amount : '';
+  $('edit-bill-merchant').value = entry.merchant || payload.merchant || '';
+  $('edit-bill-category').value = ['recurring','mortgage'].includes(entry.category) ? entry.category : 'recurring';
+  $('edit-bill-description').value = entry.description || '';
+  $('edit-bill-status').textContent = '';
+  $('edit-bill-status').className = '';
+
+  openEditBillModal();
+}
+
+function openEditBillModal() {
+  $('edit-bill-modal').style.display = 'flex';
+}
+
+function closeEditBillModal() {
+  $('edit-bill-modal').style.display = 'none';
+  _editEntry = null;
+}
+
+async function saveEditBill() {
+  if (!_editEntry) return;
+
+  const date = $('edit-bill-date').value.trim();
+  const amount = Number($('edit-bill-amount').value);
+  const merchant = $('edit-bill-merchant').value.trim();
+  const category = $('edit-bill-category').value;
+  const description = $('edit-bill-description').value.trim();
+  const statusEl = $('edit-bill-status');
+
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    statusEl.textContent = 'ERROR: Date must be YYYY-MM-DD.';
+    statusEl.className = 'err';
+    return;
+  }
+  if (!Number.isFinite(amount)) {
+    statusEl.textContent = 'ERROR: Amount must be a number.';
+    statusEl.className = 'err';
+    return;
+  }
+  if (!merchant) {
+    statusEl.textContent = 'ERROR: Merchant name is required.';
+    statusEl.className = 'err';
+    return;
+  }
+
+  statusEl.textContent = 'SAVING...';
+  statusEl.className = '';
+
+  const saveRes = await fetch('/api/entry/' + encodeURIComponent(_editEntry.source) + '/' + _editEntry.id, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ date, amount, merchant, category, description }),
+  });
+  const saveData = await saveRes.json();
+
+  if (!saveRes.ok || saveData.error) {
+    statusEl.textContent = 'ERROR: ' + (saveData.error || 'Save failed.');
+    statusEl.className = 'err';
+    return;
+  }
+
+  statusEl.textContent = 'SAVED.';
+  statusEl.className = 'ok';
+  setTimeout(async () => {
+    closeEditBillModal();
+    await loadRecurring();
+    await loadOverview();
+  }, 600);
+}
+
+// ─── Mortgage ───
+let mortgageChart = null;
+async function loadMortgage() {
+  const res = await fetch('/api/mortgage');
+  const data = await res.json();
+  const total = data.amounts.reduce((a,b)=>a+b, 0);
+  const avg = data.amounts.length ? total/data.amounts.length : 0;
+  $('mortgage-cards').innerHTML = `
+    <div class="card cyan"><div class="label">YTD TOTAL PAID</div><div class="value">${fmt(total)}</div></div>
+    <div class="card cyan"><div class="label">MONTHLY PAYMENT</div><div class="value">${fmt(avg)}</div></div>
+    <div class="card cyan"><div class="label">PAYMENTS MADE</div><div class="value">${data.amounts.length}</div></div>
+  `;
+  const ctx = $('mortgage-chart').getContext('2d');
+  if (mortgageChart) mortgageChart.destroy();
+  mortgageChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.months,
+      datasets: [{
+        label: 'MORTGAGE PAYMENT',
+        data: data.amounts,
+        borderColor: '#00E5FF',
+        backgroundColor: 'rgba(0,229,255,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#00E5FF',
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#00E5FF', font:{family:'Share Tech Mono'} } },
+        tooltip: { bodyFont:{family:'Share Tech Mono'}, titleFont:{family:'Share Tech Mono'} },
+      },
+      scales: {
+        x: { ticks:{color:'#00aa2a',font:{family:'Share Tech Mono'}}, grid:{color:'#1a1a1a'} },
+        y: { ticks:{color:'#00aa2a',font:{family:'Share Tech Mono'},callback:v=>'$'+v}, grid:{color:'#1a1a1a'} },
+      },
+    },
+  });
+  $('mortgage-tbody').innerHTML = data.transactions.map(r =>
+    `<tr><td>${r.date}</td><td class="amount-neg">${fmt(r.amount)}</td><td style="color:var(--green-dim);font-size:0.72rem">${r.description}</td></tr>`
+  ).join('');
+}
+
+// ─── Transfers ───
+async function loadTransfers() {
+  const res = await fetch('/api/transfers');
+  const rows = await res.json();
+  let inTotal = 0, outTotal = 0;
+  const inRows = rows.filter(r => r.amount > 0);
+  const outRows = rows.filter(r => r.amount < 0);
+  inRows.forEach(r => inTotal += r.amount);
+  outRows.forEach(r => outTotal += Math.abs(r.amount));
+  $('transfers-in-tbody').innerHTML = inRows.map(r =>
+    `<tr><td>${r.date}</td><td class="amount-pos">${fmt(r.amount)}</td><td style="font-size:0.7rem;color:var(--green-dim)">${r.description}</td></tr>`
+  ).join('') || '<tr><td colspan="3" style="color:var(--green-dim);padding:12px">NONE</td></tr>';
+  $('transfers-out-tbody').innerHTML = outRows.map(r =>
+    `<tr><td>${r.date}</td><td class="amount-neg">${fmt(r.amount)}</td><td style="font-size:0.7rem;color:var(--green-dim)">${r.description}</td></tr>`
+  ).join('') || '<tr><td colspan="3" style="color:var(--green-dim);padding:12px">NONE</td></tr>';
+  $('transfer-in-total').textContent = fmt(inTotal);
+  $('transfer-out-total').textContent = fmt(outTotal);
+}
+
+// ─── Expenses ───
+async function loadExpenses() {
+  const res = await fetch('/api/transactions?category=expense');
+  const rows = await res.json();
+  const tbody = $('expenses-tbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--green-dim);padding:20px">NO EXPENSE TRANSACTIONS</td></tr>'; return; }
+  const expensesTotal = rows.reduce((acc, r) => acc + Math.abs(Number(r.amount) || 0), 0);
+  tbody.innerHTML = rows.map(r =>
+    `<tr>
+      <td>${r.date}</td>
+      <td><a class="merchant-link" href="/expense/${encodeURIComponent(slugify(r.merchant))}">${r.merchant}</a></td>
+      <td class="amount-neg">${fmt(r.amount)}</td>
+      <td style="font-size:0.7rem;color:var(--green-dim)">${r.description || ''}</td>
+      <td><a class="btn" href="/expense/${encodeURIComponent(slugify(r.merchant))}" style="font-size:0.65rem;padding:3px 8px">VIEW</a></td>
+    </tr>`
+  ).join('') + `
+    <tr class="total-row">
+      <td colspan="2">TOTAL</td>
+      <td class="amount-neg">${fmt(expensesTotal)}</td>
+      <td style="color:var(--green-dim);font-size:0.72rem;">SUM OF DISPLAYED EXPENSES</td>
+      <td></td>
+    </tr>`;
+}
+
+function slugify(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// ─── All Transactions ───
+async function loadAll() {
+  const cat = $('filter-cat').value;
+  const month = $('filter-month').value;
+  const search = $('filter-search').value.toLowerCase();
+  let url = '/api/transactions?';
+  if (cat) url += 'category=' + cat + '&';
+  if (month) url += 'month=' + month + '&';
+  const res = await fetch(url);
+  let rows = await res.json();
+  if (search) rows = rows.filter(r => (r.merchant||'').toLowerCase().includes(search) || (r.description||'').toLowerCase().includes(search));
+  const tbody = $('all-tbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:var(--green-dim);padding:20px">NO RESULTS</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => {
+    const amtClass = r.amount >= 0 ? 'amount-pos' : 'amount-neg';
+    return `<tr>
+      <td>${r.date}</td>
+      <td><a class="merchant-link" href="/expense/${encodeURIComponent(slugify(r.merchant))}">${r.merchant}</a></td>
+      <td class="${amtClass}">${r.amount>=0?'+':''}${fmt(r.amount)}</td>
+      <td>${badge(r.category)}</td>
+      <td style="font-size:0.7rem;color:var(--green-dim);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.description||r.notes||''}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function populateMonthFilter() {
+  const res = await fetch('/api/months');
+  const months = await res.json();
+  const sel = $('filter-month');
+  months.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    sel.appendChild(opt);
+  });
+}
+
+// ─── Manual Entry ───
+async function submitManual() {
+  const el = $('form-result');
+  const date = $('me-date').value;
+  const amount = parseFloat($('me-amount').value);
+  const merchant = $('me-merchant').value.trim();
+  const category = $('me-category').value;
+  const entry_type = $('me-type').value;
+  const notes = $('me-notes').value.trim();
+  if (!date || isNaN(amount) || !merchant) {
+    el.textContent = 'ERROR: DATE, AMOUNT, AND MERCHANT ARE REQUIRED'; el.className = 'err'; return;
+  }
+  const res = await fetch('/api/manual', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({date, amount, merchant, category, entry_type, notes}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    el.textContent = 'ENTRY SAVED.'; el.className = 'ok';
+    $('me-date').value=''; $('me-amount').value=''; $('me-merchant').value=''; $('me-notes').value='';
+    loadManualList();
+  } else {
+    el.textContent = 'ERROR: ' + data.error; el.className = 'err';
+  }
+}
+
+async function loadManualList() {
+  const res = await fetch('/api/transactions');
+  const rows = (await res.json()).filter(r => r.source !== 'imported');
+  // Actually load manual entries from /api/manual route not available — use filtered transactions
+  // Re-fetch manual from all
+  const tbody = $('manual-tbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" style="color:var(--green-dim);padding:12px">NO MANUAL ENTRIES YET</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r =>
+    `<tr>
+      <td>${r.date}</td>
+      <td>${r.merchant}</td>
+      <td class="${r.amount>=0?'amount-pos':'amount-neg'}">${r.amount>=0?'+':''}${fmt(r.amount)}</td>
+      <td>${badge(r.category)}</td>
+      <td style="color:var(--green-dim);font-size:0.7rem">${r.description||r.notes||''}</td>
+      <td><button class="btn btn-amber" style="font-size:0.65rem;padding:2px 8px" onclick="deleteManual(${r.id})">DEL</button></td>
+    </tr>`
+  ).join('');
+}
+
+async function deleteManual(id) {
+  await fetch('/api/manual/' + id, {method:'DELETE'});
+  loadManualList();
+}
+
+function numOrDefault(id, fallback = 0) {
+  const v = parseFloat($(id).value);
+  return Number.isFinite(v) ? v : fallback;
+}
+
+function calculateBucketsPreview(currentBalance, monthlyLeftover, bufferGoal, sinkingPct, growthPct, funPct) {
+  if (monthlyLeftover <= 0) {
+    return { buffer: 0, sinking: 0, growth: 0, fun: 0 };
+  }
+  const buffer = Math.min(monthlyLeftover, Math.max(0, bufferGoal - currentBalance));
+  const remaining = Math.max(monthlyLeftover - buffer, 0);
+  return {
+    buffer: Number(buffer.toFixed(2)),
+    sinking: Number((remaining * (sinkingPct / 100)).toFixed(2)),
+    growth: Number((remaining * (growthPct / 100)).toFixed(2)),
+    fun: Number((remaining * (funPct / 100)).toFixed(2)),
+  };
+}
+
+function mapSavedRunToIncomeResult(r) {
+  const monthlyTotal = Number(r.monthly_expenses_total || 0);
+  const income1 = Number(r.income_1 || 0);
+  const income2 = Number(r.income_2 || 0);
+  const contribution1 = Number((monthlyTotal * 0.60).toFixed(2));
+  const contribution2 = Number((monthlyTotal * 0.40).toFixed(2));
+  const remainder1 = Number((income1 - contribution1).toFixed(2));
+  const remainder2 = Number((income2 - contribution2).toFixed(2));
+  const buckets1 = calculateBucketsPreview(
+    Number(r.current_balance_1 || 0),
+    remainder1,
+    Number(r.buffer_goal || 1000),
+    Number(r.sinking_pct || 15),
+    Number(r.growth_pct || 10),
+    Number(r.fun_pct || 75)
+  );
+  const buckets2 = calculateBucketsPreview(
+    Number(r.current_balance_2 || 0),
+    remainder2,
+    Number(r.buffer_goal || 1000),
+    Number(r.sinking_pct || 15),
+    Number(r.growth_pct || 10),
+    Number(r.fun_pct || 75)
+  );
+  return {
+    monthly_expenses: {
+      recurring: Number(r.recurring_total || 0),
+      mortgage: Number(r.mortgage_total || 0),
+      expense: Number(r.expense_total || 0),
+      total: monthlyTotal,
+    },
+    bills_split: {
+      contribution_1: contribution1,
+      contribution_2: contribution2,
+    },
+    leftover: {
+      person_1: remainder1,
+      person_2: remainder2,
+    },
+    buckets: {
+      person_1: buckets1,
+      person_2: buckets2,
+    },
+  };
+}
+
+function gatherIncomePayload() {
+  return {
+    income_1: numOrDefault('inc-income-1', 0),
+    income_2: numOrDefault('inc-income-2', 0),
+    current_balance_1: numOrDefault('inc-balance-1', 0),
+    current_balance_2: numOrDefault('inc-balance-2', 0),
+    split_pct_1: numOrDefault('inc-split-1', 60),
+    split_pct_2: numOrDefault('inc-split-2', 40),
+    sinking_pct: numOrDefault('inc-sinking-pct', 15),
+    growth_pct: numOrDefault('inc-growth-pct', 10),
+    fun_pct: numOrDefault('inc-fun-pct', 75),
+    buffer_goal: numOrDefault('inc-buffer-goal', 1000),
+    run_month: $('inc-run-month').value || new Date().toISOString().slice(0, 7),
+    notes: $('inc-notes').value.trim(),
+  };
+}
+
+function renderIncomeResult(result) {
+  $('income-results-cards').innerHTML = `
+    <div class="card amber"><div class="label">MONTHLY EXPENSES</div><div class="value">${fmt(result.monthly_expenses.total)}</div></div>
+    <div class="card amber"><div class="label">RECURRING</div><div class="value">${fmt(result.monthly_expenses.recurring)}</div></div>
+    <div class="card cyan"><div class="label">MORTGAGE</div><div class="value">${fmt(result.monthly_expenses.mortgage)}</div></div>
+    <div class="card red"><div class="label">EXPENSE</div><div class="value">${fmt(result.monthly_expenses.expense)}</div></div>
+    <div class="card purple"><div class="label">BILLS PERSON 1</div><div class="value">${fmt(result.bills_split.contribution_1)}</div></div>
+    <div class="card purple"><div class="label">BILLS PERSON 2</div><div class="value">${fmt(result.bills_split.contribution_2)}</div></div>
+    <div class="card green"><div class="label">LEFTOVER PERSON 1</div><div class="value">${fmtSigned(result.leftover.person_1)}</div></div>
+    <div class="card green"><div class="label">LEFTOVER PERSON 2</div><div class="value">${fmtSigned(result.leftover.person_2)}</div></div>
+  `;
+
+  $('income-buckets-tbody').innerHTML = `
+    <tr>
+      <td>PERSON 1</td>
+      <td>${fmtSigned(result.leftover.person_1)}</td>
+      <td>${fmt(result.buckets.person_1.buffer)}</td>
+      <td>${fmt(result.buckets.person_1.sinking)}</td>
+      <td>${fmt(result.buckets.person_1.growth)}</td>
+      <td>${fmt(result.buckets.person_1.fun)}</td>
+    </tr>
+    <tr>
+      <td>PERSON 2</td>
+      <td>${fmtSigned(result.leftover.person_2)}</td>
+      <td>${fmt(result.buckets.person_2.buffer)}</td>
+      <td>${fmt(result.buckets.person_2.sinking)}</td>
+      <td>${fmt(result.buckets.person_2.growth)}</td>
+      <td>${fmt(result.buckets.person_2.fun)}</td>
+    </tr>
+  `;
+}
+
+async function calculateIncomePlan() {
+  const payload = gatherIncomePayload();
+  $('income-status').textContent = 'CALCULATING...';
+  const res = await fetch('/api/income/calculate', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    $('income-status').textContent = 'ERROR: ' + (data.error || 'Unable to calculate');
+    return;
+  }
+  renderIncomeResult(data);
+  $('income-status').textContent = 'CALCULATION COMPLETE.';
+}
+
+async function saveIncomePlan() {
+  const payload = gatherIncomePayload();
+  $('income-status').textContent = 'SAVING...';
+  const res = await fetch('/api/income/save', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    $('income-status').textContent = 'ERROR: ' + (data.error || 'Unable to save');
+    return;
+  }
+  renderIncomeResult(data.result);
+  $('income-status').textContent = `SAVED RUN #${data.id}`;
+  await loadSavingsHistory();
+  showSavingsPie(data.id);
+}
+
+function resetIncomeDefaults() {
+  $('inc-split-1').value = 60;
+  $('inc-split-2').value = 40;
+  $('inc-sinking-pct').value = 15;
+  $('inc-growth-pct').value = 10;
+  $('inc-fun-pct').value = 75;
+  $('inc-buffer-goal').value = 1000;
+  $('income-status').textContent = 'DEFAULTS RESTORED.';
+}
+
+function showSavingsPie(id) {
+  const img = $('savings-pie');
+  const empty = $('savings-pie-empty');
+  const qs = id ? ('?id=' + encodeURIComponent(id) + '&_=' + Date.now()) : ('?_=' + Date.now());
+  img.src = '/api/savings/pie' + qs;
+  img.style.display = 'block';
+  empty.style.display = 'none';
+}
+
+async function loadSavingsHistory() {
+  const res = await fetch('/api/savings/history');
+  const rows = await res.json();
+  const tbody = $('savings-history-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="color:var(--green-dim);padding:12px">NO SAVED RUNS YET</td></tr>';
+    $('savings-pie').style.display = 'none';
+    $('savings-pie-empty').style.display = 'block';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.id}</td>
+      <td>${r.run_month}</td>
+      <td>${fmt(r.monthly_expenses_total)}</td>
+      <td>${fmt(r.income_1)}</td>
+      <td>${fmt(r.income_2)}</td>
+      <td>${fmtSigned(r.leftover_1)}</td>
+      <td>${fmtSigned(r.leftover_2)}</td>
+      <td><button class="btn" style="font-size:0.65rem;padding:3px 8px" onclick="showSavingsPie(${r.id})">VIEW</button></td>
+      <td><button class="btn btn-amber" style="font-size:0.65rem;padding:3px 8px" onclick="loadRunIntoForm(${r.id})">LOAD</button></td>
+    </tr>
+  `).join('');
+  showSavingsPie(rows[0].id);
+}
+
+function loadRunIntoForm(id) {
+  fetch('/api/savings/history').then(r => r.json()).then(rows => {
+    const r = rows.find(x => x.id === id);
+    if (!r) return;
+    $('inc-income-1').value    = r.income_1;
+    $('inc-income-2').value    = r.income_2;
+    $('inc-balance-1').value   = r.current_balance_1;
+    $('inc-balance-2').value   = r.current_balance_2;
+    $('inc-split-1').value     = r.split_pct_1;
+    $('inc-split-2').value     = r.split_pct_2;
+    $('inc-sinking-pct').value = r.sinking_pct;
+    $('inc-growth-pct').value  = r.growth_pct;
+    $('inc-fun-pct').value     = r.fun_pct;
+    $('inc-buffer-goal').value = r.buffer_goal;
+    $('inc-run-month').value   = r.run_month;
+    $('inc-notes').value       = '';
+    renderIncomeResult(mapSavedRunToIncomeResult(r));
+    showSavingsPie(r.id);
+    $('income-status').textContent = `LOADED RUN #${r.id} (${r.run_month}) — EDIT AND CLICK [ SAVE RUN ] TO CREATE NEW RUN`;
+  });
+}
+
+async function loadIncomeSavings() {
+  if (!$('inc-run-month').value) {
+    $('inc-run-month').value = new Date().toISOString().slice(0, 7);
+  }
+  await loadSavingsHistory();
+  const res = await fetch('/api/savings/history');
+  const rows = await res.json();
+  if (rows.length) {
+    renderIncomeResult(mapSavedRunToIncomeResult(rows[0]));
+    $('income-status').textContent = `SHOWING LATEST SAVED RUN #${rows[0].id} (${rows[0].run_month})`;
+  }
+}
+
+// ─── Init ───
+(async function init() {
+  await loadOverview();
+  await loadImportHistory();
+  await populateMonthFilter();
+})();
+</script>
+
+<!-- ── Edit Recurring Bill Modal ── -->
+<div id="edit-bill-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10000;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--green);box-shadow:0 0 24px var(--green-glow);padding:24px 28px;min-width:360px;max-width:520px;width:90%;font-family:'Share Tech Mono',monospace;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <span id="edit-bill-title" style="font-size:0.82rem;letter-spacing:3px;color:var(--green);">EDIT BILL</span>
+      <button onclick="closeEditBillModal()" style="background:transparent;border:none;color:var(--green-dim);font-size:1.2rem;cursor:pointer;line-height:1;" title="Close">&times;</button>
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="form-group">
+        <label>DATE</label>
+        <input type="date" id="edit-bill-date"/>
+      </div>
+      <div class="form-group">
+        <label>AMOUNT (negative = charge)</label>
+        <input type="number" id="edit-bill-amount" step="0.01"/>
+      </div>
+      <div class="form-group">
+        <label>MERCHANT NAME</label>
+        <input type="text" id="edit-bill-merchant"/>
+      </div>
+      <div class="form-group">
+        <label>CATEGORY</label>
+        <select id="edit-bill-category">
+          <option value="recurring">RECURRING</option>
+          <option value="mortgage">MORTGAGE</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:span 2;">
+        <label>NOTES / DESCRIPTION</label>
+        <textarea id="edit-bill-description" style="resize:vertical;min-height:56px;"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px;">
+      <button class="btn" onclick="saveEditBill()" style="flex:1;">[ SAVE ]</button>
+      <button class="btn btn-amber" onclick="closeEditBillModal()">[ CANCEL ]</button>
+    </div>
+    <div id="edit-bill-status" style="font-size:0.75rem;margin-top:10px;min-height:18px;"></div>
+  </div>
+</div>
+</body>
+</html>

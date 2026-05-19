@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-3 mb-4">
+	<div class="col-12 col-md-6 col-xl-3">
+		<div class="card stat-card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-start">
+					<div>
+						<div class="section-eyebrow">Location</div>
+						<div class="stat-value">{{ (location_switch_options | length) if location_switch_options else 0 }}</div>
+					</div>
+					<span class="badge text-bg-primary status-badge"><i class="bi bi-geo-alt-fill me-1"></i>Active</span>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-12 col-md-6 col-xl-3">
+		<div class="card stat-card">
+			<div class="card-body">
+				<div class="section-eyebrow">Workflows</div>
+				<div class="stat-value">4</div>
+				<div class="text-muted small">Upload, reports, production, setup</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-12 col-md-6 col-xl-3">
+		<div class="card stat-card">
+			<div class="card-body">
+				<div class="section-eyebrow">Session</div>
+				<div class="stat-value">Live</div>
+				<div class="text-muted small">Ready for data processing</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-12 col-md-6 col-xl-3">
+		<div class="card stat-card">
+			<div class="card-body">
+				<div class="section-eyebrow">Mode</div>
+				<div class="stat-value">{{ 'DEV' if dev_bypass_security else 'SECURE' }}</div>
+				<div class="text-muted small">{{ 'Bypass enabled' if dev_bypass_security else 'Normal auth enabled' }}</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="card">
+	<div class="card-header gradient-header d-flex justify-content-between align-items-center">
+		<span><i class="bi bi-lightning-charge-fill me-2"></i>Quick Actions</span>
+		<span class="small opacity-75">Inventory Control style shortcuts</span>
+	</div>
+	<div class="card-body">
+		<div class="action-grid">
+			<a class="btn btn-primary" href="{{ url_for('index') }}"><i class="bi bi-upload me-1"></i>Upload Product Mix</a>
+			<a class="btn btn-outline-primary" href="{{ url_for('reports_page') }}"><i class="bi bi-bar-chart-line-fill me-1"></i>View Reports</a>
+			<a class="btn btn-outline-primary" href="{{ url_for('production_list_page') }}"><i class="bi bi-list-check me-1"></i>Production List</a>
+			<a class="btn btn-outline-primary" href="{{ url_for('restaurant_setup') }}"><i class="bi bi-building me-1"></i>Restaurant Setup</a>
+		</div>
+	</div>
+</div>
+
+<div class="card mt-4">
+	<div class="card-body">
+		<div class="section-eyebrow">Current Context</div>
+		<h1 class="h4 mb-2">{{ current_user.full_name or 'Session User' }}</h1>
+		<p class="mb-0 text-muted">Use the location switcher in the top bar to change the active restaurant before uploading or generating reports.</p>
+	</div>
+</div>
+{% endblock %}

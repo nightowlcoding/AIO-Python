@@ -1,0 +1,7 @@
+﻿App enclosure created from directory app.
+
+Original app directory: C:\Users\arnol\OneDrive\Desktop\AIO-Python\Restaurant Management\Manager App Backup 2025-11-23_04-05-42
+Relative path: Restaurant Management\Manager App Backup 2025-11-23_04-05-42
+Mode: FullCopy
+
+This enclosure is additive and does not delete or move any originals.

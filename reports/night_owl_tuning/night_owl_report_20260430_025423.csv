@@ -1,0 +1,32 @@
+section,key,value
+meta,timestamp,2026-04-30T02:54:23.684009
+meta,action,Run Disk Cleanup
+meta,action_status,success
+meta,action_error,
+system,hostname,LilChicoLaptop
+system,os,Windows-11-10.0.26200-SP0
+system,uptime,0d 0h 22m
+storage,c_total_gb,924.55
+storage,c_used_gb,635.48
+storage,c_free_gb,289.07
+storage,c_free_pct,31.27
+tuning,power_plan,Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+tuning,game_mode,ERROR: ERROR: The system was unable to find the specified registry key or value.
+tuning,defender_realtime_protection,True
+tuning,startup_count,11
+process,name,pid,memory
+process,WorkloadsSessionHost.exe,19660,"4,259,312 K"
+process,Code.exe,16032,"1,374,964 K"
+process,Code.exe,25000,"1,261,648 K"
+process,WorkloadsSessionHost.exe,32124,"870,864 K"
+process,GoogleDriveFS.exe,24828,"453,756 K"
+process,WorkloadsSessionHost.exe,13260,"415,328 K"
+process,MsMpEng.exe,7336,"346,044 K"
+process,WorkloadsSessionHost.exe,16764,"318,676 K"
+process,explorer.exe,13712,"302,664 K"
+process,ollama.exe,28048,"297,584 K"
+process,Code.exe,15252,"295,980 K"
+process,Code.exe,23052,"250,896 K"
+process,ChatGPT.exe,5708,"242,768 K"
+process,MicrosoftSecurityApp.exe,27388,"226,084 K"
+process,dwm.exe,2852,"207,872 K"

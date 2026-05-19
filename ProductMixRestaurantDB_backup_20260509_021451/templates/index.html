@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    {% if request.args.get('success') %}
+    <div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill me-2"></i>{{ request.args.get('success') }}</div>
+    {% endif %}
+    {% if request.args.get('error') %}
+    <div class="alert alert-danger mb-0"><i class="bi bi-exclamation-octagon-fill me-2"></i>{{ request.args.get('error') }}</div>
+    {% endif %}
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header gradient-header">
+        <i class="bi bi-cloud-arrow-up-fill me-2"></i>Product Mix Upload
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-3">Upload one or more Product Mix Excel files (.xlsx/.xls) for the active location.</p>
+
+        <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="row g-3 align-items-center">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="col-lg-8">
+            <label class="form-label">File Selection</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-file-earmark-spreadsheet"></i></span>
+              <input class="form-control" type="file" name="files" id="productMixFilesInput" multiple>
+              <input class="d-none" type="file" name="files" id="productMixBulkFolderInput" multiple webkitdirectory directory>
+            </div>
+            <div class="form-text">Use Upload Files for selected files or Bulk Upload for a folder of many files.</div>
+            <div class="small text-muted mt-1" id="selectedFilesCount">Selected files: 0</div>
+            <div class="row g-2 mt-2">
+              <div class="col-sm-6">
+                <label class="form-label mb-1" for="reportStartDate">Report Start Date</label>
+                <input class="form-control" type="date" name="report_start_date" id="reportStartDate">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label mb-1" for="reportEndDate">Report End Date</label>
+                <input class="form-control" type="date" name="report_end_date" id="reportEndDate">
+              </div>
+            </div>
+            <div class="form-text" id="manualDateHint">Optional. Used for single-file uploads when dates are missing from the filename.</div>
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label d-none d-lg-block">Run</label>
+            <div class="d-grid gap-2">
+              <button class="btn btn-primary w-100" type="submit"><i class="bi bi-upload me-1"></i>Upload Files</button>
+              <button class="btn btn-outline-primary w-100" type="button" id="bulkUploadBtn"><i class="bi bi-folder2-open me-1"></i>Bulk Upload Folder</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-7">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-info-circle me-2"></i>Active Location</div>
+      <div class="card-body">
+        {% if restaurant %}
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <div class="section-eyebrow">Restaurant</div>
+            <div class="fw-semibold">{{ restaurant.name }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="section-eyebrow">Location</div>
+            <div class="fw-semibold">{{ restaurant.location or '—' }}</div>
+          </div>
+          {% if restaurant.city or restaurant.state %}
+          <div class="col-sm-6">
+            <div class="section-eyebrow">City / State</div>
+            <div class="fw-semibold">{{ restaurant.city or '' }}{% if restaurant.city and restaurant.state %}, {% endif %}{{ restaurant.state or '' }}</div>
+          </div>
+          {% endif %}
+          {% if restaurant.phone %}
+          <div class="col-sm-6">
+            <div class="section-eyebrow">Phone</div>
+            <div class="fw-semibold">{{ restaurant.phone }}</div>
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="text-muted">
+          <i class="bi bi-exclamation-circle me-1"></i>No active location selected.
+          <a href="{{ url_for('restaurant_setup') }}" class="ms-1">Set one up</a>.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-5">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-lightning-charge me-2"></i>Quick Actions</div>
+      <div class="card-body d-flex flex-column gap-2">
+        <a class="btn btn-outline-secondary text-start" href="{{ url_for('reports_page') }}">
+          <i class="bi bi-bar-chart-line me-2"></i>View Reports &amp; Upload History
+        </a>
+        <a class="btn btn-outline-secondary text-start" href="{{ url_for('production_list_page') }}">
+          <i class="bi bi-list-check me-2"></i>Manage Production List
+        </a>
+        <a class="btn btn-outline-secondary text-start" href="{{ url_for('restaurant_setup') }}">
+          <i class="bi bi-gear me-2"></i>Restaurant Setup
+        </a>
+        {% if current_user.is_authenticated and current_user.is_admin %}
+        <a class="btn btn-outline-secondary text-start" href="{{ url_for('admin_dashboard') }}">
+          <i class="bi bi-shield-lock me-2"></i>Admin Dashboard
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history me-2"></i>Uploaded Product Mix Files</span>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('reports_page') }}">View Full History</a>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>File</th>
+                <th>Report Start</th>
+                <th>Report End</th>
+                <th>Uploaded At</th>
+                <th class="text-end">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for upload in recent_uploads or [] %}
+              <tr>
+                <td>{{ upload.id }}</td>
+                <td class="text-break">{{ upload.filename }}</td>
+                <td>{{ upload.report_start_date or '—' }}</td>
+                <td>{{ upload.report_end_date or '—' }}</td>
+                <td>{{ upload.uploaded_at or '—' }}</td>
+                <td class="text-end">
+                  <form method="post" action="{{ url_for('delete_upload_page', upload_id=upload.id) }}" class="d-inline" onsubmit="return confirm('Delete this upload and its linked records? This cannot be undone.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="next" value="{{ url_for('index') }}">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">
+                      <i class="bi bi-trash3 me-1"></i>Delete
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+              {% if not recent_uploads %}
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">No Product Mix uploads found for this location yet.</td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var form = document.querySelector('form[action="{{ url_for("upload") }}"]');
+  var filesInput = document.getElementById('productMixFilesInput');
+  var bulkFolderInput = document.getElementById('productMixBulkFolderInput');
+  var bulkBtn = document.getElementById('bulkUploadBtn');
+  var selectedFilesCount = document.getElementById('selectedFilesCount');
+  var reportStartDateInput = document.getElementById('reportStartDate');
+  var reportEndDateInput = document.getElementById('reportEndDate');
+  var manualDateHint = document.getElementById('manualDateHint');
+
+  function updateManualDateState(totalSelected) {
+    var allowManualDates = totalSelected <= 1;
+    if (reportStartDateInput) {
+      reportStartDateInput.disabled = !allowManualDates;
+    }
+    if (reportEndDateInput) {
+      reportEndDateInput.disabled = !allowManualDates;
+    }
+    if (manualDateHint) {
+      manualDateHint.textContent = allowManualDates
+        ? 'Optional. Used for single-file uploads when dates are missing from the filename.'
+        : 'Manual dates are disabled when multiple files are selected.';
+    }
+  }
+
+  function updateSelectedFilesCount() {
+    var standardCount = filesInput && filesInput.files ? filesInput.files.length : 0;
+    var folderCount = bulkFolderInput && bulkFolderInput.files ? bulkFolderInput.files.length : 0;
+    var total = standardCount + folderCount;
+    if (selectedFilesCount) {
+      selectedFilesCount.textContent = 'Selected files: ' + total;
+    }
+    updateManualDateState(total);
+  }
+
+  if (filesInput) {
+    filesInput.addEventListener('change', updateSelectedFilesCount);
+  }
+
+  if (bulkBtn && bulkFolderInput) {
+    bulkBtn.addEventListener('click', function () {
+      bulkFolderInput.click();
+    });
+    bulkFolderInput.addEventListener('change', function () {
+      updateSelectedFilesCount();
+      if (bulkFolderInput.files && bulkFolderInput.files.length > 0 && form) {
+        form.submit();
+      }
+    });
+  }
+
+  if (form) {
+    form.addEventListener('submit', function (event) {
+      var hasStandardFiles = filesInput && filesInput.files && filesInput.files.length > 0;
+      var hasFolderFiles = bulkFolderInput && bulkFolderInput.files && bulkFolderInput.files.length > 0;
+      if (!hasStandardFiles && !hasFolderFiles) {
+        event.preventDefault();
+        alert('Choose at least one Excel file or use Bulk Upload Folder.');
+      }
+    });
+  }
+
+  updateSelectedFilesCount();
+});
+</script>
+{% endblock %}

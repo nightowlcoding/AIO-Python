@@ -1,0 +1,33 @@
+ASUS G14 Tune-Up Session 20260508_140055
+[14:00:56][T:MainThread] Session log file: C:\Users\arnol\OneDrive\Desktop\AIO-Python\reports\asus_g14_tuning\session_20260508_140055.txt
+[14:01:04][T:MainThread] [START][A0001] Preview Temp Cleanup
+[14:01:20][T:MainThread] [OK][A0001] Preview complete: 126667 files, 5.96 GB possible.
+[14:01:20][T:MainThread] [END][A0001] Preview Temp Cleanup (15.93s)
+[14:01:40][T:MainThread] [START][A0002] Run Temp Cleanup
+[14:01:56][T:MainThread] [OK][A0002] Dry-run enabled. Nothing deleted. Potential: 126665 files, 5.96 GB.
+[14:01:56][T:MainThread] [END][A0002] Run Temp Cleanup (16.33s)
+[14:04:06][T:MainThread] [START][A0003] Run Temp Cleanup
+[14:07:18][T:MainThread] [OK][A0003] Cleanup complete. Deleted entries: 1341, skipped: 43, estimated removed: 3.38 GB, C: free-space delta: 3.35 GB.
+[14:07:18][T:MainThread] [END][A0003] Run Temp Cleanup (192.59s)
+[14:07:31][T:MainThread] [START][A0004] Open NVIDIA Driver Download
+[14:07:31][T:MainThread] [OK][A0004] Skipped: preflight or admin requirement not met.
+[14:07:31][T:MainThread] [END][A0004] Open NVIDIA Driver Download (0.00s)
+[14:07:35][T:MainThread] [START][A0005] Open NVIDIA Driver Download
+[14:07:35][T:MainThread] [OK][A0005] Skipped: preflight or admin requirement not met.
+[14:07:35][T:MainThread] [END][A0005] Open NVIDIA Driver Download (0.01s)
+[14:07:38][T:MainThread] [START][A0006] Detect Driver Versions
+[14:07:42][T:MainThread] Detected current display and network driver versions.
+[14:07:42][T:MainThread] [OK][A0006] Driver version detection complete.
+[14:07:42][T:MainThread] [END][A0006] Detect Driver Versions (3.53s)
+[14:07:48][T:MainThread] [START][A0007] Open Windows Update (Driver Settings)
+[14:07:48][T:MainThread] [OK][A0007] Skipped: preflight or admin requirement not met.
+[14:07:48][T:MainThread] [END][A0007] Open Windows Update (Driver Settings) (0.01s)
+[14:07:50][T:MainThread] [START][A0008] Open Windows Update (Driver Settings)
+[14:07:50][T:MainThread] [OK][A0008] Skipped: preflight or admin requirement not met.
+[14:07:50][T:MainThread] [END][A0008] Open Windows Update (Driver Settings) (0.01s)
+[14:08:08][T:MainThread] [START][A0009] Open ASUS BIOS/Firmware Support Page
+[14:08:08][T:MainThread] [OK][A0009] Skipped: preflight or admin requirement not met.
+[14:08:08][T:MainThread] [END][A0009] Open ASUS BIOS/Firmware Support Page (0.01s)
+[14:08:10][T:MainThread] [START][A0010] Run Advanced Safety Preflight
+[14:08:10][T:MainThread] [OK][A0010] Preflight failed: AC adapter is not connected. Connect AC power before firmware workflow.
+[14:08:10][T:MainThread] [END][A0010] Run Advanced Safety Preflight (0.00s)

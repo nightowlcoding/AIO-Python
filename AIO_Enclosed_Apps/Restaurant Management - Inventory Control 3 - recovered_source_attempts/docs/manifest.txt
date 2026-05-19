@@ -1,0 +1,7 @@
+﻿App enclosure created from directory app.
+
+Original app directory: C:\Users\arnol\OneDrive\Desktop\AIO-Python\Restaurant Management\Inventory Control 3\recovered_source_attempts
+Relative path: Restaurant Management\Inventory Control 3\recovered_source_attempts
+Mode: FullCopy
+
+This enclosure is additive and does not delete or move any originals.

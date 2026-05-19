@@ -1,0 +1,7 @@
+﻿App enclosure created from directory app.
+
+Original app directory: C:\Users\arnol\OneDrive\Desktop\AIO-Python\AIO_Tidy\tidy_run_2026-04-24_15-14-47\Loose_Top_Level_Py
+Relative path: AIO_Tidy\tidy_run_2026-04-24_15-14-47\Loose_Top_Level_Py
+Mode: FullCopy
+
+This enclosure is additive and does not delete or move any originals.

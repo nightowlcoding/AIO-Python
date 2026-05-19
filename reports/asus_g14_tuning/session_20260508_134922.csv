@@ -1,0 +1,7 @@
+timestamp,action,status,detail
+2026-05-08T13:50:18,Preview Temp Cleanup,success,"Preview complete: 126442 files, 3.74 GB possible."
+2026-05-08T13:50:47,Run Temp Cleanup,success,"Dry-run enabled. Nothing deleted. Potential: 126442 files, 3.74 GB."
+2026-05-08T13:51:56,Detect Driver Versions,success,Driver version detection complete.
+2026-05-08T13:52:21,Open NVIDIA Driver Download,success,Skipped: preflight or admin requirement not met.
+2026-05-08T13:52:31,Refresh Firmware Info,success,Firmware info refreshed.
+2026-05-08T13:52:37,Open ASUS BIOS/Firmware Support Page,success,Skipped: preflight or admin requirement not met.

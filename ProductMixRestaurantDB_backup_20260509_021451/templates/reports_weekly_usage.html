@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header gradient-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-calendar-week-fill me-2"></i>Weekly Usage Report</span>
+        <span class="small opacity-75">{{ restaurant.name if restaurant else 'No location selected' }}</span>
+      </div>
+      <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <p class="text-muted mb-0">Average production usage by order window from year start to current date (or selected date range).</p>
+        {% if is_admin_user %}
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin_weekly_usage_schedule_page', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-sliders me-1"></i>Edit Order Windows
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_page', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-table me-1"></i>Tracked Items Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_production_page', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-diagram-3 me-1"></i>Production List Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_categories_page', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-tags me-1"></i>Category Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link active" aria-current="page" href="{{ url_for('reports_weekly_usage_page', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-calendar-week me-1"></i>Weekly Usage
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <div class="col-12">
+    <div class="row g-3">
+      {% for k, v in (summary or {}).items() %}
+      <div class="col-6 col-lg-3">
+        <div class="card stat-card">
+          <div class="card-body">
+            <div class="section-eyebrow">{{ k.replace('_', ' ').title() }}</div>
+            <div class="stat-value">{{ v }}</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="alert alert-info mb-0">
+      <i class="bi bi-info-circle me-2"></i>
+      Using windows from <strong>{{ effective_start_date or '-' }}</strong> to <strong>{{ effective_end_date or '-' }}</strong>.
+    </div>
+  </div>
+
+  {% if success %}
+  <div class="col-12">
+    <div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill me-2"></i>{{ success }}</div>
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="col-12">
+    <div class="alert alert-danger mb-0"><i class="bi bi-exclamation-octagon-fill me-2"></i>{{ error }}</div>
+  </div>
+  {% endif %}
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-funnel-fill me-2"></i>Filters</div>
+      <div class="card-body">
+        <form method="get" action="{{ url_for('reports_weekly_usage_page') }}" class="row g-3 align-items-end">
+          <div class="col-12 col-md-3 col-lg-3">
+            <label class="form-label">Search Item</label>
+            <input class="form-control" type="text" name="search" value="{{ upload_filters.search if upload_filters else '' }}" placeholder="Production item">
+          </div>
+          <div class="col-6 col-md-2 col-lg-2">
+            <label class="form-label">Start Date</label>
+            <input class="form-control" type="date" name="start_date" value="{{ upload_filters.start_date if upload_filters else '' }}">
+          </div>
+          <div class="col-6 col-md-2 col-lg-2">
+            <label class="form-label">End Date</label>
+            <input class="form-control" type="date" name="end_date" value="{{ upload_filters.end_date if upload_filters else '' }}">
+          </div>
+          <div class="col-6 col-md-2 col-lg-2">
+            <label class="form-label">Order Type</label>
+            <select class="form-select" name="order_type">
+              <option value="">All</option>
+              {% for opt in order_type_options or [] %}
+              <option value="{{ opt }}" {% if upload_filters and upload_filters.order_type == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-3 col-lg-2">
+            <label class="form-label">Location</label>
+            <select class="form-select" name="location_id">
+              {% for opt in location_options or [] %}
+              <option value="{{ opt.id }}" {% if (upload_filters and upload_filters.location_id == (opt.id|string)) %}selected{% endif %}>
+                {{ opt.name }}{% if opt.location %} - {{ opt.location }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-2 col-lg-1 d-grid">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-1"></i>Apply</button>
+          </div>
+          <div class="col-6 col-md-2 col-lg-2 d-grid">
+            <a class="btn btn-outline-secondary" href="{{ url_for('reports_weekly_usage_page') }}"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-table me-2"></i>Weekly Usage Averages</span>
+        <span class="badge text-bg-primary status-badge">{{ (weekly_rows or []) | length }} rows</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-striped table-hover mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Order Type</th>
+                <th>Production Item</th>
+                <th>Total Windows</th>
+                <th>Windows w/ Data</th>
+                <th>Total Cases</th>
+                <th>Average Cases</th>
+                <th>Computed At</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for row in weekly_rows or [] %}
+              <tr>
+                <td>{{ row.order_type }}</td>
+                <td>{{ row.production_item_name }}</td>
+                <td>{{ row.windows_total }}</td>
+                <td>{{ row.windows_with_data }}</td>
+                <td>{{ "%.2f"|format(row.total_cases or 0) }}</td>
+                <td><strong>{{ "%.2f"|format(row.average_cases or 0) }}</strong></td>
+                <td>{{ row.computed_at or '-' }}</td>
+              </tr>
+            {% endfor %}
+            {% if not weekly_rows %}
+              <tr><td colspan="7" class="text-center text-muted py-3">No weekly usage rows found for this location and filter set.</td></tr>
+            {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

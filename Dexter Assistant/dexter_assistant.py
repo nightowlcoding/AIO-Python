@@ -1,3 +1,7 @@
+# --- Place at the very end of the file, after all other routes and logic ---
+
+
+
 from __future__ import annotations
 
 import json
@@ -30,101 +34,108 @@ SESSION_USER_KEY = "dexter_user"
 
 DASHBOARD_HTML = """
 <!doctype html>
-<html lang="en">
+<html lang=\"en\">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Dexter Assistant</title>
-  <style>
-    :root {
-      --bg:#f4f7f0;
-      --panel:#ffffff;
-      --ink:#1f2a1f;
-      --muted:#5e6a5e;
-      --ok:#2e7d32;
-      --warn:#ef6c00;
-      --bad:#c62828;
-      --accent:#005f73;
-      --edge:#d7dfd3;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 10% 0%, #d9ead3 0%, rgba(217,234,211,0) 40%),
-        radial-gradient(circle at 90% 10%, #dceefb 0%, rgba(220,238,251,0) 35%),
-        var(--bg);
-    }
-    .wrap {
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 28px 20px 40px;
-    }
-    h1 { margin: 0 0 10px; font-size: 32px; }
-    .subtitle { margin: 0 0 24px; color: var(--muted); }
-    .banner {
-      border: 1px solid #b7d4bf;
-      background: #edf8ef;
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 16px;
-      color: #215b2b;
-    }
-    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--edge);
-      border-radius: 14px;
-      padding: 14px;
-      box-shadow: 0 8px 24px rgba(33, 48, 33, 0.06);
-    }
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .name { font-size: 20px; font-weight: 600; }
-    .pill {
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 12px;
-      font-weight: 600;
-      border: 1px solid transparent;
-    }
-    .running { color: #1b5e20; background: #e8f5e9; border-color: #b7dfbb; }
-    .stopped { color: #5d4037; background: #fbe9e7; border-color: #f5c9c1; }
-    .error { color: #7f1d1d; background: #fee2e2; border-color: #fecaca; }
-    .meta { color: var(--muted); font-size: 13px; margin: 8px 0 10px; }
-    .btns { display: flex; gap: 8px; flex-wrap: wrap; }
-    button, a.btn {
-      appearance: none;
-      border: 1px solid #c4d1bd;
-      background: #fff;
-      color: #213021;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-size: 13px;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 82px;
-    }
-    button.primary { background: var(--accent); color: #fff; border-color: #004553; }
-    button.warning { background: #9a3412; color: #fff; border-color: #7c2d12; }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
-    .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
-    pre {
-      margin-top: 10px;
-      border-radius: 10px;
-      border: 1px solid var(--edge);
-      background: #f8faf7;
-      padding: 8px;
-      max-height: 160px;
-      overflow: auto;
-      font-size: 12px;
-    }
-  </style>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
+    <title>Dexter Assistant</title>
+    <style>
+        :root {
+            --bg:#f4f7f0;
+            --panel:#ffffff;
+            --ink:#1f2a1f;
+            --muted:#5e6a5e;
+            --ok:#2e7d32;
+            --warn:#ef6c00;
+            --bad:#c62828;
+            --accent:#005f73;
+            --edge:#d7dfd3;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at 10% 0%, #d9ead3 0%, rgba(217,234,211,0) 40%),
+                radial-gradient(circle at 90% 10%, #dceefb 0%, rgba(220,238,251,0) 35%),
+                var(--bg);
+        }
+        .wrap {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 28px 20px 40px;
+        }
+        h1 { margin: 0 0 10px; font-size: 32px; }
+        .subtitle { margin: 0 0 24px; color: var(--muted); }
+        .banner {
+            border: 1px solid #b7d4bf;
+            background: #edf8ef;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            color: #215b2b;
+        }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--edge);
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 8px 24px rgba(33, 48, 33, 0.06);
+        }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .name { font-size: 20px; font-weight: 600; }
+        .pill {
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid transparent;
+        }
+        .running { color: #1b5e20; background: #e8f5e9; border-color: #b7dfbb; }
+        .stopped { color: #5d4037; background: #fbe9e7; border-color: #f5c9c1; }
+        .error { color: #7f1d1d; background: #fee2e2; border-color: #fecaca; }
+        .meta { color: var(--muted); font-size: 13px; margin: 8px 0 10px; }
+        .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+        button, a.btn {
+            appearance: none;
+            border: 1px solid #c4d1bd;
+            background: #fff;
+            color: #213021;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 82px;
+        }
+        button.primary { background: var(--accent); color: #fff; border-color: #004553; }
+        button.warning { background: #9a3412; color: #fff; border-color: #7c2d12; }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
+        .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+        pre {
+            margin-top: 10px;
+            border-radius: 10px;
+            border: 1px solid var(--edge);
+            background: #f8faf7;
+            padding: 8px;
+            max-height: 160px;
+            overflow: auto;
+            font-size: 12px;
+        }
+        @media (max-width: 700px) {
+            .wrap { padding: 10px 2px 18px; }
+            h1 { font-size: 1.3rem; }
+            .actions { gap: 6px; }
+            .card { padding: 8px; border-radius: 8px; }
+            .grid { gap: 8px; }
+        }
+    </style>
 </head>
 <body>
   <div class="wrap">
@@ -201,10 +212,10 @@ DASHBOARD_HTML = """
 
 PORTAL_HOME_HTML = """
 <!doctype html>
-<html lang="en">
+<html lang=\"en\">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
     <title>Dexter Assistant Portal</title>
     <style>
         :root {
@@ -220,7 +231,7 @@ PORTAL_HOME_HTML = """
         * { box-sizing: border-box; }
         body {
             margin: 0;
-            font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+            font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
             color: var(--ink);
             background:
                 radial-gradient(circle at 0% 0%, #d9efe4 0%, rgba(217,239,228,0) 45%),
@@ -286,6 +297,12 @@ PORTAL_HOME_HTML = """
         }
         .actions a.primary { background: var(--brand-2); color: #fff; border-color: #0f4d26; }
         .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+        @media (max-width: 700px) {
+            .wrap { padding: 10px 2px 18px; }
+            h1 { font-size: 1.3rem; }
+            .cards { gap: 8px; }
+            .card { padding: 8px; border-radius: 8px; }
+        }
     </style>
 </head>
 <body>
@@ -341,10 +358,10 @@ PORTAL_HOME_HTML = """
 
 PORTAL_APP_HTML = """
 <!doctype html>
-<html lang="en">
+<html lang=\"en\">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
     <title>{{ app_title }} - Dexter Assistant</title>
     <style>
         :root {
@@ -358,7 +375,7 @@ PORTAL_APP_HTML = """
         * { box-sizing: border-box; }
         body {
             margin: 0;
-            font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+            font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
             color: var(--ink);
             background: var(--bg);
             min-height: 100vh;
@@ -402,6 +419,12 @@ PORTAL_APP_HTML = """
             border: 0;
             background: #fff;
         }
+        @media (max-width: 700px) {
+            .topbar, .subbar { flex-direction: column; align-items: flex-start; padding: 8px 4px; }
+            .brand { font-size: 1.1rem; }
+            .nav { gap: 4px; }
+            iframe { height: 60vh; }
+        }
     </style>
 </head>
 <body>
@@ -439,47 +462,194 @@ PORTAL_APP_HTML = """
 
 LOGIN_HTML = """
 <!doctype html>
-<html lang="en">
+<html lang=\"en\">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
     <title>Dexter Assistant Login</title>
     <style>
-        :root { --bg:#eef3ea; --panel:#fff; --ink:#1f2a1f; --muted:#5f6a60; --edge:#d7dfd3; --brand:#0f766e; --danger:#991b1b; }
+        :root {
+            --bg: #eef3ea;
+            --panel: #fff;
+            --ink: #1f2a1f;
+            --muted: #5f6a60;
+            --edge: #d7dfd3;
+            --brand: #0f766e;
+            --brand2: #2563eb;
+            --danger: #991b1b;
+            --accent: #fbbf24;
+        }
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: "Segoe UI", "Trebuchet MS", sans-serif; color: var(--ink); background: var(--bg); }
-        .wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
-        .card { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; padding: 20px; box-shadow: 0 10px 26px rgba(33, 48, 33, 0.08); }
-        h1 { margin: 0 0 8px; font-size: 28px; }
-        p { margin: 0 0 18px; color: var(--muted); }
+        body { margin: 0; font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; color: var(--ink); background: var(--bg); }
+        .wrap {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 8px;
+            background: linear-gradient(120deg, #e0f2fe 0%, #f1f5f9 100%);
+        }
+        .container {
+            display: flex;
+            flex-direction: row;
+            gap: 36px;
+            width: 100%;
+            max-width: 900px;
+            align-items: center;
+            justify-content: center;
+        }
+        .marketing {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 32px 0 32px 0;
+        }
+        .logo {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 18px;
+        }
+        .hero-title {
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            color: var(--brand2);
+            letter-spacing: 0.5px;
+        }
+        .hero-tagline {
+            font-size: 1.15rem;
+            color: var(--muted);
+            margin-bottom: 18px;
+        }
+        .features {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 18px 0;
+        }
+        .features li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: var(--ink);
+        }
+        .features svg {
+            width: 22px;
+            height: 22px;
+            color: var(--brand2);
+            flex-shrink: 0;
+        }
+        .contact-link {
+            margin-top: 10px;
+            font-size: 1rem;
+            color: var(--brand2);
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .card {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: 410px;
+            background: var(--panel);
+            border: 1.5px solid var(--edge);
+            border-radius: 16px;
+            padding: 28px 22px 22px 22px;
+            box-shadow: 0 10px 32px rgba(33, 48, 33, 0.10);
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .card h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.7rem;
+            font-weight: 700;
+            color: var(--brand2);
+        }
+        .card p { margin: 0 0 18px; color: var(--muted); }
         label { display: block; margin: 10px 0 6px; font-size: 14px; }
-        input { width: 100%; padding: 10px 12px; border: 1px solid #c7d2c4; border-radius: 10px; font-size: 14px; }
-        .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        input {
+            width: 100%;
+            padding: 11px 13px;
+            border: 1px solid #c7d2c4;
+            border-radius: 10px;
+            font-size: 15px;
+            margin-bottom: 2px;
+        }
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
         .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
         .check input { width: auto; margin: 0; }
-        button { margin-top: 14px; width: 100%; border: 1px solid #0b645e; background: var(--brand); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; }
+        button {
+            margin-top: 16px;
+            width: 100%;
+            border: 1px solid var(--brand2);
+            background: linear-gradient(90deg, var(--brand2) 60%, var(--accent) 100%);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+            transition: background 0.2s;
+        }
+        button:hover { background: linear-gradient(90deg, var(--brand2) 80%, var(--accent) 100%); }
         .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
-        .links { margin-top: 12px; font-size: 13px; color: var(--muted); }
-        .links a { color: #0b5a56; text-decoration: none; }
+        .links { margin-top: 14px; font-size: 13px; color: var(--muted); text-align: center; }
+        .links a { color: var(--brand2); text-decoration: underline; }
+        @media (max-width: 900px) {
+            .container { flex-direction: column; gap: 18px; align-items: stretch; }
+            .marketing, .card { max-width: 100%; }
+        }
+        @media (max-width: 600px) {
+            .wrap { padding: 10px 2px; }
+            .container { gap: 0; }
+            .marketing { padding: 18px 0 10px 0; }
+            .hero-title { font-size: 1.3rem; }
+            .card { padding: 18px 6px 14px 6px; border-radius: 10px; }
+        }
     </style>
 </head>
 <body>
     <div class="wrap">
-        <form class="card" method="post" action="{{ action_url }}">
-            <h1>Dexter Assistant</h1>
-            <p>Sign in to access app controls and protected routes.</p>
-            <label>Username</label>
-            <input id="login-username" type="text" name="username" required autofocus autocomplete="username" />
-            <label>Password</label>
-            <input id="login-password" type="password" name="password" required autocomplete="current-password" />
-            <div class="row">
-                <label class="check"><input id="show-password" type="checkbox" /> Show password</label>
-                <label class="check"><input id="save-password" type="checkbox" /> Remember username</label>
+        <div class="container">
+            <div class="marketing">
+                <img class="logo" src="https://cdn.jsdelivr.net/gh/simple-icons/simple-icons/icons/fastapi.svg" alt="Dexter Assistant Logo" />
+                <div class="hero-title">Dexter Assistant</div>
+                <div class="hero-tagline">All your restaurant management apps, one secure dashboard.</div>
+                <ul class="features">
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Start, stop, and monitor apps instantly</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Secure, password-protected access</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Works on any device, anywhere</li>
+                </ul>
+                <a class="contact-link" href="mailto:info@dexterassist.com">Contact us / Learn more</a>
             </div>
-            <button type="submit">Sign In</button>
-            {% if error %}<div class="error">{{ error }}</div>{% endif %}
-            <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a></div>
-        </form>
+            <form class="card" method="post" action="{{ action_url }}">
+                <h2>Sign In</h2>
+                <p>Access your dashboard and manage your apps.</p>
+                <label>Username</label>
+                <input id="login-username" type="text" name="username" required autofocus autocomplete="username" />
+                <label>Password</label>
+                <input id="login-password" type="password" name="password" required autocomplete="current-password" />
+                <div class="row">
+                    <label class="check"><input id="show-password" type="checkbox" /> Show password</label>
+                    <label class="check"><input id="save-password" type="checkbox" /> Remember username</label>
+                </div>
+                <button type="submit">Sign In</button>
+                {% if error %}<div class="error">{{ error }}</div>{% endif %}
+                <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a></div>
+            </form>
+        </div>
     </div>
     <script>
         (function () {
@@ -488,7 +658,6 @@ LOGIN_HTML = """
             const showPassword = document.getElementById('show-password');
             const savePassword = document.getElementById('save-password');
             const storageKey = 'dexterAssistantLogin';
-
             try {
                 const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
                 if (saved && typeof saved === 'object') {
@@ -497,14 +666,10 @@ LOGIN_HTML = """
                     savePassword.checked = !!saved.savePassword;
                     if (showPassword.checked) passwordInput.type = 'text';
                 }
-            } catch (e) {
-                // Ignore malformed stored data.
-            }
-
+            } catch (e) {}
             showPassword.addEventListener('change', () => {
                 passwordInput.type = showPassword.checked ? 'text' : 'password';
             });
-
             document.querySelector('form.card').addEventListener('submit', () => {
                 if (savePassword.checked) {
                     localStorage.setItem(storageKey, JSON.stringify({

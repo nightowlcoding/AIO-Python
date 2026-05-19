@@ -1,0 +1,2 @@
+risk_score,flags,source_file,employee,check_id,datetime,location,action,reason,amount,void_amount,discount_amount,comp_amount,refund_amount
+38,High refund amount ($55.00); Keyword detected: refund,toast_ticket_capture_sample.csv,John Doe,100,"3/7/2026, 2:20 AM",Bar,refund,Guest complaint,65.00,0.00,0.00,0.00,55.00

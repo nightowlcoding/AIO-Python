@@ -1,0 +1,362 @@
+recipe_name,ingredient_slot,ingredient,quantity,additional_instructions,additional_type,quality_flag,source_row
+Adios MotherFer,1,Vodka,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,2,Gin,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,3,Rum,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,4,Tequila,.5oz,Fill with sweet and sour top with sprite,,,2
+Adios MotherFer,5,Blue Curacao,.5oz,Fill with sweet and sour top with sprite,,,2
+Alligator Bite,1,Midori,.5oz,Layer in Champagne Glass float Chambord & Jager,,,3
+Alligator Bite,2,Malibu,.5oz,Layer in Champagne Glass float Chambord & Jager,,,3
+Alligator Bite,3,Pineapple,.25oz,Layer in Champagne Glass float Chambord & Jager,,,3
+Amaretto Sour,1,Amaretto,1oz,Build over ice and Garnish with Cherries,,,4
+Amaretto Sour,2,Sweet & Sour,4oz,Build over ice and Garnish with Cherries,,,4
+Appletini,1,Vodka,1.5oz,Stir ingredients w/ice strain into martini glass,,,5
+Appletini,2,Sour Apple,1oz,Stir ingredients w/ice strain into martini glass,,,5
+Appletini,3,7up,splash,Stir ingredients w/ice strain into martini glass,,,5
+Bahama Mama,1,Cap Morgan,1oz,Shake and Strain,,,6
+Bahama Mama,2,Amaretto,1oz,Shake and Strain,,,6
+Bahama Mama,3,Banana Liquor,1oz,Shake and Strain,,,6
+Bahama Mama,4,Orange Juice,1.5oz,Shake and Strain,,,6
+Bahama Mama,5,Pineapple,1.5oz,Shake and Strain,,,6
+Banana Split,1,Banana Liquor,.5oz,Shake and Strain Garnish with Cherries,,,7
+Banana Split,2,Kahlua,.5oz,Shake and Strain Garnish with Cherries,,,7
+Banana Split,3,Milk,.5oz,Shake and Strain Garnish with Cherries,,,7
+Banana Split,4,Pineapple,2oz,Shake and Strain Garnish with Cherries,,,7
+Bebecita,1,x-rated,1oz,Shaken and Stirred,,,8
+Bebecita,2,Whipped Cream,Orange Juice,Shaken and Stirred,,quantity_maybe_shifted,8
+Bebecita,3,1oz,Pineapple,Shaken and Stirred,,quantity_maybe_shifted,8
+Bebecita,4,1oz,Grenadine,Shaken and Stirred,,quantity_maybe_shifted,8
+Bebecita,5,1oz,,Shaken and Stirred,,missing_quantity,8
+BHB Pineapple,1,Amaretto,1oz,"Fill with pineapple, splash with orange juice, top with grenadine. Garnish: Orange and Cherries",,,9
+BHB Pineapple,2,Peach Schn,1oz,"Fill with pineapple, splash with orange juice, top with grenadine. Garnish: Orange and Cherries",,,9
+BHB Pineapple,3,So Comfort,1oz,"Fill with pineapple, splash with orange juice, top with grenadine. Garnish: Orange and Cherries",,,9
+Big House Tea,1,Vodka,2.5oz,Squeeze half a lemon and Garnish with lemon wedge,,,10
+Big House Tea,2,Peach Tree,.25oz,Squeeze half a lemon and Garnish with lemon wedge,,,10
+Big House Tea,3,Sugar Water,Fill,Squeeze half a lemon and Garnish with lemon wedge,,,10
+Bloody Kiss,1,Peach Schnapps,1oz,Sprinkle glass with grenadine,,,11
+Bloody Kiss,2,Gin,1oz,Sprinkle glass with grenadine,,,11
+Bloody Kiss,3,Hawaiian Punch,1oz,Sprinkle glass with grenadine,,,11
+Bloody Kiss,4,7up,.5oz,Sprinkle glass with grenadine,,,11
+Bloody Maria,1,Tequila,1.5oz,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,12
+Bloody Maria,2,Olive Juice,Splash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,12
+Bloody Maria,3,Worcestershire,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,12
+Bloody Maria,4,Tobaso,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,12
+Bloody Maria,5,Pepper,Dash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,12
+Bloody Maria,6,Clamato,Fill,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,12
+Bloody Mary,1,Vodka,1.5oz,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,13
+Bloody Mary,2,Olive Juice,Splash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,13
+Bloody Mary,3,Worcestershire,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,13
+Bloody Mary,4,Tobaso,2 shakes,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,13
+Bloody Mary,5,Pepper,Dash,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,13
+Bloody Mary,6,Clamato,Fill,Shake & Serve with Ice. Rim Glass with salt. Garnish Olives and Limes,,,13
+Bloody Stool,1,151,.5oz,Add Hawaiian Punch and Pineapple Juice,,,14
+Bloody Stool,2,Jameson,.5oz,Add Hawaiian Punch and Pineapple Juice,,,14
+Bloody Stool,3,Vanilla Vodka,.5oz,Add Hawaiian Punch and Pineapple Juice,,,14
+Blow Job,1,Kahlua,.5oz,LAYERED…Top with Whipped Cream,,,15
+Blow Job,2,Bailey's,.5oz,LAYERED…Top with Whipped Cream,,,15
+Blue Hawaiian,1,Malibu,1oz,Shake & Serve over ice. Garnish with Orange and Cherries,,,16
+Blue Hawaiian,2,Blue Curacao,.5oz,Shake & Serve over ice. Garnish with Orange and Cherries,,,16
+Blue Hawaiian,3,Pineapple,3oz,Shake & Serve over ice. Garnish with Orange and Cherries,,,16
+Blue Hawaiian,4,Triple sec,1oz,Shake & Serve over ice. Garnish with Orange and Cherries,,,16
+Booty Juice,1,Midori,1oz,,,,17
+Booty Juice,2,Malibu,1oz,,,,17
+Booty Juice,3,Captain Morgan,1oz,,,,17
+Booty Juice,4,151,Splash,,,,17
+Bruised Apple,1,Jaeger,1oz,,,,18
+Bruised Apple,2,Apple Puckers,1oz,,,,18
+Bruised Apple,3,Cranberry,Splash,,,,18
+Bull Blaster,1,Jaeger,1.5oz,,,,19
+Bull Blaster,2,Red Bull,2oz,,,,19
+Cabana Dream,1,Rum Chata,1oz,<Rainbow Glass> Garnish with Dried pineapple juice,,,20
+Cabana Dream,2,Malibu,1oz,<Rainbow Glass> Garnish with Dried pineapple juice,,,20
+Cabana Dream,3,Lime Juice,.5oz,<Rainbow Glass> Garnish with Dried pineapple juice,,,20
+Cabana Dream,4,Pineapple Juice,2oz,<Rainbow Glass> Garnish with Dried pineapple juice,,,20
+Cabana Dream,5,Top off,Topo Chico,<Rainbow Glass> Garnish with Dried pineapple juice,,quantity_maybe_shifted,20
+California Cocaine,1,Amaretto,1oz,,,,21
+California Cocaine,2,Blue Curacao,1oz,,,,21
+California Cocaine,3,Malibu,1oz,,,,21
+California Cocaine,4,So Comfort,1oz,,,,21
+California Cocaine,5,Pineapple,1oz,,,,21
+Cape Code,1,Vodka,1.5oz,Build over ice Garnish with Lime,,,22
+Cape Code,2,Cranberry,Fill,Build over ice Garnish with Lime,,,22
+Caribbean,1,151,1oz,,,,23
+Caribbean,2,Triple Sec,.5oz,,,,23
+Caribbean,3,Blue Curacao,.5oz,,,,23
+Caribbean,4,Sweet&Sour,.5oz,,,,23
+Cherry Coke Shot,1,Cherry Vodka,1oz,Fill for drink,,,24
+Cherry Coke Shot,2,Amaretto,.5oz,Fill for drink,,,24
+Cherry Coke Shot,3,Coke Cola,.5oz,Fill for drink,,,24
+Cherry Punch,1,Cherry Vodka,1oz,,,,25
+Cherry Punch,2,Pineapple,1oz,,,,25
+Cherry Punch,3,Grenadine,splash,,,,25
+Cherry Vodka Sour,1,Vodka,1oz,Build over ice,,,26
+Cherry Vodka Sour,2,Sweet & Sour,1oz,Build over ice,,,26
+Cherry Vodka Sour,3,Grenadine,.5oz,Build over ice,,,26
+Chocolate Cake Shot,1,Absolute Citron,1oz,Rim with Sugar and Lime,,,27
+Chocolate Cake Shot,2,Frangelico,1oz,Rim with Sugar and Lime,,,27
+Cosmopolitan,1,Vodka,1.25oz,Shake & Strain. Garnish with Lemon Twist,,,28
+Cosmopolitan,2,Triple Sec,.75oz,Shake & Strain. Garnish with Lemon Twist,,,28
+Cosmopolitan,3,Cranberry,2oz,Shake & Strain. Garnish with Lemon Twist,,,28
+Cosmopolitan,4,Sweet&Sour,1oz,Shake & Strain. Garnish with Lemon Twist,,,28
+Crack Pipe,1,Bacardi Limon,.5oz,Drop in red bull like and R&R,,,29
+Crack Pipe,2,Malibu,.5oz,Drop in red bull like and R&R,,,29
+Crack Pipe,3,Blue Curacao,Splash,Drop in red bull like and R&R,,,29
+Cucumber Refresher,1,Effen Cucumber,1.5oz,"<Crystal Glass> Don’t Strain. Shake all ingredients. Mint needs to be in glass. Tajin Rim, Garnish with Cucumber slice",,,30
+Cucumber Refresher,2,Mint Leaves,4oz,"<Crystal Glass> Don’t Strain. Shake all ingredients. Mint needs to be in glass. Tajin Rim, Garnish with Cucumber slice",,,30
+Cucumber Refresher,3,Lime Juice,.5oz,"<Crystal Glass> Don’t Strain. Shake all ingredients. Mint needs to be in glass. Tajin Rim, Garnish with Cucumber slice",,,30
+Cucumber Refresher,4,Simple Syrup,.5oz,"<Crystal Glass> Don’t Strain. Shake all ingredients. Mint needs to be in glass. Tajin Rim, Garnish with Cucumber slice",,,30
+Cucumber Refresher,5,Top off,Topo Chico,"<Crystal Glass> Don’t Strain. Shake all ingredients. Mint needs to be in glass. Tajin Rim, Garnish with Cucumber slice",,quantity_maybe_shifted,30
+Ecstasy Martini,1,Grape Vodka,3oz,Shake & Strain into chilled martini glass add a splash of Club Soda. GARNISH w/ Orange,,,31
+Ecstasy Martini,2,Blue Curacao,.5oz,Shake & Strain into chilled martini glass add a splash of Club Soda. GARNISH w/ Orange,,,31
+Ecstasy Martini,3,Grenadine,.5oz,Shake & Strain into chilled martini glass add a splash of Club Soda. GARNISH w/ Orange,,,31
+Electric Eel,1,Ciroc Apple,1oz,Sour Apple & Blue Curacao Shaken seperately layered on top,,,32
+Electric Eel,2,Midori,1oz,Sour Apple & Blue Curacao Shaken seperately layered on top,,,32
+Electric Eel,3,Sweet&Sour,1oz,Sour Apple & Blue Curacao Shaken seperately layered on top,,,32
+Five Star General,1,Jaeger,.5oz,,,,33
+Five Star General,2,Rumpleminze,.5oz,,,,33
+Five Star General,3,151,.5oz,,,,33
+Five Star General,4,Goldschlager,.5oz,,,,33
+Five Star General,5,Tequila,.5oz,,,,33
+Flaming Dr. Pepper,1,Amaretto,.75oz,Layer Amaretto and 151 in shot glass light on fire and drop into draft beer,,,34
+Flaming Dr. Pepper,2,151,.75oz,Layer Amaretto and 151 in shot glass light on fire and drop into draft beer,,,34
+Flaming Dr. Pepper,3,Beer,1/2 a Pint,Layer Amaretto and 151 in shot glass light on fire and drop into draft beer,,,34
+Foley's Red Apple,1,Malibu,.5oz,Shake and Strain,,,35
+Foley's Red Apple,2,Apple Puckers,.5oz,Shake and Strain,,,35
+Foley's Red Apple,3,Cranberry,.5oz,Shake and Strain,,,35
+Fruit Loop,1,Loopy Vodka,1oz,,,,36
+Fruit Loop,2,Pineapple,Splash,,,,36
+Fruit Loop,3,Sweet&Sour,Splash,,,,36
+Fuck Buddy (drink),1,Malibu,.5oz,Shake and serve,,,37
+Fuck Buddy (drink),2,Amaretto,.5oz,Shake and serve,,,37
+Fuck Buddy (drink),3,Peachtree,.5oz,Shake and serve,,,37
+Fuck Buddy (drink),4,151,.25oz,Shake and serve,,,37
+Fuck Buddy (drink),5,Pineapple,Splash,Shake and serve,,,37
+Fuck Buddy (drink),6,Cranberry,Splash,Shake and serve,,,37
+Fuck Buddy (drink),7,Grenadine,,Shake and serve,,missing_quantity,37
+Georgia Tea,1,Vodka,1oz,Fill with sweet and sour top off with cranberry,,,38
+Georgia Tea,2,Gin,1oz,Fill with sweet and sour top off with cranberry,,,38
+Georgia Tea,3,Light Rum,1oz,Fill with sweet and sour top off with cranberry,,,38
+Georgia Tea,4,Peach Schnapps,1oz,Fill with sweet and sour top off with cranberry,,,38
+Green Bean,1,3 Olive Vodka,1oz,Make like a bull blaster,,,39
+Green Bean,2,Red Bull,Fill,Make like a bull blaster,,,39
+Green Bean,3,Cranberry,Splash,Make like a bull blaster,,,39
+Green Goblin,1,Vodka,1oz,,,,40
+Green Goblin,2,Triple Sec,.5oz,,,,40
+Green Goblin,3,Sweet&Sour,.5oz,,,,40
+Green Goblin,4,Green Dye,2 drops,,,,40
+Green Grape Martini,1,3 Olive Grapes,2oz,Shake and Strain all into chilled martini glass. Garnish with Orange Wedge,,,41
+Green Grape Martini,2,Midori,1oz,Shake and Strain all into chilled martini glass. Garnish with Orange Wedge,,,41
+Green Grape Martini,3,Pineapple,splash,Shake and Strain all into chilled martini glass. Garnish with Orange Wedge,,,41
+Hand Grenade,1,Midori,1oz,add Red Bull,,,42
+Hand Grenade,2,151,1oz,add Red Bull,,,42
+Hand Grenade,3,Vodka,1oz,add Red Bull,,,42
+Hibiscus Bourbon,1,Jim bean,2oz,<Crystal Stem Glass> Shake all Ingredients and Hibisucs Floral Garnish,,,43
+Hibiscus Bourbon,2,Lemon Juice,.5oz,<Crystal Stem Glass> Shake all Ingredients and Hibisucs Floral Garnish,,,43
+Hibiscus Bourbon,3,Orange Juice,.5oz,<Crystal Stem Glass> Shake all Ingredients and Hibisucs Floral Garnish,,,43
+Hibiscus Bourbon,4,Simple Syrup,.5oz,<Crystal Stem Glass> Shake all Ingredients and Hibisucs Floral Garnish,,,43
+Hibiscus Bourbon,5,Hibiscus,2oz,<Crystal Stem Glass> Shake all Ingredients and Hibisucs Floral Garnish,,,43
+Hurricane,1,Light Rum,.5oz,Shake&Serve over ice. Garnish with Cherries,,,44
+Hurricane,2,Dark Rum,.5oz,Shake&Serve over ice. Garnish with Cherries,,,44
+Hurricane,3,Orange Juice,1oz,Shake&Serve over ice. Garnish with Cherries,,,44
+Hurricane,4,Pineapple,3oz,Shake&Serve over ice. Garnish with Cherries,,,44
+Hurricane,5,Grenadine,.5oz,Shake&Serve over ice. Garnish with Cherries,,,44
+Irish Car Bomb,1,Guinness,3/4 of a pint,Drop shot in beer and chug,,,45
+Irish Car Bomb,2,Jameson,.5oz,Drop shot in beer and chug,,,45
+Irish Car Bomb,3,Bailey's,.5oz,Drop shot in beer and chug,,,45
+Jolly Rancher,1,Watermelon,.5oz,,,,46
+Jolly Rancher,2,Apple Puckers,.5oz,,,,46
+Jolly Rancher,3,Sweet&Sour,.5oz,,,,46
+Jolly Rancher,4,7up,.5oz,,,,46
+Jolly Rancher,5,Grenadine,splash,,,,46
+Kamikaze,1,Vodka,1oz,Shake and Strain,,,47
+Kamikaze,2,Triple Sec,.5oz,Shake and Strain,,,47
+Kamikaze,3,Sweet&Sour,.5oz,Shake and Strain,,,47
+Key Lime Pie,1,Vanilla Vodka,.5oz,,,,48
+Key Lime Pie,2,Milk,.5oz,,,,48
+Key Lime Pie,3,Squeezed Lime,.5oz,,,,48
+Key Lime Pie,4,Sugar Water,.5oz,,,,48
+Liquid Cocaine,1,151,.5oz,Shake and Strain,,,49
+Liquid Cocaine,2,Goldschlager,.5oz,Shake and Strain,,,49
+Liquid Cocaine,3,Jaeger,.5oz,Shake and Strain,,,49
+Liquid Marijuana,1,Cap Morgan,.5oz,,,,50
+Liquid Marijuana,2,Blue Curacao,.5oz,,,,50
+Liquid Marijuana,3,Malibu,.5oz,,,,50
+Liquid Marijuana,4,Midori,.5oz,,,,50
+Liquid Marijuana,5,Pineapple,Fill,,,,50
+Liquid Marijuana,6,Sweet&Sour,Splash,,,,50
+Liquid Marijuana (Shot),1,Malibu,.25oz,Shake and Strain,,,51
+Liquid Marijuana (Shot),2,Blue Curacao,.25oz,Shake and Strain,,,51
+Liquid Marijuana (Shot),3,Cap Morgan,.25oz,Shake and Strain,,,51
+Liquid Marijuana (Shot),4,Midori,.25oz,Shake and Strain,,,51
+Liquid Marijuana (Shot),5,Pineapple,Splash,Shake and Strain,,,51
+Liquid Marijuana (Shot),6,Sweet&Sour,Splash,Shake and Strain,,,51
+Mai Tai,1,Light Rum,.5oz,,,,52
+Mai Tai,2,Amaretto,.5oz,,,,52
+Mai Tai,3,Sweet&Sour,1oz,,,,52
+Mai Tai,4,Pineapple,3oz,,,,52
+Mai Tai,5,Grand Marnier,.5oz,,,,52
+Mai Tai,6,Grenadine,.5oz,,,,52
+Margarita Citron,1,Patron,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,53
+Margarita Citron,2,Patron Citron,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,53
+Margarita Citron,3,Lime Juice,2oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,53
+Margarita Citron,4,Orange Juice,Fill,Build over Ice. Rim with salt. Garnish with lime and oranges,,,53
+Margarita Melon,1,Watermelon,2 parts,Served on the rocks Garnish with Limes,,,54
+Margarita Melon,2,Tequila,1 part,Served on the rocks Garnish with Limes,,,54
+Margarita Melon,3,Sweet&Sour,2 Parts,Served on the rocks Garnish with Limes,,,54
+Margarita Patron,1,Patron,1.5oz,Salt the rim of the glass. Garnish with Lime,,,55
+Margarita Patron,2,Orange Liqueur,1oz,Salt the rim of the glass. Garnish with Lime,,,55
+Margarita Patron,3,Lime Juice,Half,Salt the rim of the glass. Garnish with Lime,,quantity_maybe_shifted,55
+Margarita Patron,4,Sweet&Sour,Half,Salt the rim of the glass. Garnish with Lime,,quantity_maybe_shifted,55
+Margarita Patron,5,Grand Marnier,Float,Salt the rim of the glass. Garnish with Lime,,quantity_maybe_shifted,55
+Margarita WELL,1,Tequila,1.5oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,56
+Margarita WELL,2,Triple Sec,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,56
+Margarita WELL,3,Sweet&Sour,1oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,56
+Margarita WELL,4,Lime Juice,2oz,Build over Ice. Rim with salt. Garnish with lime and oranges,,,56
+Martini Dry,1,Gin,1oz,Garnish with lemon twist,,,57
+Martini Dry,2,Dry Vermouth,1oz,Garnish with lemon twist,,,57
+Martini Mexican,1,Tequila,2oz,Garnish with Olives,,,58
+Martini Mexican,2,Cointreau,1.5oz,Garnish with Olives,,,58
+Martini Mexican,3,Lime Juice,2oz,Garnish with Olives,,,58
+Martini Mexican,4,Orange Juice,2oz,Garnish with Olives,,,58
+Martini Mexican,5,Olive Juice,Splash,Garnish with Olives,,,58
+Martini Mexican,6,7up,Splash,Garnish with Olives,,,58
+Martini Sweet,1,Gin,1oz,Garnish with lemon twist,,,59
+Martini Sweet,2,Sweet Vermouth,1oz,Garnish with lemon twist,,,59
+Midori Splice,1,Malibu,1.5oz,Top with wipe cream,,,60
+Midori Splice,2,Midori,1oz,Top with wipe cream,,,60
+Midori Splice,3,Pineapple,4oz,Top with wipe cream,,,60
+Mighty Tasty,1,Crown,.5oz,,,,61
+Mighty Tasty,2,Jager,.5oz,,,,61
+Mind Eraser,1,Vodka,1oz,Build and serve with a straw,,,62
+Mind Eraser,2,Kahlua,1oz,Build and serve with a straw,,,62
+Mind Eraser,3,Coke Cola,splash,Build and serve with a straw,,,62
+Oatmeal Cookie,1,Goldshlager,.5oz,Shake and Strain,,,63
+Oatmeal Cookie,2,Jager,.5oz,Shake and Strain,,,63
+Oatmeal Cookie,3,Bailey's,.5oz,Shake and Strain,,,63
+Paradise Dream,1,Malibu,1oz,Layed grenadine at bottom. Blue & Island Puckers Mixed,,,64
+Paradise Dream,2,Peach Schn,1oz,Layed grenadine at bottom. Blue & Island Puckers Mixed,,,64
+Paradise Dream,3,Pineapple,1/2 way,Layed grenadine at bottom. Blue & Island Puckers Mixed,,,64
+PB&J (shot),1,Cranberry,.5oz,Shake and Strain,,,65
+PB&J (shot),2,Frangelico,.5oz,Shake and Strain,,,65
+Perkins,1,Kahlua,1oz,,,,66
+Perkins,2,Butterscotch,1oz,,,,66
+Perkins,3,Vodka,1oz,,,,66
+Perkins,4,Baileys,1oz,,,,66
+Pineapple Express,1,Vodka,.75oz,Shake and Strain,,,67
+Pineapple Express,2,Blue Curacao,.25oz,Shake and Strain,,,67
+Pineapple Express,3,Pineapple,Splash,Shake and Strain,,,67
+Pineapple Express,4,Red Bull,Splash,Shake and Strain,,,67
+Pixie Stik,1,Bacardi O,1oz,Chill Bacardi O and drop into glass,,,68
+Pixie Stik,2,Watermelon,.5oz,Chill Bacardi O and drop into glass,,,68
+Pixie Stik,3,Apple,.5oz,Chill Bacardi O and drop into glass,,,68
+Pixie Stik,4,Blue Curacao,Splash,Chill Bacardi O and drop into glass,,,68
+Purple Gecko,1,Tequila,.75oz,Shake and Strain,,,69
+Purple Gecko,2,Blue Curacao,.25oz,Shake and Strain,,,69
+Purple Gecko,3,Cranberry,Splash,Shake and Strain,,,69
+Purple Gecko,4,Sweet&Sour,Splash,Shake and Strain,,,69
+Pussy Juice,1,Malibu,1oz,,,,70
+Pussy Juice,2,Vodka,1oz,,,,70
+Pussy Juice,3,Red bull,splash,,,,70
+Pussy Juice,4,Grenadine,Splash,,,,70
+Red Headed Slut,1,Crown,1oz,Shake and strain,,,71
+Red Headed Slut,2,Peach Schn,.5oz,Shake and strain,,,71
+Red Headed Slut,3,Jaeger,1oz,Shake and strain,,,71
+Red Headed Slut,4,Cranberry,Splash,Shake and strain,,,71
+Red Snapper,1,Crown,1oz,Shake and strain,,,72
+Red Snapper,2,Amaretto,1oz,Shake and strain,,,72
+Red Snapper,3,Cranberry,splash,Shake and strain,,,72
+Ricky Bobby,1,Bacardi,.5oz,Shake and strain,,,73
+Ricky Bobby,2,Hypnotiq,.5oz,Shake and strain,,,73
+Ricky Bobby,3,Vodka,.5oz,Shake and strain,,,73
+Ricky Bobby,4,Blue Curacao,Splash,Shake and strain,,,73
+Ricky Bobby,5,Red Bull,Splash,Shake and strain,,,73
+Rum Chata Spritz,1,Rum Chata,2oz,<Crystal Glass> Shake all ingredients Garnish with Dried Pieapples,,,74
+Rum Chata Spritz,2,Limeade,1/2 Glass,<Crystal Glass> Shake all ingredients Garnish with Dried Pieapples,,,74
+Rum Chata Spritz,3,Top With,Sprite,<Crystal Glass> Shake all ingredients Garnish with Dried Pieapples,,quantity_maybe_shifted,74
+Saturday Night Special,1,Jack Daniels,1oz,,,,75
+Saturday Night Special,2,Jim Bean,1oz,,,,75
+Saturday Night Special,3,Sweet&Sour,1oz,,,,75
+Saturday Night Special,4,Cranberry,Splash,,,,75
+Saturday Night Special,5,Grenadine,Splash,,,,75
+Sex on the Beach,1,Vodka,1oz,Shake and Strain,,,76
+Sex on the Beach,2,Peach Snapps,.5oz,Shake and Strain,,,76
+Sex on the Beach,3,Pineapple,.5oz,Shake and Strain,,,76
+Sex on the Beach,4,Cranberry,.25oz,Shake and Strain,,,76
+Shark Bite,1,Bacardi Limon,.5oz,,,,77
+Shark Bite,2,Vodka,.5oz,,,,77
+Shark Bite,3,Blue Curacao,.25oz,,,,77
+Shark Bite,4,Sweet&Sour,Splash,,,,77
+Shark Bite,5,Grenadine,Splash,,,,77
+Six Gage,1,Crown,.25oz,Shake and Serve,,,78
+Six Gage,2,Cap Morgan,.25oz,Shake and Serve,,,78
+Six Gage,3,Malibu,.25oz,Shake and Serve,,,78
+Six Gage,4,Peach,.25oz,Shake and Serve,,,78
+Six Gage,5,Amaretto,.25oz,Shake and Serve,,,78
+Six Gage,6,Pineapple,Splash,Shake and Serve,,,78
+Six Gage,7,Cranberry,Splash,Shake and Serve,,,78
+Sour Patch Kid,1,Tito's,1oz,,,,79
+Sour Patch Kid,2,Watermelon,.5oz,,,,79
+Sour Patch Kid,3,Apple,.5oz,,,,79
+Sour Patch Kid,4,Sweet&Sour,Fill,,,,79
+Sour Skittles,1,Vodka,1oz,,,,80
+Sour Skittles,2,Blue Curacao,1oz,,,,80
+Sour Skittles,3,Razzmatazz,1oz,,,,80
+Sour Skittles,4,Sweet&Sour,2oz,,,,80
+Spicy Mami,1,Tamarind Vodka,1.5oz,Collins Glass. Rim glass with tajin. Shake All ingredients. Add pineapple garnish sprinkle with Tajin,,,81
+Spicy Mami,2,Lime Juice,.5oz,Collins Glass. Rim glass with tajin. Shake All ingredients. Add pineapple garnish sprinkle with Tajin,,,81
+Spicy Mami,3,Simple Syrup,.5oz,Collins Glass. Rim glass with tajin. Shake All ingredients. Add pineapple garnish sprinkle with Tajin,,,81
+Spicy Mami,4,Grenadine,2 Dashes,Collins Glass. Rim glass with tajin. Shake All ingredients. Add pineapple garnish sprinkle with Tajin,,,81
+Spicy Mami,5,Chamoy,2 Dashes,Collins Glass. Rim glass with tajin. Shake All ingredients. Add pineapple garnish sprinkle with Tajin,,,81
+Spicy Mami,6,Top Off,Squirt,Collins Glass. Rim glass with tajin. Shake All ingredients. Add pineapple garnish sprinkle with Tajin,,quantity_maybe_shifted,81
+Stardust,1,Citron Vodka,.5oz,,,,82
+Stardust,2,Peachtree,.5oz,,,,82
+Stardust,3,Blue Curacao,.5oz,,,,82
+Stardust,4,Sweet&Sour,1oz,,,,82
+Stardust,5,Pineapple,1oz,,,,82
+Stardust,6,Grenadine,Splash,,,,82
+STFU,1,Crown,1oz,,,,83
+STFU,2,Disaronno,1oz,,,,83
+STFU,3,So Comfort,1oz,,,,83
+STFU,4,Peach,.5oz,,,,83
+STFU,5,Cranberry,Fill,,,,83
+STFU,6,Pineapple,Splash,,,,83
+Tequila Crush,1,Carabuena,1.5oz,<Crystal Glass> Dried Oranges Garnish,,,84
+Tequila Crush,2,Lime Juice,.5oz,<Crystal Glass> Dried Oranges Garnish,,,84
+Tequila Crush,3,Simple Syrup,.5oz,<Crystal Glass> Dried Oranges Garnish,,,84
+Tequila Crush,4,Grapefruit,2oz,<Crystal Glass> Dried Oranges Garnish,,,84
+Tequila Crush,5,Orange Juice,1oz,<Crystal Glass> Dried Oranges Garnish,,,84
+Tequila Crush,6,Top Off,Topo Chico,<Crystal Glass> Dried Oranges Garnish,,quantity_maybe_shifted,84
+Tequila Sunrise,1,Tequila,1.5oz,Build over ice Garnish with Cherries,,,85
+Tequila Sunrise,2,Grenadine,.5oz,Build over ice Garnish with Cherries,,,85
+Tequila Sunrise,3,Orange Juice,4oz,Build over ice Garnish with Cherries,,,85
+Tiger Blood,1,Spiced Rum,1oz,Shake and Strain,,,86
+Tiger Blood,2,151,1oz,Shake and Strain,,,86
+Tiger Blood,3,X-Rated,.5oz,Shake and Strain,,,86
+Tiger Blood,4,Grenadine,Splash,Shake and Strain,,,86
+Tipsy Cucumber,1,Effen Cucumber,1.5oz,"<Rainbow Glass> Dressed with Tajin, Ga<nish with Cucumbers",,,87
+Tipsy Cucumber,2,Lime Juice,.5oz,"<Rainbow Glass> Dressed with Tajin, Ga<nish with Cucumbers",,,87
+Tipsy Cucumber,3,Sweet&Sour,1.5oz,"<Rainbow Glass> Dressed with Tajin, Ga<nish with Cucumbers",,,87
+Tipsy Cucumber,4,Beer Salt,2 Dashes,"<Rainbow Glass> Dressed with Tajin, Ga<nish with Cucumbers",,,87
+Tipsy Cucumber,5,Top off,Topo Chico,"<Rainbow Glass> Dressed with Tajin, Ga<nish with Cucumbers",,quantity_maybe_shifted,87
+Vegas Bomb,1,Crown,1oz,Shake and Strain,,,88
+Vegas Bomb,2,Peach Snapps,.5oz,Shake and Strain,,,88
+Vegas Bomb,3,Malibu,.5oz,Shake and Strain,,,88
+Vegas Bomb,4,Red Bull,Splash,Shake and Strain,,,88
+Vodka Fresca,1,Dragon Berry,1oz,Shaken with Fresh Fruit,,,89
+Vodka Fresca,2,Lemonade,1/2 cup,Shaken with Fresh Fruit,,,89
+Vodka Fresca,3,Sprite,splash,Shaken with Fresh Fruit,,,89
+Vodka Sour,1,Vodka,2oz,Build over Ice Garnish Lemon and Cherries,,,90
+Vodka Sour,2,Lime Juice,1oz,Build over Ice Garnish Lemon and Cherries,,,90
+Washington Apple,1,Crown,1oz,Shake and strain,,,91
+Washington Apple,2,Apple Puckers,.5oz,Shake and strain,,,91
+Washington Apple,3,Cranberry,.5oz,Shake and strain,,,91
+Water Moccasin,1,Crown,1oz,Shake and Strain,,,92
+Water Moccasin,2,Peach Snapps,.5oz,Shake and Strain,,,92
+Water Moccasin,3,Sweet&Sour,.5oz,Shake and Strain,,,92
+Whiskey Sour,1,Whiskey,2oz,Build  over ice. Garnish with Lemon and Cherries,,,93
+Whiskey Sour,2,Lime Juice,1oz,Build  over ice. Garnish with Lemon and Cherries,,,93
+White Russian,1,Vodka,2oz,Build over ice,,,94
+White Russian,2,Coffee Liqueur,1oz,Build over ice,,,94
+White Russian,3,Milk or Cream,splash,Build over ice,,,94
+White Zipper,1,Tequila,.5oz,Shake and Strain,,,95
+White Zipper,2,Grand Marnier,.25oz,Shake and Strain,,,95
+White Zipper,3,Creamer,.25oz,Shake and Strain,,,95

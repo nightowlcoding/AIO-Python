@@ -1,0 +1,11 @@
+timestamp,action_id,action,status,duration_sec,detail
+2026-05-08T14:01:20,A0001,Preview Temp Cleanup,success,15.93,"Preview complete: 126667 files, 5.96 GB possible."
+2026-05-08T14:01:56,A0002,Run Temp Cleanup,success,16.33,"Dry-run enabled. Nothing deleted. Potential: 126665 files, 5.96 GB."
+2026-05-08T14:07:18,A0003,Run Temp Cleanup,success,192.59,"Cleanup complete. Deleted entries: 1341, skipped: 43, estimated removed: 3.38 GB, C: free-space delta: 3.35 GB."
+2026-05-08T14:07:31,A0004,Open NVIDIA Driver Download,success,0.00,Skipped: preflight or admin requirement not met.
+2026-05-08T14:07:35,A0005,Open NVIDIA Driver Download,success,0.01,Skipped: preflight or admin requirement not met.
+2026-05-08T14:07:42,A0006,Detect Driver Versions,success,3.53,Driver version detection complete.
+2026-05-08T14:07:48,A0007,Open Windows Update (Driver Settings),success,0.01,Skipped: preflight or admin requirement not met.
+2026-05-08T14:07:50,A0008,Open Windows Update (Driver Settings),success,0.01,Skipped: preflight or admin requirement not met.
+2026-05-08T14:08:08,A0009,Open ASUS BIOS/Firmware Support Page,success,0.01,Skipped: preflight or admin requirement not met.
+2026-05-08T14:08:10,A0010,Run Advanced Safety Preflight,success,0.00,Preflight failed: AC adapter is not connected. Connect AC power before firmware workflow.

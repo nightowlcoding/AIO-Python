@@ -1,0 +1,43 @@
+Night Owl Tuning - Health Report
+============================================
+Timestamp: 2026-04-30T02:31:30.991614
+Action: Open Windows Update
+Action status: success
+
+System
+--------------------------------------------
+Hostname: LilChicoLaptop
+OS: Windows-11-10.0.26200-SP0
+Uptime: 3d 16h 0m
+
+Storage
+--------------------------------------------
+C: Total GB: 924.55
+C: Used GB: 647.78
+C: Free GB: 276.76
+C: Free %: 29.93
+
+Tuning Status
+--------------------------------------------
+Power plan query: Power Scheme GUID: db6638c8-3605-4d77-aa4d-df84a49947ac  (PD Performance)
+Game mode query: ERROR: ERROR: The system was unable to find the specified registry key or value.
+Defender realtime protection: True
+Startup item count: 11
+
+Top Processes by Memory
+--------------------------------------------
+Memory Compression             PID=  4848  MEM=2,724,952 K
+Code.exe                       PID= 35480  MEM=1,754,780 K
+Code.exe                       PID= 28020  MEM=1,653,836 K
+chrome.exe                     PID= 34732  MEM=999,432 K
+OneDrive.exe                   PID= 43448  MEM=911,904 K
+bambu-studio.exe               PID= 21908  MEM=533,756 K
+msedgewebview2.exe             PID= 10564  MEM=509,232 K
+Code.exe                       PID= 49324  MEM=500,380 K
+Code.exe                       PID= 49236  MEM=486,968 K
+WorkloadsSessionHost.exe       PID= 36404  MEM=423,396 K
+snapmaker-orca.exe             PID= 47340  MEM=422,040 K
+Secure System                  PID=   332  MEM=416,860 K
+explorer.exe                   PID= 41624  MEM=413,776 K
+MsMpEng.exe                    PID=  6600  MEM=304,400 K
+chrome.exe                     PID= 38356  MEM=297,656 K

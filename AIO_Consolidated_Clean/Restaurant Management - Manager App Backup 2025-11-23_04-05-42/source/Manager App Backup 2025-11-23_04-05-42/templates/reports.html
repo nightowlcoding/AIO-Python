@@ -1,0 +1,651 @@
+{% extends "base.html" %}
+
+{% block title %}Reports & Analytics - Manager App{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4"><i class="bi bi-graph-up"></i> Reports & Analytics</h1>
+    
+    <!-- Filter Controls -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-funnel"></i> Report Filters</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Start Date</label>
+                    <input type="date" class="form-control" id="startDate" value="{{ (available_dates[-1] if available_dates else '') }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">End Date</label>
+                    <input type="date" class="form-control" id="endDate" value="{{ (available_dates[0] if available_dates else '') }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Report Type</label>
+                    <select class="form-select" id="reportType">
+                        <option value="daily">Daily Summary</option>
+                        <option value="employee">Employee Performance</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="button" class="btn btn-primary w-100" onclick="generateReport()">
+                        <i class="bi bi-play-fill"></i> Generate Report
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Additional Filters -->
+            <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                    <label class="form-label">Shift Filter</label>
+                    <select class="form-select" id="shiftFilter">
+                        <option value="Full">Full Day (Combined)</option>
+                        <option value="Day">Day Shift Only</option>
+                        <option value="Night">Night Shift Only</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="employeeFilters" style="display: none;">
+                    <label class="form-label">Filter by Employee Name</label>
+                    <input type="text" class="form-control" id="employeeName" list="employeeNameList" placeholder="Leave empty for all employees" autocomplete="off">
+                    <datalist id="employeeNameList">
+                        <!-- Populated by JavaScript -->
+                    </datalist>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Report Results -->
+    <div class="card" id="reportContainer" style="display: none;">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0" id="reportTitle"><i class="bi bi-file-earmark-bar-graph"></i> Report Results</h5>
+            <div>
+                <button type="button" class="btn btn-light btn-sm" onclick="exportToCSV()">
+                    <i class="bi bi-download"></i> Export CSV
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="reportTable">
+                    <thead id="reportTableHead"></thead>
+                    <tbody id="reportTableBody"></tbody>
+                </table>
+            </div>
+            
+            <!-- Summary Stats - Single Row Table -->
+            <div class="mt-4" id="summaryStats"></div>
+        </div>
+    </div>
+    
+    <!-- Loading Indicator -->
+    <div class="text-center p-5" id="loadingIndicator" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Generating report...</p>
+    </div>
+</div>
+
+<script>
+let currentReportData = [];
+
+// Load employee names on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadEmployeeNames();
+});
+
+// Load employee names from backend for autocomplete
+function loadEmployeeNames() {
+    fetch('/api/employee-names')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Employee names API response:', data);
+            if (data.success && data.employees && data.employees.length > 0) {
+                populateEmployeeNameList(data.employees);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading employee names:', error);
+        });
+}
+
+function populateEmployeeNameList(employees) {
+    const datalist = document.getElementById('employeeNameList');
+    if (!employees || employees.length === 0) {
+        datalist.innerHTML = '';
+        return;
+    }
+    
+    // Handle both string arrays and object arrays
+    datalist.innerHTML = employees.map(emp => {
+        let name;
+        if (typeof emp === 'string') {
+            name = emp;
+        } else if (emp.firstName && emp.lastName) {
+            name = emp.firstName + ' ' + emp.lastName;
+        } else if (emp.first_name && emp.last_name) {
+            name = emp.first_name + ' ' + emp.last_name;
+        } else if (emp.name) {
+            name = emp.name;
+        } else {
+            return '';
+        }
+        return `<option value="${name}">`;
+    }).filter(opt => opt !== '').join('');
+}
+
+// Show/hide employee filters based on report type
+document.getElementById('reportType').addEventListener('change', function() {
+    const employeeFilters = document.getElementById('employeeFilters');
+    if (this.value === 'employee') {
+        employeeFilters.style.display = 'block';
+    } else {
+        employeeFilters.style.display = 'none';
+    }
+});
+
+function generateReport() {
+    const reportType = document.getElementById('reportType').value;
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    // Show loading
+    document.getElementById('loadingIndicator').style.display = 'block';
+    document.getElementById('reportContainer').style.display = 'none';
+    
+    const shiftFilter = document.getElementById('shiftFilter').value;
+    
+    if (reportType === 'daily') {
+        fetchDailySummary(startDate, endDate, shiftFilter);
+    } else if (reportType === 'employee') {
+        const employeeName = document.getElementById('employeeName').value;
+        fetchEmployeePerformance(startDate, endDate, employeeName);
+    }
+}
+
+function fetchDailySummary(startDate, endDate, shiftFilter) {
+    fetch(`/api/reports/daily-summary?start_date=${startDate}&end_date=${endDate}&shift_filter=${shiftFilter}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentReportData = data.data;
+                displayDailySummary(data.data);
+            } else {
+                alert('Error generating report: ' + (data.error || 'Unknown error'));
+            }
+            document.getElementById('loadingIndicator').style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to generate report');
+            document.getElementById('loadingIndicator').style.display = 'none';
+        });
+}
+
+function fetchEmployeePerformance(startDate, endDate, employeeName) {
+    const shiftFilter = document.getElementById('shiftFilter').value;
+    let url = `/api/reports/employee-performance?start_date=${startDate}&end_date=${endDate}&shift_filter=${shiftFilter}`;
+    if (employeeName) {
+        url += `&employee_name=${encodeURIComponent(employeeName)}`;
+    }
+    
+    fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Session expired. Please log in again.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                currentReportData = data.data;
+                displayEmployeePerformance(data.data);
+            } else {
+                alert('Error generating report: ' + (data.error || 'Unknown error'));
+            }
+            document.getElementById('loadingIndicator').style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            if (error.message.includes('Session expired')) {
+                alert('Your session has expired. Please log in again.');
+                window.location.href = '/login';
+            } else {
+                alert('Failed to generate report: ' + error.message);
+            }
+            document.getElementById('loadingIndicator').style.display = 'none';
+        });
+}
+
+function displayDailySummary(data) {
+    const thead = document.getElementById('reportTableHead');
+    const tbody = document.getElementById('reportTableBody');
+    const summaryStats = document.getElementById('summaryStats');
+    
+    // Create table header
+    thead.innerHTML = `
+        <tr>
+            <th onclick="sortTable('date')">Date <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('shift')">Shift <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('employees')">Employees <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('total_sales')">Total Sales <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('beer')">Beer <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('liquor')">Liquor <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('wine')">Wine <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('food')">Food <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('total_cash')">Total Cash <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('total_tips')">Total Tips <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('tip_percentage')">Tip % <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('voids')">Voids <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('void_percentage')">Void % <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('total_cash_adjustments')">Cash Adj. <i class="bi bi-arrow-down-up"></i></th>
+            <th onclick="sortTable('deposit')">Deposit <i class="bi bi-arrow-down-up"></i></th>
+        </tr>
+    `;
+    
+    // Populate table body
+    tbody.innerHTML = data.map(row => `
+        <tr>
+            <td><a href="/daily-log?date=${row.date}" class="text-decoration-none" title="Open Daily Log for ${row.date}">${row.date}</a></td>
+            <td><span class="badge bg-${row.shift === 'Day' ? 'primary' : row.shift === 'Night' ? 'dark' : 'info'}">${row.shift}</span></td>
+            <td>${row.employees}</td>
+            <td>$${row.total_sales.toFixed(2)}</td>
+            <td>$${row.beer.toFixed(2)}</td>
+            <td>$${row.liquor.toFixed(2)}</td>
+            <td>$${row.wine.toFixed(2)}</td>
+            <td>$${row.food.toFixed(2)}</td>
+            <td>$${row.total_cash.toFixed(2)}</td>
+            <td>$${row.total_tips.toFixed(2)}</td>
+            <td><span class="badge bg-info">${row.tip_percentage.toFixed(2)}%</span></td>
+            <td>$${row.voids.toFixed(2)}</td>
+            <td><span class="badge bg-warning">${row.void_percentage.toFixed(2)}%</span></td>
+            <td>$${row.total_cash_adjustments.toFixed(2)}</td>
+            <td>$${(row.deposit || 0).toFixed(2)}</td>
+        </tr>
+    `).join('');
+    
+    // Calculate summary statistics
+    const totalSales = data.reduce((sum, row) => sum + row.total_sales, 0);
+    const totalBeer = data.reduce((sum, row) => sum + row.beer, 0);
+    const totalLiquor = data.reduce((sum, row) => sum + row.liquor, 0);
+    const totalWine = data.reduce((sum, row) => sum + row.wine, 0);
+    const totalFood = data.reduce((sum, row) => sum + row.food, 0);
+    const totalCash = data.reduce((sum, row) => sum + row.total_cash, 0);
+    const totalTips = data.reduce((sum, row) => sum + row.total_tips, 0);
+    const totalVoids = data.reduce((sum, row) => sum + row.voids, 0);
+    const totalCashAdj = data.reduce((sum, row) => sum + row.total_cash_adjustments, 0);
+    const totalDeposit = data.reduce((sum, row) => sum + (row.deposit || 0), 0);
+    const avgSales = data.length > 0 ? totalSales / data.length : 0;
+    const avgTipPct = totalSales > 0 ? (totalTips / totalSales * 100) : 0;
+    const avgVoidPct = totalSales > 0 ? (totalVoids / totalSales * 100) : 0;
+    
+    summaryStats.innerHTML = `
+        <table class="table table-bordered table-sm">
+            <thead class="table-dark">
+                <tr>
+                    <th>Total Sales</th>
+                    <th>Beer</th>
+                    <th>Liquor</th>
+                    <th>Wine</th>
+                    <th>Food</th>
+                    <th>Total Tips</th>
+                    <th>Avg Tip %</th>
+                    <th>Total Voids</th>
+                    <th>Avg Void %</th>
+                    <th>Cash Adj.</th>
+                    <th>Deposit</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="table-light">
+                    <td><strong>$${totalSales.toFixed(2)}</strong></td>
+                    <td><strong>$${totalBeer.toFixed(2)}</strong></td>
+                    <td><strong>$${totalLiquor.toFixed(2)}</strong></td>
+                    <td><strong>$${totalWine.toFixed(2)}</strong></td>
+                    <td><strong>$${totalFood.toFixed(2)}</strong></td>
+                    <td><strong>$${totalTips.toFixed(2)}</strong></td>
+                    <td><strong><span class="badge bg-info">${avgTipPct.toFixed(2)}%</span></strong></td>
+                    <td><strong>$${totalVoids.toFixed(2)}</strong></td>
+                    <td><strong><span class="badge bg-warning">${avgVoidPct.toFixed(2)}%</span></strong></td>
+                    <td><strong>$${totalCashAdj.toFixed(2)}</strong></td>
+                    <td><strong>$${totalDeposit.toFixed(2)}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+    
+    document.getElementById('reportContainer').style.display = 'block';
+    document.getElementById('reportTitle').innerHTML = '<i class="bi bi-file-earmark-bar-graph"></i> Daily Summary Report';
+}
+
+function displayEmployeePerformance(data) {
+    const thead = document.getElementById('reportTableHead');
+    const tbody = document.getElementById('reportTableBody');
+    const summaryStats = document.getElementById('summaryStats');
+    
+    // Check if we have daily breakdown data (single employee filtered)
+    const hasDailyBreakdown = data.length === 1 && data[0].daily_breakdown;
+    
+    if (hasDailyBreakdown) {
+        // Display daily breakdown with summary
+        const employee = data[0];
+        const dailyData = employee.daily_breakdown;
+        
+        // Store for sorting
+        currentDailyBreakdownData = [...dailyData];
+        
+        thead.innerHTML = `
+            <tr>
+                <th onclick="sortDailyBreakdown('date')" style="cursor: pointer;">Date <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('shift')" style="cursor: pointer;">Shift <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('sales')" style="cursor: pointer;">Sales <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('cash')" style="cursor: pointer;">Cash <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('credit')" style="cursor: pointer;">Credit <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('tips')" style="cursor: pointer;">Tips <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('tip_percentage')" style="cursor: pointer;">Tip % <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('voids')" style="cursor: pointer;">Voids <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('beer')" style="cursor: pointer;">Beer <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('liquor')" style="cursor: pointer;">Liquor <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('wine')" style="cursor: pointer;">Wine <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortDailyBreakdown('food')" style="cursor: pointer;">Food <i class="bi bi-arrow-down-up"></i></th>
+            </tr>
+        `;
+        
+        // Display daily rows
+        let dailyRows = dailyData.map(day => `
+            <tr>
+                <td>${day.date}</td>
+                <td><span class="badge bg-${day.shift === 'Day' ? 'primary' : 'dark'}">${day.shift}</span></td>
+                <td>$${day.sales.toFixed(2)}</td>
+                <td>$${day.cash.toFixed(2)}</td>
+                <td>$${day.credit.toFixed(2)}</td>
+                <td>$${day.tips.toFixed(2)}</td>
+                <td><span class="badge bg-info">${day.tip_percentage.toFixed(1)}%</span></td>
+                <td>$${day.voids.toFixed(2)}</td>
+                <td>$${day.beer.toFixed(2)}</td>
+                <td>$${day.liquor.toFixed(2)}</td>
+                <td>$${day.wine.toFixed(2)}</td>
+                <td>$${day.food.toFixed(2)}</td>
+            </tr>
+        `).join('');
+        
+        // Add summary row
+        let summaryRow = `
+            <tr class="table-success fw-bold">
+                <td colspan="2">TOTAL (${employee.shifts_worked} shifts) - Avg: $${employee.avg_sales.toFixed(2)}/shift</td>
+                <td>$${employee.total_sales.toFixed(2)}</td>
+                <td>$${employee.total_cash.toFixed(2)}</td>
+                <td>$${employee.total_credit.toFixed(2)}</td>
+                <td>$${employee.total_tips.toFixed(2)}</td>
+                <td><span class="badge bg-success">${employee.tip_percentage.toFixed(1)}%</span></td>
+                <td>$${employee.total_voids.toFixed(2)}</td>
+                <td>$${employee.total_beer.toFixed(2)}</td>
+                <td>$${employee.total_liquor.toFixed(2)}</td>
+                <td>$${employee.total_wine.toFixed(2)}</td>
+                <td>$${employee.total_food.toFixed(2)}</td>
+            </tr>
+        `;
+        
+        tbody.innerHTML = dailyRows + summaryRow;
+        
+        // Summary stats for single employee - more compact
+        summaryStats.innerHTML = `
+            <div class="col-md-2">
+                <div class="card bg-primary text-white">
+                    <div class="card-body p-2">
+                        <small class="text-uppercase">Employee</small>
+                        <h5 class="mb-0">${employee.name}</h5>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-success text-white">
+                    <div class="card-body p-2">
+                        <small class="text-uppercase">Shifts</small>
+                        <h4 class="mb-0">${employee.shifts_worked}</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-info text-white">
+                    <div class="card-body p-2">
+                        <small class="text-uppercase">Total Sales</small>
+                        <h5 class="mb-0">$${employee.total_sales.toFixed(2)}</h5>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body p-2">
+                        <small class="text-uppercase">Avg/Shift</small>
+                        <h5 class="mb-0">$${employee.avg_sales.toFixed(2)}</h5>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-secondary text-white">
+                    <div class="card-body p-2">
+                        <small class="text-uppercase">Tip %</small>
+                        <h4 class="mb-0">${employee.tip_percentage.toFixed(1)}%</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-danger text-white">
+                    <div class="card-body p-2">
+                        <small class="text-uppercase">Voids</small>
+                        <h5 class="mb-0">$${employee.total_voids.toFixed(2)}</h5>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('reportTitle').innerHTML = `<i class="bi bi-file-earmark-person"></i> ${employee.name} - Detailed Performance`;
+    } else {
+        // Display regular employee summary
+        thead.innerHTML = `
+            <tr>
+                <th onclick="sortTable('name')">Employee Name <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('shifts_worked')">Shifts Worked <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('total_sales')">Total Sales <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('avg_sales')">Avg Sales/Shift <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('total_cash')">Total Cash <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('total_credit')">Total Credit <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('total_tips')">Total Tips <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('tip_percentage')">Tip % <i class="bi bi-arrow-down-up"></i></th>
+                <th onclick="sortTable('total_voids')">Voids <i class="bi bi-arrow-down-up"></i></th>
+            </tr>
+        `;
+        
+        // Populate table body
+        tbody.innerHTML = data.map(row => `
+            <tr>
+                <td><strong>${row.name}</strong></td>
+                <td>${row.shifts_worked}</td>
+                <td>$${row.total_sales.toFixed(2)}</td>
+                <td>$${row.avg_sales.toFixed(2)}</td>
+                <td>$${row.total_cash.toFixed(2)}</td>
+                <td>$${row.total_credit.toFixed(2)}</td>
+                <td>$${row.total_tips.toFixed(2)}</td>
+                <td><span class="badge bg-info">${row.tip_percentage.toFixed(1)}%</span></td>
+                <td>$${row.total_voids.toFixed(2)}</td>
+            </tr>
+        `).join('');
+        
+        // Calculate summary statistics
+        const totalEmployees = data.length;
+        const totalShifts = data.reduce((sum, row) => sum + row.shifts_worked, 0);
+        const totalSales = data.reduce((sum, row) => sum + row.total_sales, 0);
+        const topPerformer = data.length > 0 ? data[0].name : 'N/A';
+        
+        summaryStats.innerHTML = `
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h6>Total Employees</h6>
+                        <h3>${totalEmployees}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <h6>Total Shifts</h6>
+                        <h3>${totalShifts}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h6>Total Sales</h6>
+                        <h3>$${totalSales.toFixed(2)}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body">
+                        <h6>Top Performer</h6>
+                        <h3 class="small">${topPerformer}</h3>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('reportTitle').innerHTML = '<i class="bi bi-file-earmark-bar-graph"></i> Employee Performance Report';
+    }
+    
+    document.getElementById('reportContainer').style.display = 'block';
+}
+
+let sortDirection = {};
+let dailyBreakdownSortDirection = {};
+let currentDailyBreakdownData = [];
+
+function sortDailyBreakdown(column) {
+    // Toggle sort direction for daily breakdown
+    dailyBreakdownSortDirection[column] = dailyBreakdownSortDirection[column] === 'asc' ? 'desc' : 'asc';
+    
+    currentDailyBreakdownData.sort((a, b) => {
+        let aVal = a[column];
+        let bVal = b[column];
+        
+        // Handle string comparison
+        if (typeof aVal === 'string') {
+            aVal = aVal.toLowerCase();
+            bVal = bVal.toLowerCase();
+        }
+        
+        if (dailyBreakdownSortDirection[column] === 'asc') {
+            return aVal > bVal ? 1 : -1;
+        } else {
+            return aVal < bVal ? 1 : -1;
+        }
+    });
+    
+    // Re-display sorted daily breakdown
+    displayEmployeePerformance([{
+        ...currentReportData[0],
+        daily_breakdown: currentDailyBreakdownData
+    }]);
+}
+
+function sortTable(column) {
+    // Toggle sort direction
+    sortDirection[column] = sortDirection[column] === 'asc' ? 'desc' : 'asc';
+    
+    currentReportData.sort((a, b) => {
+        let aVal = a[column];
+        let bVal = b[column];
+        
+        // Handle string comparison
+        if (typeof aVal === 'string') {
+            aVal = aVal.toLowerCase();
+            bVal = bVal.toLowerCase();
+        }
+        
+        if (sortDirection[column] === 'asc') {
+            return aVal > bVal ? 1 : -1;
+        } else {
+            return aVal < bVal ? 1 : -1;
+        }
+    });
+    
+    // Re-display the sorted data
+    const reportType = document.getElementById('reportType').value;
+    if (reportType === 'daily') {
+        displayDailySummary(currentReportData);
+    } else {
+        displayEmployeePerformance(currentReportData);
+    }
+}
+
+function exportToCSV() {
+    if (currentReportData.length === 0) {
+        alert('No data to export');
+        return;
+    }
+    
+    const reportType = document.getElementById('reportType').value;
+    let csv = '';
+    let filename = '';
+    
+    if (reportType === 'daily') {
+        filename = 'daily_summary_report.csv';
+        csv = 'Date,Shift,Employees,Total Sales,Total Cash,Total Tips,Cash Adjustments,Deposit\n';
+        currentReportData.forEach(row => {
+            csv += `${row.date},${row.shift},${row.employees},${row.total_sales},${row.total_cash},${row.total_tips},${row.total_cash_adjustments},${row.deposit}\n`;
+        });
+    } else {
+        filename = 'employee_performance_report.csv';
+        csv = 'Employee Name,Shifts Worked,Total Sales,Avg Sales/Shift,Total Cash,Total Credit,Total Tips\n';
+        currentReportData.forEach(row => {
+            csv += `${row.name},${row.shifts_worked},${row.total_sales},${row.avg_sales},${row.total_cash},${row.total_credit},${row.total_tips}\n`;
+        });
+    }
+    
+    // Download CSV
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+// Load employee names when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadEmployeeNames();
+});
+</script>
+
+<style>
+th {
+    cursor: pointer;
+    user-select: none;
+}
+
+th:hover {
+    background-color: #e9ecef;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+</style>
+{% endblock %}
+

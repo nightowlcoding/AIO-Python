@@ -1,0 +1,32 @@
+section,key,value
+meta,timestamp,2026-04-30T02:52:42.941125
+meta,action,Open Startup Apps Manager
+meta,action_status,success
+meta,action_error,
+system,hostname,LilChicoLaptop
+system,os,Windows-11-10.0.26200-SP0
+system,uptime,0d 0h 20m
+storage,c_total_gb,924.55
+storage,c_used_gb,643.76
+storage,c_free_gb,280.78
+storage,c_free_pct,30.37
+tuning,power_plan,Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+tuning,game_mode,ERROR: ERROR: The system was unable to find the specified registry key or value.
+tuning,defender_realtime_protection,True
+tuning,startup_count,11
+process,name,pid,memory
+process,WorkloadsSessionHost.exe,19660,"4,259,460 K"
+process,Code.exe,16032,"1,375,156 K"
+process,Code.exe,25000,"1,261,620 K"
+process,WorkloadsSessionHost.exe,32124,"995,068 K"
+process,GoogleDriveFS.exe,24828,"474,464 K"
+process,WorkloadsSessionHost.exe,13260,"415,396 K"
+process,MsMpEng.exe,7336,"361,592 K"
+process,WorkloadsSessionHost.exe,16764,"318,764 K"
+process,explorer.exe,13712,"305,736 K"
+process,ollama.exe,28048,"297,556 K"
+process,Code.exe,15252,"295,056 K"
+process,ChatGPT.exe,5708,"249,600 K"
+process,Code.exe,23052,"247,516 K"
+process,MicrosoftSecurityApp.exe,27388,"226,508 K"
+process,ChatGPT.exe,24380,"203,652 K"

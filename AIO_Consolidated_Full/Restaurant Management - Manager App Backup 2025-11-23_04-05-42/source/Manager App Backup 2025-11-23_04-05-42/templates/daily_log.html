@@ -1,0 +1,2818 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Log - Manager App{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-calendar-check"></i> Daily Operations Log</h1>
+        <div class="d-flex gap-2">
+            <input type="date" id="dateSelector" class="form-control" value="{{ date }}" 
+                   onchange="window.location.href='{{ url_for('daily_log') }}?date=' + this.value">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('csvImport').click()">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Import Excel File
+            </button>
+            <input type="file" id="csvImport" accept=".csv,.xlsx" style="display: none;" onchange="importCSV(event)">
+        </div>
+    </div>
+    
+    <form method="POST" action="{{ url_for('daily_log') }}" id="dailyLogForm">
+        <input type="hidden" name="date" value="{{ date }}">
+        <input type="hidden" name="deposit_amount" id="deposit_amount_hidden" value="{{ log_data.deposit_amount if log_data else 0 }}">
+        
+        <div class="row g-4">
+            <!-- Employee Entry Form -->
+            <div class="col-md-6">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-person-plus"></i> Add Employee Entry</h5>
+                        <button type="button" class="btn btn-light btn-sm" onclick="toggleBulkEntry()" title="Add employees in bulk">
+                            <i class="bi bi-chevron-double-down" id="bulkEntryIcon"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <!-- Bulk Entry Section (Hidden by default) -->
+                        <div id="bulkEntrySection" style="display: none;">
+                            <div class="card bg-light border-info mb-3">
+                                <div class="card-body">
+                                    <h6 class="card-title"><i class="bi bi-info-circle text-info"></i> Bulk Entry Mode</h6>
+                                    <p class="card-text mb-2">Enter multiple employees at once. Use Tab to move between fields. Maximum 5 employees per bulk entry.</p>
+                                    <div class="mt-2">
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('bulkCsvImport').click()">
+                                            <i class="bi bi-file-earmark-spreadsheet"></i> Import Excel File
+                                        </button>
+                                        <input type="file" id="bulkCsvImport" accept=".csv,.xlsx" style="display: none;" onchange="importBulkCSV(event)">
+                                        <small class="text-muted ms-2">Import data directly into bulk entry table</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="table-responsive mb-3" style="max-height: 400px; overflow: auto;">
+                                <table class="table table-sm table-bordered" style="min-width: 1800px;">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th style="min-width: 150px;">Name</th>
+                                            <th style="min-width: 80px;">Shift</th>
+                                            <th style="min-width: 80px;">Area</th>
+                                            <th style="min-width: 100px;">Cash</th>
+                                            <th style="min-width: 100px;">CC Tips</th>
+                                            <th style="min-width: 100px;">Visa</th>
+                                            <th style="min-width: 100px;">MC</th>
+                                            <th style="min-width: 100px;">Amex</th>
+                                            <th style="min-width: 100px;">Disc</th>
+                                            <th style="min-width: 100px;">Beer</th>
+                                            <th style="min-width: 100px;">Liquor</th>
+                                            <th style="min-width: 100px;">Wine</th>
+                                            <th style="min-width: 100px;">Food</th>
+                                            <th style="min-width: 100px;">Voids</th>
+                                            <th style="min-width: 60px;">OK</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bulkEntryRows">
+                                        <!-- Rows will be added dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-success" onclick="addBulkRow()">
+                                    <i class="bi bi-plus"></i> Add Row
+                                </button>
+                                <button type="button" class="btn btn-sm btn-warning" onclick="clearBulkEntries()">
+                                    <i class="bi bi-trash"></i> Clear All
+                                </button>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="saveBulkEntries()">
+                                    <i class="bi bi-check-lg"></i> Save All Entries
+                                </button>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="toggleBulkEntry()">
+                                    <i class="bi bi-x"></i> Cancel
+                                </button>
+                            </div>
+                            <hr class="my-3">
+                        </div>
+                        
+                        <!-- Basic Info -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <label class="form-label small">Name</label>
+                                <input type="text" class="form-control form-control-sm" id="emp_name" placeholder="Employee Name" list="employeeNameList" autocomplete="off">
+                                <datalist id="employeeNameList">
+                                    <!-- Populated by JavaScript -->
+                                </datalist>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small">Shift</label>
+                                <select class="form-select form-select-sm" id="emp_shift">
+                                    <option value="Day">Day</option>
+                                    <option value="Night">Night</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small">Area</label>
+                                <select class="form-select form-select-sm" id="emp_area">
+                                    <option value="Dining">Dining</option>
+                                    <option value="Bar">Bar</option>
+                                    <option value="To Go">To Go</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Cash & Tips -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label small">Cash</label>
+                                <input type="number" class="form-control form-control-sm" id="emp_cash" step="0.01" value="0.00" oninput="updateCashDifference()">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small">CC Tips</label>
+                                <input type="number" class="form-control form-control-sm" id="emp_cc_tips" step="0.01" value="0.00" oninput="updateCashDifference()">
+                            </div>
+                        </div>
+                        
+                        <!-- Cash Difference -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-12">
+                                <label class="form-label small">Cash Difference</label>
+                                <input type="number" class="form-control form-control-sm" id="emp_cash_diff" step="0.01" value="0.00" readonly>
+                                <small class="text-muted">Cash - CC Tips</small>
+                            </div>
+                        </div>
+                        
+                        <!-- Credit Cards -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Credit Cards</label>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small">Visa</label>
+                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_visa" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Mastercard</label>
+                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_mastercard" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Amex</label>
+                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_amex" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Discover</label>
+                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_discover" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                </div>
+                            </div>
+                            <div class="alert alert-info mt-2 mb-0 py-1 px-2">
+                                <small>Credit Total: $<span id="emp_credit_total">0.00</span></small>
+                            </div>
+                        </div>
+                        
+                        <!-- Sales -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Sales</label>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small">Beer</label>
+                                    <input type="number" class="form-control form-control-sm" id="emp_beer" step="0.01" value="0.00">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Liquor</label>
+                                    <input type="number" class="form-control form-control-sm" id="emp_liquor" step="0.01" value="0.00">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Wine</label>
+                                    <input type="number" class="form-control form-control-sm" id="emp_wine" step="0.01" value="0.00">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Food</label>
+                                    <input type="number" class="form-control form-control-sm" id="emp_food" step="0.01" value="0.00">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Voids -->
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Voids</label>
+                            <input type="number" class="form-control form-control-sm" id="emp_voids" step="0.01" value="0.00">
+                        </div>
+                        
+                        <div id="formButtons">
+                            <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
+                                <i class="bi bi-save"></i> Save Entry
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Employee List -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <div style="cursor: pointer; flex: 1;" onclick="toggleSection('employeeListBody')">
+                            <h5 class="mb-0 d-inline">
+                                <i class="bi bi-people"></i> Employee Entries <span class="badge bg-light text-dark" id="employeeCount">0</span>
+                            </h5>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <select class="form-select form-select-sm" id="shiftFilter" onchange="filterEmployeesByShift()" style="width: auto; background-color: white;">
+                                <option value="All">All Shifts</option>
+                                <option value="Day">Day Only</option>
+                                <option value="Night">Night Only</option>
+                                <option value="Full">Full Day</option>
+                            </select>
+                            <i class="bi bi-chevron-up" id="employeeListIcon" style="cursor: pointer;" onclick="toggleSection('employeeListBody')"></i>
+                        </div>
+                    </div>
+                    <div class="card-body p-0" id="employeeListBody" style="max-height: 600px; overflow-y: auto;">
+                        <div id="employeeList">
+                            <p class="text-muted text-center p-3">No employees added yet</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Totals Summary -->
+                <div class="card mt-3">
+                    <div class="card-header bg-info text-white" style="cursor: pointer;" onclick="toggleSection('totalsBody')">
+                        <h6 class="mb-0">
+                            <i class="bi bi-calculator"></i> Totals
+                            <i class="bi bi-chevron-down float-end" id="totalsIcon"></i>
+                        </h6>
+                    </div>
+                    <div class="card-body" id="totalsBody" style="display: none;">
+                        <!-- Day Shift Section -->
+                        <h6 class="text-primary mb-2"><i class="bi bi-sun"></i> Day Shift</h6>
+                        <table class="table table-sm table-borderless small mb-2">
+                            <tr><td>Cash:</td><td class="text-end">$<span id="day_total_cash">0.00</span></td></tr>
+                            <tr><td>CC Tips:</td><td class="text-end">$<span id="day_total_cc_tips">0.00</span></td></tr>
+                            <tr><td>Visa:</td><td class="text-end">$<span id="day_total_visa">0.00</span></td></tr>
+                            <tr><td>Mastercard:</td><td class="text-end">$<span id="day_total_mastercard">0.00</span></td></tr>
+                            <tr><td>Amex:</td><td class="text-end">$<span id="day_total_amex">0.00</span></td></tr>
+                            <tr><td>Discover:</td><td class="text-end">$<span id="day_total_discover">0.00</span></td></tr>
+                            <tr class="table-primary"><td><strong>Total Credit:</strong></td><td class="text-end"><strong>$<span id="day_total_credit">0.00</span></strong></td></tr>
+                            <tr><td>Beer:</td><td class="text-end">$<span id="day_total_beer">0.00</span></td></tr>
+                            <tr><td>Liquor:</td><td class="text-end">$<span id="day_total_liquor">0.00</span></td></tr>
+                            <tr><td>Wine:</td><td class="text-end">$<span id="day_total_wine">0.00</span></td></tr>
+                            <tr><td>Food:</td><td class="text-end">$<span id="day_total_food">0.00</span></td></tr>
+                            <tr class="table-primary"><td><strong>Total Net Sales:</strong></td><td class="text-end"><strong>$<span id="day_total_sales_calc">0.00</span></strong></td></tr>
+                        </table>
+                        
+                        <hr>
+                        
+                        <!-- Night Shift Section -->
+                        <h6 class="text-dark mb-2"><i class="bi bi-moon-stars"></i> Night Shift</h6>
+                        <table class="table table-sm table-borderless small mb-2">
+                            <tr><td>Cash:</td><td class="text-end">$<span id="night_total_cash">0.00</span></td></tr>
+                            <tr><td>CC Tips:</td><td class="text-end">$<span id="night_total_cc_tips">0.00</span></td></tr>
+                            <tr><td>Visa:</td><td class="text-end">$<span id="night_total_visa">0.00</span></td></tr>
+                            <tr><td>Mastercard:</td><td class="text-end">$<span id="night_total_mastercard">0.00</span></td></tr>
+                            <tr><td>Amex:</td><td class="text-end">$<span id="night_total_amex">0.00</span></td></tr>
+                            <tr><td>Discover:</td><td class="text-end">$<span id="night_total_discover">0.00</span></td></tr>
+                            <tr class="table-secondary"><td><strong>Total Credit:</strong></td><td class="text-end"><strong>$<span id="night_total_credit">0.00</span></strong></td></tr>
+                            <tr><td>Beer:</td><td class="text-end">$<span id="night_total_beer">0.00</span></td></tr>
+                            <tr><td>Liquor:</td><td class="text-end">$<span id="night_total_liquor">0.00</span></td></tr>
+                            <tr><td>Wine:</td><td class="text-end">$<span id="night_total_wine">0.00</span></td></tr>
+                            <tr><td>Food:</td><td class="text-end">$<span id="night_total_food">0.00</span></td></tr>
+                            <tr class="table-secondary"><td><strong>Total Net Sales:</strong></td><td class="text-end"><strong>$<span id="night_total_sales_calc">0.00</span></strong></td></tr>
+                        </table>
+                        
+                        <hr>
+                        
+                        <!-- Combined Totals -->
+                        <h6 class="text-success mb-2"><i class="bi bi-calculator-fill"></i> Combined Totals</h6>
+                        <table class="table table-sm table-borderless small mb-0">
+                            <tr><td>Cash:</td><td class="text-end">$<span id="total_cash">0.00</span></td></tr>
+                            <tr><td>CC Tips:</td><td class="text-end">$<span id="total_cc_tips">0.00</span></td></tr>
+                            <tr><td>Visa:</td><td class="text-end">$<span id="total_visa">0.00</span></td></tr>
+                            <tr><td>Mastercard:</td><td class="text-end">$<span id="total_mastercard">0.00</span></td></tr>
+                            <tr><td>Amex:</td><td class="text-end">$<span id="total_amex">0.00</span></td></tr>
+                            <tr><td>Discover:</td><td class="text-end">$<span id="total_discover">0.00</span></td></tr>
+                            <tr class="table-success"><td><strong>Total Credit:</strong></td><td class="text-end"><strong>$<span id="total_credit">0.00</span></strong></td></tr>
+                            <tr><td>Beer:</td><td class="text-end">$<span id="total_beer">0.00</span></td></tr>
+                            <tr><td>Liquor:</td><td class="text-end">$<span id="total_liquor">0.00</span></td></tr>
+                            <tr><td>Wine:</td><td class="text-end">$<span id="total_wine">0.00</span></td></tr>
+                            <tr><td>Food:</td><td class="text-end">$<span id="total_food">0.00</span></td></tr>
+                            <tr class="table-success"><td><strong>Total Net Sales:</strong></td><td class="text-end"><strong>$<span id="total_sales_calc">0.00</span></strong></td></tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Cash Deductions Section -->
+                <div class="card mt-3">
+                    <div class="card-header bg-warning text-dark" style="cursor: pointer;" onclick="toggleSection('cashDeductionsBody')">
+                        <h6 class="mb-0">
+                            <i class="bi bi-receipt"></i> Cash Deductions
+                            <i class="bi bi-chevron-down float-end" id="cashDeductionsIcon"></i>
+                        </h6>
+                    </div>
+                    <div class="card-body" id="cashDeductionsBody" style="display: none;">
+                        <div id="cashDeductionsContainer" class="mb-3">
+                            {% if log_data and log_data.deduction_descs %}
+                                {% for i in range(log_data.deduction_descs|length) %}
+                                <div class="row mb-2 cash-deduction-row g-2">
+                                    <div class="col-4">
+                                        <input type="text" class="form-control form-control-sm" name="deduction_desc" 
+                                               placeholder="Description" value="{{ log_data.deduction_descs[i] }}">
+                                    </div>
+                                    <div class="col-4">
+                                        <input type="text" class="form-control form-control-sm" name="deduction_location" 
+                                               placeholder="Location" value="{{ log_data.deduction_locations[i] if log_data.deduction_locations and i < log_data.deduction_locations|length else '' }}">
+                                    </div>
+                                    <div class="col-3">
+                                        <input type="number" class="form-control form-control-sm cash-deduction-amount" name="deduction_amount" 
+                                               placeholder="0.00" step="0.01" value="{{ log_data.deduction_amounts[i] }}" onchange="calculateDeposit()">
+                                    </div>
+                                    <div class="col-1">
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateDeposit()">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                            <div class="row mb-2 cash-deduction-row g-2">
+                                <div class="col-4">
+                                    <input type="text" class="form-control form-control-sm" name="deduction_desc" 
+                                           placeholder="Description">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" class="form-control form-control-sm" name="deduction_location" 
+                                           placeholder="Location">
+                                </div>
+                                <div class="col-3">
+                                    <input type="number" class="form-control form-control-sm cash-deduction-amount" name="deduction_amount" 
+                                           placeholder="0.00" step="0.01" onchange="calculateDeposit()">
+                                </div>
+                                <div class="col-1">
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateDeposit()">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-warning" onclick="addCashDeductionRow()">
+                            <i class="bi bi-plus-circle"></i> Add Cash Deduction
+                        </button>
+                        
+                        <div class="mt-3">
+                            <div class="alert alert-warning mb-0">
+                                <strong>Total Cash Deductions:</strong> $<span id="totalCashDeductions">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Revenue Centers Section -->
+                <div class="card mt-3">
+                    <div class="card-header bg-success text-white" style="cursor: pointer;" onclick="toggleSection('revenueCentersBody')">
+                        <h6 class="mb-0">
+                            <i class="bi bi-shop"></i> Revenue Centers
+                            <i class="bi bi-chevron-down float-end" id="revenueCentersIcon"></i>
+                        </h6>
+                    </div>
+                    <div class="card-body" id="revenueCentersBody" style="display: none;">
+                        <p class="text-muted small mb-3">
+                            <i class="bi bi-info-circle"></i> Automatically calculated from employee entries
+                        </p>
+                        
+                        <!-- Day Shift -->
+                        <h6 class="text-primary mb-2"><i class="bi bi-brightness-high"></i> Day Shift</h6>
+                        <table class="table table-bordered">
+                            <tr>
+                                <td><strong>Bar:</strong></td>
+                                <td class="text-end"><h4 class="mb-0">$<span id="dayBar">0.00</span></h4></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Dining:</strong></td>
+                                <td class="text-end"><h4 class="mb-0">$<span id="dayDining">0.00</span></h4></td>
+                            </tr>
+                            <tr>
+                                <td><strong>To Go:</strong></td>
+                                <td class="text-end"><h4 class="mb-0">$<span id="dayToGo">0.00</span></h4></td>
+                            </tr>
+                        </table>
+                        
+                        <!-- Night Shift -->
+                        <h6 class="text-dark mb-2"><i class="bi bi-moon-stars"></i> Night Shift</h6>
+                        <table class="table table-bordered">
+                            <tr>
+                                <td><strong>Bar:</strong></td>
+                                <td class="text-end"><h4 class="mb-0">$<span id="nightBar">0.00</span></h4></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Dining:</strong></td>
+                                <td class="text-end"><h4 class="mb-0">$<span id="nightDining">0.00</span></h4></td>
+                            </tr>
+                            <tr>
+                                <td><strong>To Go:</strong></td>
+                                <td class="text-end"><h4 class="mb-0">$<span id="nightToGo">0.00</span></h4></td>
+                            </tr>
+                        </table>
+                        
+                        <!-- Combined Totals -->
+                        <hr>
+                        <h6 class="text-success mb-2"><i class="bi bi-calculator"></i> Combined Totals</h6>
+                        <table class="table table-bordered table-success">
+                            <tr>
+                                <td><strong>Total Bar:</strong></td>
+                                <td class="text-end"><h3 class="mb-0 text-success">$<span id="totalBar">0.00</span></h3></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Total Dining:</strong></td>
+                                <td class="text-end"><h3 class="mb-0 text-success">$<span id="totalDining">0.00</span></h3></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Total To Go:</strong></td>
+                                <td class="text-end"><h3 class="mb-0 text-success">$<span id="totalToGo">0.00</span></h3></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Expected Deposit -->
+                <div class="card mt-3">
+                    <div class="card-header bg-warning text-dark">
+                        <h6 class="mb-0">
+                            <i class="bi bi-cash-stack"></i> Expected Deposit
+                        </h6>
+                    </div>
+                    <div class="card-body" id="depositBody">>
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Total Cash:</strong>
+                                    <span>$<span id="deposit_total_cash">0.00</span></span>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Total CC Tips:</strong>
+                                    <span class="text-danger">- $<span id="deposit_total_cc_tips">0.00</span></span>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between">
+                                    <strong>Cash Deductions:</strong>
+                                    <span class="text-danger">- $<span id="deposit_cash_deductions">0.00</span></span>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <hr class="my-2">
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between">
+                                    <strong class="text-success fs-5">Deposit:</strong>
+                                    <strong class="text-success fs-5">$<span id="expected_deposit">0.00</span></strong>
+                                </div>
+                            </div>
+                            
+                            <div class="col-12">
+                                <hr class="my-3">
+                            </div>
+                            
+                            <!-- Cash Counting Assistant Collapsible -->
+                            <div class="col-12">
+                                <div class="card border-primary">
+                                    <div class="card-header bg-primary text-white" style="cursor: pointer;" onclick="toggleSection('cashAssistantBody')">
+                                        <h6 class="mb-0">
+                                            <i class="bi bi-calculator-fill"></i> Cash Counting Assistant
+                                            <i class="bi bi-chevron-down float-end" id="cashAssistantIcon"></i>
+                                        </h6>
+                                    </div>
+                                    <div class="card-body" id="cashAssistantBody" style="display: none;">
+                                        <div class="row g-3">
+                                            <!-- $100 Bills -->
+                                            <div class="col-6">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-0">$100 x</label>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <input type="text" class="form-control form-control-sm cash-assist-count" 
+                                                               data-value="100" id="ca_hundreds" value="0" 
+                                                               pattern="[0-9]*" inputmode="numeric" 
+                                                               oninput="calculateCashAssistant()" onchange="calculateCashAssistant()">
+                                                    </div>
+                                                    <div class="col-5 text-end">
+                                                        <span class="small">= $<span id="ca_hundreds_total">0.00</span></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- $50 Bills -->
+                                            <div class="col-6">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-0">$50 x</label>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <input type="text" class="form-control form-control-sm cash-assist-count" 
+                                                               data-value="50" id="ca_fifties" value="0" 
+                                                               pattern="[0-9]*" inputmode="numeric" 
+                                                               oninput="calculateCashAssistant()" onchange="calculateCashAssistant()">
+                                                    </div>
+                                                    <div class="col-5 text-end">
+                                                        <span class="small">= $<span id="ca_fifties_total">0.00</span></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- $20 Bills -->
+                                            <div class="col-6">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-0">$20 x</label>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <input type="text" class="form-control form-control-sm cash-assist-count" 
+                                                               data-value="20" id="ca_twenties" value="0" 
+                                                               pattern="[0-9]*" inputmode="numeric" 
+                                                               oninput="calculateCashAssistant()" onchange="calculateCashAssistant()">
+                                                    </div>
+                                                    <div class="col-5 text-end">
+                                                        <span class="small">= $<span id="ca_twenties_total">0.00</span></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- $10 Bills -->
+                                            <div class="col-6">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-0">$10 x</label>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <input type="text" class="form-control form-control-sm cash-assist-count" 
+                                                               data-value="10" id="ca_tens" value="0" 
+                                                               pattern="[0-9]*" inputmode="numeric" 
+                                                               oninput="calculateCashAssistant()" onchange="calculateCashAssistant()">
+                                                    </div>
+                                                    <div class="col-5 text-end">
+                                                        <span class="small">= $<span id="ca_tens_total">0.00</span></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- $5 Bills -->
+                                            <div class="col-6">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-0">$5 x</label>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <input type="text" class="form-control form-control-sm cash-assist-count" 
+                                                               data-value="5" id="ca_fives" value="0" 
+                                                               pattern="[0-9]*" inputmode="numeric" 
+                                                               oninput="calculateCashAssistant()" onchange="calculateCashAssistant()">
+                                                    </div>
+                                                    <div class="col-5 text-end">
+                                                        <span class="small">= $<span id="ca_fives_total">0.00</span></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- $1 Bills -->
+                                            <div class="col-6">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-3">
+                                                        <label class="form-label small mb-0">$1 x</label>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <input type="text" class="form-control form-control-sm cash-assist-count" 
+                                                               data-value="1" id="ca_ones" value="0" 
+                                                               pattern="[0-9]*" inputmode="numeric" 
+                                                               oninput="calculateCashAssistant()" onchange="calculateCashAssistant()">
+                                                    </div>
+                                                    <div class="col-5 text-end">
+                                                        <span class="small">= $<span id="ca_ones_total">0.00</span></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col-12">
+                                                <hr class="my-2">
+                                            </div>
+                                            
+                                            <div class="col-12">
+                                                <table class="table table-sm table-bordered mb-0">
+                                                    <tr class="table-info">
+                                                        <td><strong>Total Cash Counted:</strong></td>
+                                                        <td class="text-end"><strong>$<span id="cash_assistant_total">0.00</span></strong></td>
+                                                    </tr>
+                                                    <tr class="table-warning">
+                                                        <td><strong>Difference:</strong><br><small class="text-muted">Deposit - Total Cash Counted</small></td>
+                                                        <td class="text-end"><h5 class="mb-0">$<span id="cash_difference">0.00</span></h5></td>
+                                                    </tr>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Hidden input to store employee data as JSON -->
+        <input type="hidden" name="employee_data" id="employee_data" value="">
+        
+        <!-- Sales Summary Section (Removed - now calculated from employees) -->
+        <div class="row g-4 mt-2">
+            <div class="col-12">
+                <div class="alert alert-info">
+                    <strong>Note:</strong> Sales totals are automatically calculated from individual employee entries above.
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cash Drawer Count Section -->
+        <div class="row g-4 mt-4">
+            <div class="col-12">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white" style="cursor: pointer;" onclick="toggleSection('cashDrawerBody')">
+                        <h4 class="mb-0">
+                            <i class="bi bi-cash-stack"></i> Cash Drawer Count
+                            <i class="bi bi-chevron-down float-end" id="cashDrawerIcon"></i>
+                        </h4>
+                    </div>
+                    <div class="card-body" id="cashDrawerBody" style="display: none;">
+                        <div class="row g-4">
+                            <!-- Coins Section -->
+                            <div class="col-md-6">
+                                <h6 class="text-success mb-3"><i class="bi bi-coin"></i> Coins</h6>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label small">Pennies ($0.01)</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="pennies" 
+                                               data-value="0.01" value="{{ log_data.pennies if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Nickels ($0.05)</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="nickels" 
+                                               data-value="0.05" value="{{ log_data.nickels if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Dimes ($0.10)</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="dimes" 
+                                               data-value="0.10" value="{{ log_data.dimes if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Quarters ($0.25)</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="quarters" 
+                                               data-value="0.25" value="{{ log_data.quarters if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Bills Section -->
+                            <div class="col-md-6">
+                                <h6 class="text-success mb-3"><i class="bi bi-cash-stack"></i> Bills</h6>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label small">$1 Bills</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="ones" 
+                                               data-value="1" value="{{ log_data.ones if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">$5 Bills</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="fives" 
+                                               data-value="5" value="{{ log_data.fives if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">$10 Bills</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="tens" 
+                                               data-value="10" value="{{ log_data.tens if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">$20 Bills</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="twenties" 
+                                               data-value="20" value="{{ log_data.twenties if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">$50 Bills</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="fifties" 
+                                               data-value="50" value="{{ log_data.fifties if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">$100 Bills</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="hundreds" 
+                                               data-value="100" value="{{ log_data.hundreds if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <strong>Drawer Total:</strong> $<span id="drawerTotal">0.00</span>
+                                    <input type="hidden" name="drawer_total" id="drawerTotalInput" value="0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi bi-save"></i> Save Daily Log
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-lg" onclick="clearForm()">
+                <i class="bi bi-x-circle"></i> Clear
+            </button>
+            <button type="button" class="btn btn-outline-info btn-lg" onclick="preparePrintSummary(); setTimeout(() => window.print(), 200)">
+                <i class="bi bi-printer"></i> Print
+            </button>
+        </div>
+    </form>
+    
+    <!-- Print-Only Summary -->
+    <div id="printSummary" class="print-only">
+        <div class="print-header">
+            <h2>Daily Operations Log</h2>
+            <p><strong>Date:</strong> <span id="print_date"></span></p>
+        </div>
+        
+        <!-- Employee Entries -->
+        <div class="print-section">
+            <h3>Employee Entries</h3>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Shift</th>
+                        <th>Area</th>
+                        <th>Cash</th>
+                        <th>CC Tips</th>
+                        <th>Beer</th>
+                        <th>Liquor</th>
+                        <th>Wine</th>
+                        <th>Food</th>
+                        <th>Total Sales</th>
+                    </tr>
+                </thead>
+                <tbody id="print_employees">
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Totals -->
+        <div class="print-section">
+            <h3>Totals</h3>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Shift</th>
+                        <th>Cash</th>
+                        <th>CC Tips</th>
+                        <th>Credit</th>
+                        <th>Beer</th>
+                        <th>Liquor</th>
+                        <th>Wine</th>
+                        <th>Food</th>
+                        <th>Net Sales</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Day</strong></td>
+                        <td>$<span id="print_day_cash"></span></td>
+                        <td>$<span id="print_day_cc_tips"></span></td>
+                        <td>$<span id="print_day_credit"></span></td>
+                        <td>$<span id="print_day_beer"></span></td>
+                        <td>$<span id="print_day_liquor"></span></td>
+                        <td>$<span id="print_day_wine"></span></td>
+                        <td>$<span id="print_day_food"></span></td>
+                        <td>$<span id="print_day_sales"></span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Night</strong></td>
+                        <td>$<span id="print_night_cash"></span></td>
+                        <td>$<span id="print_night_cc_tips"></span></td>
+                        <td>$<span id="print_night_credit"></span></td>
+                        <td>$<span id="print_night_beer"></span></td>
+                        <td>$<span id="print_night_liquor"></span></td>
+                        <td>$<span id="print_night_wine"></span></td>
+                        <td>$<span id="print_night_food"></span></td>
+                        <td>$<span id="print_night_sales"></span></td>
+                    </tr>
+                    <tr class="total-row">
+                        <td><strong>Combined</strong></td>
+                        <td><strong>$<span id="print_total_cash"></span></strong></td>
+                        <td><strong>$<span id="print_total_cc_tips"></span></strong></td>
+                        <td><strong>$<span id="print_total_credit"></span></strong></td>
+                        <td><strong>$<span id="print_total_beer"></span></strong></td>
+                        <td><strong>$<span id="print_total_liquor"></span></strong></td>
+                        <td><strong>$<span id="print_total_wine"></span></strong></td>
+                        <td><strong>$<span id="print_total_food"></span></strong></td>
+                        <td><strong>$<span id="print_total_sales"></span></strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Revenue Centers -->
+        <div class="print-section">
+            <h3>Revenue Centers</h3>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Shift</th>
+                        <th>Bar</th>
+                        <th>Dining</th>
+                        <th>To Go</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Day</strong></td>
+                        <td>$<span id="print_day_bar"></span></td>
+                        <td>$<span id="print_day_dining"></span></td>
+                        <td>$<span id="print_day_togo"></span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Night</strong></td>
+                        <td>$<span id="print_night_bar"></span></td>
+                        <td>$<span id="print_night_dining"></span></td>
+                        <td>$<span id="print_night_togo"></span></td>
+                    </tr>
+                    <tr class="total-row">
+                        <td><strong>Combined</strong></td>
+                        <td><strong>$<span id="print_total_bar"></span></strong></td>
+                        <td><strong>$<span id="print_total_dining"></span></strong></td>
+                        <td><strong>$<span id="print_total_togo"></span></strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Cash Deductions -->
+        <div class="print-section">
+            <h3>Cash Deductions</h3>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Location</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody id="print_deductions">
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="2"><strong>Total Deductions</strong></td>
+                        <td><strong>$<span id="print_total_deductions"></span></strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        <!-- Deposit -->
+        <div class="print-section">
+            <h3>Deposit</h3>
+            <table class="print-table">
+                <tbody>
+                    <tr>
+                        <td>Total Cash</td>
+                        <td>$<span id="print_deposit_cash"></span></td>
+                    </tr>
+                    <tr>
+                        <td>Total CC Tips</td>
+                        <td class="text-danger">- $<span id="print_deposit_cc_tips"></span></td>
+                    </tr>
+                    <tr>
+                        <td>Cash Deductions</td>
+                        <td class="text-danger">- $<span id="print_deposit_deductions"></span></td>
+                    </tr>
+                    <tr class="total-row">
+                        <td><strong>Deposit</strong></td>
+                        <td><strong>$<span id="print_expected_deposit"></span></strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Employee data array
+let employees = {{ log_data.employees|tojson if log_data and log_data.employees else '[]'|safe }};
+let editingIndex = null; // Track which employee is being edited
+
+function toggleSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    const iconId = sectionId.replace('Body', 'Icon');
+    const icon = document.getElementById(iconId);
+    
+    if (section.style.display === 'none') {
+        section.style.display = 'block';
+        icon.classList.remove('bi-chevron-down');
+        icon.classList.add('bi-chevron-up');
+    } else {
+        section.style.display = 'none';
+        icon.classList.remove('bi-chevron-up');
+        icon.classList.add('bi-chevron-down');
+    }
+}
+
+function updateEmpCreditTotal() {
+    const visa = parseFloat(document.getElementById('emp_visa').value) || 0;
+    const mastercard = parseFloat(document.getElementById('emp_mastercard').value) || 0;
+    const amex = parseFloat(document.getElementById('emp_amex').value) || 0;
+    const discover = parseFloat(document.getElementById('emp_discover').value) || 0;
+    const total = visa + mastercard + amex + discover;
+    
+    const creditTotalElement = document.getElementById('emp_credit_total');
+    if (creditTotalElement) {
+        creditTotalElement.textContent = total.toFixed(2);
+    }
+}
+
+function updateCashDifference() {
+    const cash = parseFloat(document.getElementById('emp_cash').value) || 0;
+    const ccTips = parseFloat(document.getElementById('emp_cc_tips').value) || 0;
+    const cashDiff = cash - ccTips;
+    
+    const cashDiffElement = document.getElementById('emp_cash_diff');
+    if (cashDiffElement) {
+        cashDiffElement.value = cashDiff.toFixed(2);
+    }
+}
+
+function addEmployeeEntry() {
+    try {
+        const name = document.getElementById('emp_name').value.trim();
+        if (!name) {
+            alert('Please enter employee name');
+            return;
+        }
+        
+        // Get credit total safely
+        const creditTotalElement = document.getElementById('emp_credit_total');
+        const creditTotal = creditTotalElement ? parseFloat(creditTotalElement.textContent) || 0 : 0;
+        
+        const employee = {
+            name: name,
+            shift: document.getElementById('emp_shift').value,
+            area: document.getElementById('emp_area').value,
+            cash: parseFloat(document.getElementById('emp_cash').value) || 0,
+            cc_tips: parseFloat(document.getElementById('emp_cc_tips').value) || 0,
+            cash_diff: parseFloat(document.getElementById('emp_cash_diff').value) || 0,
+            visa: parseFloat(document.getElementById('emp_visa').value) || 0,
+            mastercard: parseFloat(document.getElementById('emp_mastercard').value) || 0,
+            amex: parseFloat(document.getElementById('emp_amex').value) || 0,
+            discover: parseFloat(document.getElementById('emp_discover').value) || 0,
+            credit: creditTotal,
+            beer: parseFloat(document.getElementById('emp_beer').value) || 0,
+            liquor: parseFloat(document.getElementById('emp_liquor').value) || 0,
+            wine: parseFloat(document.getElementById('emp_wine').value) || 0,
+            food: parseFloat(document.getElementById('emp_food').value) || 0,
+            voids: parseFloat(document.getElementById('emp_voids').value) || 0
+        };
+        
+        // Check if we're editing an existing employee
+        if (editingIndex !== null) {
+            employees[editingIndex] = employee;
+            editingIndex = null;
+            resetFormButtons();
+        } else {
+            employees.push(employee);
+        }
+        
+        updateEmployeeList();
+        clearEmployeeForm();
+        updateTotals();
+    } catch (error) {
+        alert('Error adding employee: ' + error.message);
+        console.error('Error in addEmployeeEntry:', error);
+    }
+}
+
+function clearEmployeeForm() {
+    const fields = [
+        { id: 'emp_name', value: '' },
+        { id: 'emp_shift', value: 'Day' },
+        { id: 'emp_area', value: 'Dining' },
+        { id: 'emp_cash', value: '0.00' },
+        { id: 'emp_cc_tips', value: '0.00' },
+        { id: 'emp_cash_diff', value: '0.00' },
+        { id: 'emp_visa', value: '0.00' },
+        { id: 'emp_mastercard', value: '0.00' },
+        { id: 'emp_amex', value: '0.00' },
+        { id: 'emp_discover', value: '0.00' },
+        { id: 'emp_beer', value: '0.00' },
+        { id: 'emp_liquor', value: '0.00' },
+        { id: 'emp_wine', value: '0.00' },
+        { id: 'emp_food', value: '0.00' },
+        { id: 'emp_voids', value: '0.00' }
+    ];
+    
+    fields.forEach(field => {
+        const element = document.getElementById(field.id);
+        if (element) {
+            element.value = field.value;
+        }
+    });
+    
+    updateEmpCreditTotal();
+}
+
+function editEmployee(index) {
+    const emp = employees[index];
+    editingIndex = index;
+    
+    // Populate form with employee data
+    document.getElementById('emp_name').value = emp.name;
+    document.getElementById('emp_shift').value = emp.shift;
+    document.getElementById('emp_area').value = emp.area;
+    document.getElementById('emp_cash').value = emp.cash.toFixed(2);
+    document.getElementById('emp_cc_tips').value = emp.cc_tips.toFixed(2);
+    document.getElementById('emp_cash_diff').value = (emp.cash_diff || 0).toFixed(2);
+    document.getElementById('emp_visa').value = emp.visa.toFixed(2);
+    document.getElementById('emp_mastercard').value = emp.mastercard.toFixed(2);
+    document.getElementById('emp_amex').value = emp.amex.toFixed(2);
+    document.getElementById('emp_discover').value = emp.discover.toFixed(2);
+    document.getElementById('emp_beer').value = emp.beer.toFixed(2);
+    document.getElementById('emp_liquor').value = emp.liquor.toFixed(2);
+    document.getElementById('emp_wine').value = emp.wine.toFixed(2);
+    document.getElementById('emp_food').value = emp.food.toFixed(2);
+    document.getElementById('emp_voids').value = (emp.voids || 0).toFixed(2);
+    
+    // Update credit total display
+    updateEmpCreditTotal();
+    updateCashDifference();
+    
+    // Change form buttons to edit mode
+    const formButtons = document.getElementById('formButtons');
+    formButtons.innerHTML = `
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary flex-fill" onclick="addEmployeeEntry()">
+                <i class="bi bi-check-lg"></i> Update Entry
+            </button>
+            <button type="button" class="btn btn-danger" onclick="deleteEditingEmployee()">
+                <i class="bi bi-trash"></i> Delete
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="cancelEdit()">
+                <i class="bi bi-x"></i> Cancel
+            </button>
+        </div>
+    `;
+    
+    // Scroll to form
+    document.querySelector('.card.border-primary').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function deleteEditingEmployee() {
+    if (editingIndex !== null && confirm('Are you sure you want to delete this employee entry?')) {
+        employees.splice(editingIndex, 1);
+        editingIndex = null;
+        resetFormButtons();
+        clearEmployeeForm();
+        updateEmployeeList();
+        updateTotals();
+    }
+}
+
+function cancelEdit() {
+    editingIndex = null;
+    resetFormButtons();
+    clearEmployeeForm();
+}
+
+function resetFormButtons() {
+    const formButtons = document.getElementById('formButtons');
+    formButtons.innerHTML = `
+        <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
+            <i class="bi bi-save"></i> Save Entry
+        </button>
+    `;
+}
+
+// Bulk Entry Functions
+let bulkRowCounter = 0;
+const MAX_BULK_ROWS = 5;
+
+function toggleBulkEntry() {
+    const bulkSection = document.getElementById('bulkEntrySection');
+    const icon = document.getElementById('bulkEntryIcon');
+    
+    if (bulkSection.style.display === 'none') {
+        bulkSection.style.display = 'block';
+        icon.classList.remove('bi-chevron-double-down');
+        icon.classList.add('bi-chevron-double-up');
+        
+        // Add initial row if no rows exist
+        if (document.getElementById('bulkEntryRows').children.length === 0) {
+            addBulkRow();
+        }
+    } else {
+        bulkSection.style.display = 'none';
+        icon.classList.remove('bi-chevron-double-up');
+        icon.classList.add('bi-chevron-double-down');
+    }
+}
+
+function addBulkRow() {
+    const tbody = document.getElementById('bulkEntryRows');
+    
+    // Check if already at max rows
+    if (tbody.children.length >= MAX_BULK_ROWS) {
+        alert(`Maximum of ${MAX_BULK_ROWS} employees can be added at once in bulk mode.`);
+        return;
+    }
+    
+    const rowId = 'bulk_row_' + (++bulkRowCounter);
+    
+    const row = document.createElement('tr');
+    row.id = rowId;
+    row.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm" id="${rowId}_name" list="employeeNameList" placeholder="Name"></td>
+        <td>
+            <select class="form-select form-select-sm" id="${rowId}_shift">
+                <option value="Day">Day</option>
+                <option value="Night">Night</option>
+            </select>
+        </td>
+        <td>
+            <select class="form-select form-select-sm" id="${rowId}_area">
+                <option value="Dining">Dining</option>
+                <option value="Bar">Bar</option>
+                <option value="To Go">To Go</option>
+            </select>
+        </td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_cash" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_cc_tips" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_visa" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_mastercard" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_amex" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_discover" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_beer" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_liquor" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_wine" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_food" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td><input type="number" class="form-control form-control-sm" id="${rowId}_voids" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeBulkRow('${rowId}')" title="Remove row">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </td>
+    `;
+    
+    tbody.appendChild(row);
+    
+    // Focus on the name field of the new row
+    document.getElementById(rowId + '_name').focus();
+}
+
+function removeBulkRow(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) {
+        row.remove();
+    }
+}
+
+function clearBulkEntries() {
+    const tbody = document.getElementById('bulkEntryRows');
+    const rowCount = tbody.getElementsByTagName('tr').length;
+    
+    if (rowCount === 0) {
+        alert('No entries to clear.');
+        return;
+    }
+    
+    if (confirm(`Are you sure you want to clear all ${rowCount} row(s)? This cannot be undone.`)) {
+        tbody.innerHTML = '';
+        console.log('Bulk entries cleared');
+    }
+}
+
+function saveBulkEntries() {
+    const tbody = document.getElementById('bulkEntryRows');
+    const rows = tbody.getElementsByTagName('tr');
+    
+    let addedCount = 0;
+    
+    for (let row of rows) {
+        const rowId = row.id;
+        const name = document.getElementById(rowId + '_name').value.trim();
+        
+        if (!name) continue; // Skip empty rows
+        
+        const employee = {
+            name: name,
+            shift: document.getElementById(rowId + '_shift').value,
+            area: document.getElementById(rowId + '_area').value,
+            cash: parseFloat(document.getElementById(rowId + '_cash').value) || 0,
+            cc_tips: parseFloat(document.getElementById(rowId + '_cc_tips').value) || 0,
+            cash_diff: (parseFloat(document.getElementById(rowId + '_cash').value) || 0) - (parseFloat(document.getElementById(rowId + '_cc_tips').value) || 0),
+            visa: parseFloat(document.getElementById(rowId + '_visa').value) || 0,
+            mastercard: parseFloat(document.getElementById(rowId + '_mastercard').value) || 0,
+            amex: parseFloat(document.getElementById(rowId + '_amex').value) || 0,
+            discover: parseFloat(document.getElementById(rowId + '_discover').value) || 0,
+            credit: (parseFloat(document.getElementById(rowId + '_visa').value) || 0) +
+                   (parseFloat(document.getElementById(rowId + '_mastercard').value) || 0) +
+                   (parseFloat(document.getElementById(rowId + '_amex').value) || 0) +
+                   (parseFloat(document.getElementById(rowId + '_discover').value) || 0),
+            beer: parseFloat(document.getElementById(rowId + '_beer').value) || 0,
+            liquor: parseFloat(document.getElementById(rowId + '_liquor').value) || 0,
+            wine: parseFloat(document.getElementById(rowId + '_wine').value) || 0,
+            food: parseFloat(document.getElementById(rowId + '_food').value) || 0,
+            voids: parseFloat(document.getElementById(rowId + '_voids').value) || 0
+        };
+        
+        employees.push(employee);
+        addedCount++;
+    }
+    
+    if (addedCount > 0) {
+        updateEmployeeList();
+        updateTotals();
+        calculateRevenueCenters();
+        
+        // Clear bulk entry rows
+        tbody.innerHTML = '';
+        
+        // Close bulk entry section
+        toggleBulkEntry();
+        
+        alert(`${addedCount} employee ${addedCount === 1 ? 'entry' : 'entries'} added successfully!`);
+    } else {
+        alert('No entries to save. Please add at least one employee.');
+    }
+}
+
+async function importBulkCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const fileInput = event.target;
+    
+    try {
+        const filename = file.name.toLowerCase();
+        
+        if (filename.endsWith('.xlsx')) {
+            // Excel file - send to backend (same as regular import)
+            await importBulkExcelFile(file);
+        } else if (filename.endsWith('.csv')) {
+            // CSV file - parse client-side
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    parseBulkCSV(content);
+                    fileInput.value = '';
+                } catch (error) {
+                    console.error('CSV parsing error:', error);
+                    alert('CSV parsing failed: ' + error.message);
+                    fileInput.value = '';
+                }
+            };
+            reader.readAsText(file);
+        } else {
+            alert('Please select a .csv or .xlsx file');
+        }
+    } catch (error) {
+        console.error('Import error:', error);
+        alert('Import failed: ' + error.message);
+        fileInput.value = '';
+    }
+}
+
+async function importBulkExcelFile(file) {
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        console.log('Uploading file to /api/import-file...');
+        
+        const response = await fetch('/api/import-file', {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers.get('content-type'));
+        
+        // Check if we got redirected (session expired)
+        if (response.redirected || response.status === 302) {
+            throw new Error('Your session has expired. Please refresh the page and log in again.');
+        }
+        
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Non-JSON response:', text.substring(0, 500));
+            
+            // Check if it's a login page
+            if (text.includes('<!DOCTYPE') && text.includes('login')) {
+                throw new Error('Your session has expired. Please refresh the page and log in again.');
+            }
+            
+            throw new Error('Server returned an invalid response. Please try again.');
+        }
+        
+        const result = await response.json();
+        
+        console.log('API Response:', result);
+        
+        if (!result.success) {
+            throw new Error(result.error || 'Import failed');
+        }
+        
+        // Log the data structure
+        console.log('Imported data:', result.data);
+        
+        // Convert the aggregated data into a single employee entry for bulk table
+        const employeeData = [{
+            name: 'Imported Total',
+            shift: 'Day',
+            area: 'Dining',
+            cash: result.data.cash || 0,
+            cc_tips: result.data.cc_tips || 0,
+            visa: result.data.visa || 0,
+            mastercard: result.data.mastercard || 0,
+            amex: result.data.amex || 0,
+            discover: result.data.discover || 0,
+            beer: result.data.beer || 0,
+            liquor: result.data.liquor || 0,
+            wine: result.data.wine || 0,
+            food: result.data.food || 0,
+            voids: result.data.voids || 0
+        }];
+        
+        console.log('Employee data to fill:', employeeData);
+        
+        // Fill bulk entry table with Excel data
+        fillBulkTableWithData(employeeData);
+        
+        // Clear file input
+        document.getElementById('bulkCsvImport').value = '';
+        
+    } catch (error) {
+        console.error('Import error:', error);
+        alert('Import failed: ' + error.message);
+        document.getElementById('bulkCsvImport').value = '';
+    }
+}
+
+async function importBulkExcelFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/import-file', {
+        method: 'POST',
+        body: formData
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+        throw new Error(result.error || 'Import failed');
+    }
+    
+    // Fill bulk entry table with Excel data
+    fillBulkTableWithData([result.data]);
+    
+    // Clear file input
+    document.getElementById('bulkCsvImport').value = '';
+}
+
+function parseBulkCSV(csvContent) {
+    console.log('Parsing CSV content:', csvContent.substring(0, 200));
+    
+    // Parse CSV and fill bulk table
+    const lines = csvContent.split('\n');
+    const employeeData = [];
+    
+    // Check if this is a daily log CSV format
+    let inEmployeeSection = false;
+    let headerFound = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        
+        if (!trimmed) continue;
+        
+        // Look for Employee Entries section
+        if (trimmed.startsWith('Employee Entries')) {
+            inEmployeeSection = true;
+            console.log('Found Employee Entries section');
+            continue;
+        }
+        
+        // Stop at next section
+        if (inEmployeeSection && (trimmed.startsWith('Cash Drawer') || trimmed.startsWith('Deductions') || trimmed.startsWith('Deposit'))) {
+            console.log('Reached end of employee section');
+            break;
+        }
+        
+        // Skip header row
+        if (inEmployeeSection && trimmed.startsWith('Name,')) {
+            headerFound = true;
+            console.log('Found header row');
+            continue;
+        }
+        
+        // Parse employee rows
+        if (inEmployeeSection && headerFound) {
+            const values = line.split(',');
+            
+            // Must have at least name and some data
+            if (values.length >= 15 && values[0] && values[0].trim()) {
+                const empData = {
+                    name: values[0].trim(),
+                    shift: values[1] ? values[1].trim() : 'Day',
+                    area: values[2] ? values[2].trim() : 'Dining',
+                    cash: parseFloat(values[3]) || 0,
+                    cc_tips: parseFloat(values[4]) || 0,
+                    visa: parseFloat(values[6]) || 0,
+                    mastercard: parseFloat(values[7]) || 0,
+                    amex: parseFloat(values[8]) || 0,
+                    discover: parseFloat(values[9]) || 0,
+                    beer: parseFloat(values[11]) || 0,
+                    liquor: parseFloat(values[12]) || 0,
+                    wine: parseFloat(values[13]) || 0,
+                    food: parseFloat(values[14]) || 0,
+                    voids: parseFloat(values[15]) || 0
+                };
+                
+                console.log('Parsed employee:', empData.name);
+                employeeData.push(empData);
+            }
+        }
+    }
+    
+    console.log('Total employees parsed:', employeeData.length);
+    
+    if (employeeData.length > 0) {
+        fillBulkTableWithData(employeeData);
+    } else {
+        alert('No employee data found in CSV file. Please make sure the file is in Daily Log format with an "Employee Entries" section.');
+    }
+}
+
+function fillBulkTableWithData(employeeDataArray) {
+    console.log('fillBulkTableWithData called with:', employeeDataArray);
+    
+    const tbody = document.getElementById('bulkEntryRows');
+    
+    if (!tbody) {
+        console.error('bulkEntryRows element not found!');
+        alert('Error: Bulk entry table not found. Please refresh the page.');
+        return;
+    }
+    
+    // Find existing rows and check which are blank (no name entered)
+    const existingRows = Array.from(tbody.getElementsByTagName('tr'));
+    let blankRowIndex = -1;
+    
+    // Look for first blank row (no name or name is empty)
+    for (let i = 0; i < existingRows.length; i++) {
+        const row = existingRows[i];
+        const nameInput = row.querySelector('input[id$="_name"]');
+        if (nameInput && !nameInput.value.trim()) {
+            blankRowIndex = i;
+            break;
+        }
+    }
+    
+    // If we found a blank row, fill it instead of creating a new one
+    if (blankRowIndex >= 0 && employeeDataArray.length === 1) {
+        const empData = employeeDataArray[0];
+        const blankRow = existingRows[blankRowIndex];
+        const rowId = blankRow.id;
+        
+        console.log('Filling existing blank row:', rowId);
+        
+        // Fill in the blank row's data
+        document.getElementById(rowId + '_name').value = empData.name || '';
+        document.getElementById(rowId + '_shift').value = empData.shift || 'Day';
+        document.getElementById(rowId + '_area').value = empData.area || 'Dining';
+        document.getElementById(rowId + '_cash').value = (empData.cash || 0).toFixed(2);
+        document.getElementById(rowId + '_cc_tips').value = (empData.cc_tips || 0).toFixed(2);
+        document.getElementById(rowId + '_visa').value = (empData.visa || 0).toFixed(2);
+        document.getElementById(rowId + '_mastercard').value = (empData.mastercard || 0).toFixed(2);
+        document.getElementById(rowId + '_amex').value = (empData.amex || 0).toFixed(2);
+        document.getElementById(rowId + '_discover').value = (empData.discover || 0).toFixed(2);
+        document.getElementById(rowId + '_beer').value = (empData.beer || 0).toFixed(2);
+        document.getElementById(rowId + '_liquor').value = (empData.liquor || 0).toFixed(2);
+        document.getElementById(rowId + '_wine').value = (empData.wine || 0).toFixed(2);
+        document.getElementById(rowId + '_food').value = (empData.food || 0).toFixed(2);
+        document.getElementById(rowId + '_voids').value = (empData.voids || 0).toFixed(2);
+        
+        // Update status icon
+        const hasData = (empData.cash || 0) > 0 || (empData.cc_tips || 0) > 0 || 
+                       (empData.visa || 0) > 0 || (empData.mastercard || 0) > 0 || 
+                       (empData.beer || 0) > 0 || (empData.food || 0) > 0;
+        
+        const statusCell = blankRow.querySelector('td:last-child');
+        if (statusCell) {
+            statusCell.innerHTML = hasData ? 
+                '<i class="bi bi-check-circle-fill text-success" title="Data imported successfully"></i>' : 
+                '<i class="bi bi-x-circle-fill text-danger" title="No data found"></i>';
+        }
+        
+        console.log('Blank row filled successfully');
+        alert('Data imported into existing row successfully!');
+        return;
+    }
+    
+    // Otherwise, create new rows as before
+    const currentRowCount = existingRows.length;
+    const availableSlots = MAX_BULK_ROWS - currentRowCount;
+    
+    if (availableSlots <= 0) {
+        alert(`Maximum ${MAX_BULK_ROWS} employees allowed. Please save current entries first or remove some rows.`);
+        return;
+    }
+    
+    // Limit to available slots
+    const dataToAdd = employeeDataArray.slice(0, availableSlots);
+    
+    if (employeeDataArray.length > availableSlots) {
+        alert(`Only ${availableSlots} employee(s) can be added. Maximum bulk entries allowed is ${MAX_BULK_ROWS}.`);
+    }
+    
+    // Add a row for each employee
+    for (let empData of dataToAdd) {
+        console.log('Creating row for:', empData);
+        
+        const rowId = 'bulk_row_' + (++bulkRowCounter);
+        
+        // Check if data import was successful (has at least some non-zero values)
+        const hasData = (empData.cash || 0) > 0 || (empData.cc_tips || 0) > 0 || 
+                       (empData.visa || 0) > 0 || (empData.mastercard || 0) > 0 || 
+                       (empData.beer || 0) > 0 || (empData.food || 0) > 0;
+        
+        console.log('Has data:', hasData);
+        
+        const statusIcon = hasData ? 
+            '<i class="bi bi-check-circle-fill text-success" title="Data imported successfully"></i>' : 
+            '<i class="bi bi-x-circle-fill text-danger" title="No data found"></i>';
+        
+        const row = document.createElement('tr');
+        row.id = rowId;
+        row.innerHTML = `
+            <td><input type="text" class="form-control form-control-sm" id="${rowId}_name" list="employeeNameList" placeholder="Name" value="${empData.name || ''}" style="min-width: 130px;"></td>
+            <td>
+                <select class="form-select form-select-sm" id="${rowId}_shift">
+                    <option value="Day" ${empData.shift === 'Day' ? 'selected' : ''}>Day</option>
+                    <option value="Night" ${empData.shift === 'Night' ? 'selected' : ''}>Night</option>
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm" id="${rowId}_area">
+                    <option value="Dining" ${empData.area === 'Dining' ? 'selected' : ''}>Dining</option>
+                    <option value="Bar" ${empData.area === 'Bar' ? 'selected' : ''}>Bar</option>
+                    <option value="To Go" ${empData.area === 'To Go' ? 'selected' : ''}>To Go</option>
+                </select>
+            </td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_cash" step="0.01" value="${(empData.cash || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_cc_tips" step="0.01" value="${(empData.cc_tips || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_visa" step="0.01" value="${(empData.visa || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_mastercard" step="0.01" value="${(empData.mastercard || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_amex" step="0.01" value="${(empData.amex || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_discover" step="0.01" value="${(empData.discover || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_beer" step="0.01" value="${(empData.beer || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_liquor" step="0.01" value="${(empData.liquor || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_wine" step="0.01" value="${(empData.wine || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_food" step="0.01" value="${(empData.food || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_voids" step="0.01" value="${(empData.voids || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
+            <td class="text-center">${statusIcon}</td>
+        `;
+        
+        tbody.appendChild(row);
+        console.log('Row added:', rowId);
+    }
+    
+    console.log('Total rows added:', dataToAdd.length);
+    alert(`${dataToAdd.length} employee ${dataToAdd.length === 1 ? 'entry' : 'entries'} loaded into bulk entry table. Review and click "Save All Entries" to add them.`);
+}
+
+function updateEmployeeList() {
+    try {
+        const list = document.getElementById('employeeList');
+        
+        if (!list) {
+            console.error('employeeList element not found!');
+            alert('Error: Employee list container not found. Please refresh the page.');
+            return;
+        }
+        
+        // Update employee count
+        document.getElementById('employeeCount').textContent = employees.length;
+        
+        // Check if filter is active and use filter function instead
+        const filterSelect = document.getElementById('shiftFilter');
+        if (filterSelect && filterSelect.value !== 'All') {
+            filterEmployeesByShift();
+            
+            // Update hidden field with JSON data
+            const hiddenField = document.getElementById('employee_data');
+            if (hiddenField) {
+                hiddenField.value = JSON.stringify(employees);
+            }
+            return;
+        }
+        
+        if (employees.length === 0) {
+            list.innerHTML = '<p class="text-muted text-center p-3">No employees added yet</p>';
+            return;
+        }
+        
+        // Sort employees by shift (Day first), then by area, then by name A-Z
+        const sortedEmployees = [...employees].sort((a, b) => {
+            // First sort by shift (Day before Night)
+            if (a.shift !== b.shift) {
+                return a.shift === 'Day' ? -1 : 1;
+            }
+            // Then sort by area
+            if (a.area !== b.area) {
+                return a.area.localeCompare(b.area);
+            }
+            // Finally sort by name A-Z
+            return a.name.localeCompare(b.name);
+        });
+        
+        // Update employee count
+        document.getElementById('employeeCount').textContent = employees.length;
+        
+        // Create compact table view
+        list.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th style="width: 120px;">Name</th>
+                            <th style="width: 50px;" class="text-center">Shift</th>
+                            <th style="width: 60px;" class="text-center">Area</th>
+                            <th style="width: 70px;" class="text-end">Cash</th>
+                            <th style="width: 70px;" class="text-end">CC Tips</th>
+                            <th style="width: 70px;" class="text-end">Credit</th>
+                            <th style="width: 70px;" class="text-end">Sales</th>
+                            <th style="width: 70px;" class="text-end">Voids</th>
+                            <th style="width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${sortedEmployees.map((emp, index) => {
+                            // Find original index in unsorted array for delete button
+                            const originalIndex = employees.findIndex(e => e === emp);
+                            const creditTotal = emp.visa + emp.mastercard + emp.amex + emp.discover;
+                            const salesTotal = emp.beer + emp.liquor + emp.wine + emp.food;
+                            const shiftBadge = emp.shift === 'Day' ? 'primary' : 'dark';
+                            return `
+                            <tr style="cursor: pointer;" onclick="editEmployee(${originalIndex})" class="employee-row" title="Click to edit">
+                                <td>
+                                    <strong class="small">${emp.name}</strong>
+                                </td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm badge bg-${shiftBadge}" style="width: auto; display: inline-block; padding: 2px 6px; font-size: 0.75rem;" onchange="event.stopPropagation(); updateEmployeeShift(${originalIndex}, this.value)">
+                                        <option value="Day" ${emp.shift === 'Day' ? 'selected' : ''}>Day</option>
+                                        <option value="Night" ${emp.shift === 'Night' ? 'selected' : ''}>Night</option>
+                                    </select>
+                                </td>
+                                <td class="text-center">
+                                    <select class="form-select form-select-sm badge bg-secondary" style="width: auto; display: inline-block; padding: 2px 6px; font-size: 0.75rem;" onchange="event.stopPropagation(); updateEmployeeArea(${originalIndex}, this.value)">
+                                        <option value="Dining" ${emp.area === 'Dining' ? 'selected' : ''}>Dining</option>
+                                        <option value="Bar" ${emp.area === 'Bar' ? 'selected' : ''}>Bar</option>
+                                        <option value="To Go" ${emp.area === 'To Go' ? 'selected' : ''}>To Go</option>
+                                    </select>
+                                </td>
+                                <td class="text-end small">${emp.cash.toFixed(2)}</td>
+                                <td class="text-end small">${emp.cc_tips.toFixed(2)}</td>
+                                <td class="text-end small" title="V: $${emp.visa.toFixed(2)}, MC: $${emp.mastercard.toFixed(2)}, AX: $${emp.amex.toFixed(2)}, DS: $${emp.discover.toFixed(2)}">${creditTotal.toFixed(2)}</td>
+                                <td class="text-end small" title="Beer: $${emp.beer.toFixed(2)}, Liquor: $${emp.liquor.toFixed(2)}, Wine: $${emp.wine.toFixed(2)}, Food: $${emp.food.toFixed(2)}">${salesTotal.toFixed(2)}</td>
+                                <td class="text-end small">${(emp.voids || 0).toFixed(2)}</td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-sm btn-danger btn-sm py-0 px-1" onclick="event.stopPropagation(); removeEmployee(${originalIndex})" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        // Update hidden field with JSON data
+        const hiddenField = document.getElementById('employee_data');
+        if (hiddenField) {
+            hiddenField.value = JSON.stringify(employees);
+        }
+    } catch (error) {
+        console.error('Error in updateEmployeeList:', error);
+        alert('Error updating employee list: ' + error.message);
+    }
+}
+
+function removeEmployee(index) {
+    employees.splice(index, 1);
+    updateEmployeeList();
+    updateTotals();
+}
+
+function updateEmployeeShift(index, newShift) {
+    employees[index].shift = newShift;
+    updateEmployeeList();
+    updateTotals();
+}
+
+function updateEmployeeArea(index, newArea) {
+    employees[index].area = newArea;
+    updateEmployeeList();
+    updateTotals();
+}
+
+function filterEmployeesByShift() {
+    const filterValue = document.getElementById('shiftFilter').value;
+    const list = document.getElementById('employeeList');
+    
+    if (employees.length === 0) {
+        list.innerHTML = '<p class="text-muted text-center p-3">No employees added yet</p>';
+        return;
+    }
+    
+    let displayEmployees = [];
+    
+    if (filterValue === 'Full') {
+        // Aggregate employees who worked both shifts into "Full" entries
+        const employeeMap = {};
+        
+        employees.forEach(emp => {
+            if (!employeeMap[emp.name]) {
+                employeeMap[emp.name] = {
+                    name: emp.name,
+                    shift: 'Full',
+                    area: emp.area,
+                    cash: 0,
+                    cc_tips: 0,
+                    visa: 0,
+                    mastercard: 0,
+                    amex: 0,
+                    discover: 0,
+                    beer: 0,
+                    liquor: 0,
+                    wine: 0,
+                    food: 0,
+                    voids: 0,
+                    shifts: []
+                };
+            }
+            
+            // Aggregate values
+            employeeMap[emp.name].cash += emp.cash;
+            employeeMap[emp.name].cc_tips += emp.cc_tips;
+            employeeMap[emp.name].visa += emp.visa;
+            employeeMap[emp.name].mastercard += emp.mastercard;
+            employeeMap[emp.name].amex += emp.amex;
+            employeeMap[emp.name].discover += emp.discover;
+            employeeMap[emp.name].beer += emp.beer;
+            employeeMap[emp.name].liquor += emp.liquor;
+            employeeMap[emp.name].wine += emp.wine;
+            employeeMap[emp.name].food += emp.food;
+            employeeMap[emp.name].voids += (emp.voids || 0);
+            employeeMap[emp.name].shifts.push(emp.shift);
+        });
+        
+        displayEmployees = Object.values(employeeMap).sort((a, b) => {
+            if (a.area !== b.area) return a.area.localeCompare(b.area);
+            return a.name.localeCompare(b.name);
+        });
+    } else if (filterValue === 'All') {
+        // Show all employees, sorted
+        displayEmployees = [...employees].sort((a, b) => {
+            if (a.shift !== b.shift) return a.shift === 'Day' ? -1 : 1;
+            if (a.area !== b.area) return a.area.localeCompare(b.area);
+            return a.name.localeCompare(b.name);
+        });
+    } else {
+        // Filter by specific shift (Day or Night)
+        displayEmployees = employees.filter(emp => emp.shift === filterValue).sort((a, b) => {
+            if (a.area !== b.area) return a.area.localeCompare(b.area);
+            return a.name.localeCompare(b.name);
+        });
+    }
+    
+    if (displayEmployees.length === 0) {
+        list.innerHTML = `<p class="text-muted text-center p-3">No ${filterValue === 'All' ? '' : filterValue} employees found</p>`;
+        return;
+    }
+    
+    // Create table view
+    list.innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top">
+                    <tr>
+                        <th style="width: 120px;">Name</th>
+                        <th style="width: 50px;" class="text-center">Shift</th>
+                        <th style="width: 60px;" class="text-center">Area</th>
+                        <th style="width: 70px;" class="text-end">Cash</th>
+                        <th style="width: 70px;" class="text-end">CC Tips</th>
+                        <th style="width: 70px;" class="text-end">Credit</th>
+                        <th style="width: 70px;" class="text-end">Sales</th>
+                        <th style="width: 70px;" class="text-end">Voids</th>
+                        ${filterValue !== 'Full' ? '<th style="width: 50px;"></th>' : ''}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${displayEmployees.map((emp, index) => {
+                        const creditTotal = emp.visa + emp.mastercard + emp.amex + emp.discover;
+                        const salesTotal = emp.beer + emp.liquor + emp.wine + emp.food;
+                        const shiftBadge = emp.shift === 'Day' ? 'primary' : (emp.shift === 'Night' ? 'dark' : 'success');
+                        const shiftLabel = emp.shift === 'Full' ? `Full (${emp.shifts.join('+')})` : emp.shift;
+                        
+                        // For non-Full view, find original index for delete button
+                        const originalIndex = filterValue !== 'Full' ? employees.findIndex(e => e === emp) : -1;
+                        
+                        return `
+                        <tr>
+                            <td>
+                                <strong class="small">${emp.name}</strong>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-${shiftBadge} badge-sm" title="${shiftLabel}">${emp.shift || 'Day'}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-secondary badge-sm">${emp.area}</span>
+                            </td>
+                            <td class="text-end small">${emp.cash.toFixed(2)}</td>
+                            <td class="text-end small">${emp.cc_tips.toFixed(2)}</td>
+                            <td class="text-end small" title="V: $${emp.visa.toFixed(2)}, MC: $${emp.mastercard.toFixed(2)}, AX: $${emp.amex.toFixed(2)}, DS: $${emp.discover.toFixed(2)}">${creditTotal.toFixed(2)}</td>
+                            <td class="text-end small" title="Beer: $${emp.beer.toFixed(2)}, Liquor: $${emp.liquor.toFixed(2)}, Wine: $${emp.wine.toFixed(2)}, Food: $${emp.food.toFixed(2)}">${salesTotal.toFixed(2)}</td>
+                            <td class="text-end small">${(emp.voids || 0).toFixed(2)}</td>
+                            ${filterValue !== 'Full' ? `
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm btn-danger btn-sm py-0 px-1" onclick="removeEmployee(${originalIndex})" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>` : ''}
+                        </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function updateTotals() {
+    // Initialize totals for each shift
+    let dayCash = 0, dayCCTips = 0, dayVisa = 0, dayMastercard = 0, dayAmex = 0, dayDiscover = 0;
+    let dayBeer = 0, dayLiquor = 0, dayWine = 0, dayFood = 0;
+    
+    let nightCash = 0, nightCCTips = 0, nightVisa = 0, nightMastercard = 0, nightAmex = 0, nightDiscover = 0;
+    let nightBeer = 0, nightLiquor = 0, nightWine = 0, nightFood = 0;
+    
+    // Calculate totals by shift
+    employees.forEach(emp => {
+        if (emp.shift === 'Day') {
+            dayCash += emp.cash;
+            dayCCTips += emp.cc_tips;
+            dayVisa += emp.visa;
+            dayMastercard += emp.mastercard;
+            dayAmex += emp.amex;
+            dayDiscover += emp.discover;
+            dayBeer += emp.beer;
+            dayLiquor += emp.liquor;
+            dayWine += emp.wine;
+            dayFood += emp.food;
+        } else if (emp.shift === 'Night') {
+            nightCash += emp.cash;
+            nightCCTips += emp.cc_tips;
+            nightVisa += emp.visa;
+            nightMastercard += emp.mastercard;
+            nightAmex += emp.amex;
+            nightDiscover += emp.discover;
+            nightBeer += emp.beer;
+            nightLiquor += emp.liquor;
+            nightWine += emp.wine;
+            nightFood += emp.food;
+        }
+    });
+    
+    // Calculate credit totals from individual cards
+    const dayCredit = dayVisa + dayMastercard + dayAmex + dayDiscover;
+    const nightCredit = nightVisa + nightMastercard + nightAmex + nightDiscover;
+    
+    // Calculate net sales for each shift
+    const dayNetSales = dayBeer + dayLiquor + dayWine + dayFood;
+    const nightNetSales = nightBeer + nightLiquor + nightWine + nightFood;
+    
+    // Calculate combined totals
+    const totalCash = dayCash + nightCash;
+    const totalCCTips = dayCCTips + nightCCTips;
+    const totalVisa = dayVisa + nightVisa;
+    const totalMastercard = dayMastercard + nightMastercard;
+    const totalAmex = dayAmex + nightAmex;
+    const totalDiscover = dayDiscover + nightDiscover;
+    const totalCredit = totalVisa + totalMastercard + totalAmex + totalDiscover;
+    const totalBeer = dayBeer + nightBeer;
+    const totalLiquor = dayLiquor + nightLiquor;
+    const totalWine = dayWine + nightWine;
+    const totalFood = dayFood + nightFood;
+    const totalNetSales = totalBeer + totalLiquor + totalWine + totalFood;
+    
+    // Update Day Shift totals
+    document.getElementById('day_total_cash').textContent = dayCash.toFixed(2);
+    document.getElementById('day_total_cc_tips').textContent = dayCCTips.toFixed(2);
+    document.getElementById('day_total_visa').textContent = dayVisa.toFixed(2);
+    document.getElementById('day_total_mastercard').textContent = dayMastercard.toFixed(2);
+    document.getElementById('day_total_amex').textContent = dayAmex.toFixed(2);
+    document.getElementById('day_total_discover').textContent = dayDiscover.toFixed(2);
+    document.getElementById('day_total_credit').textContent = dayCredit.toFixed(2);
+    document.getElementById('day_total_beer').textContent = dayBeer.toFixed(2);
+    document.getElementById('day_total_liquor').textContent = dayLiquor.toFixed(2);
+    document.getElementById('day_total_wine').textContent = dayWine.toFixed(2);
+    document.getElementById('day_total_food').textContent = dayFood.toFixed(2);
+    document.getElementById('day_total_sales_calc').textContent = dayNetSales.toFixed(2);
+    
+    // Update Night Shift totals
+    document.getElementById('night_total_cash').textContent = nightCash.toFixed(2);
+    document.getElementById('night_total_cc_tips').textContent = nightCCTips.toFixed(2);
+    document.getElementById('night_total_visa').textContent = nightVisa.toFixed(2);
+    document.getElementById('night_total_mastercard').textContent = nightMastercard.toFixed(2);
+    document.getElementById('night_total_amex').textContent = nightAmex.toFixed(2);
+    document.getElementById('night_total_discover').textContent = nightDiscover.toFixed(2);
+    document.getElementById('night_total_credit').textContent = nightCredit.toFixed(2);
+    document.getElementById('night_total_beer').textContent = nightBeer.toFixed(2);
+    document.getElementById('night_total_liquor').textContent = nightLiquor.toFixed(2);
+    document.getElementById('night_total_wine').textContent = nightWine.toFixed(2);
+    document.getElementById('night_total_food').textContent = nightFood.toFixed(2);
+    document.getElementById('night_total_sales_calc').textContent = nightNetSales.toFixed(2);
+    
+    // Update Combined totals
+    document.getElementById('total_cash').textContent = totalCash.toFixed(2);
+    document.getElementById('total_cc_tips').textContent = totalCCTips.toFixed(2);
+    document.getElementById('total_visa').textContent = totalVisa.toFixed(2);
+    document.getElementById('total_mastercard').textContent = totalMastercard.toFixed(2);
+    document.getElementById('total_amex').textContent = totalAmex.toFixed(2);
+    document.getElementById('total_discover').textContent = totalDiscover.toFixed(2);
+    document.getElementById('total_credit').textContent = totalCredit.toFixed(2);
+    document.getElementById('total_beer').textContent = totalBeer.toFixed(2);
+    document.getElementById('total_liquor').textContent = totalLiquor.toFixed(2);
+    document.getElementById('total_wine').textContent = totalWine.toFixed(2);
+    document.getElementById('total_food').textContent = totalFood.toFixed(2);
+    document.getElementById('total_sales_calc').textContent = totalNetSales.toFixed(2);
+    
+    // Recalculate deposit
+    calculateDeposit();
+    
+    // Recalculate revenue centers
+    calculateRevenueCenters();
+}
+
+function addEmployeeRow() {
+    const container = document.getElementById('employeeRows');
+    const row = document.createElement('div');
+    row.className = 'row mb-2 employee-row';
+    row.innerHTML = `
+        <div class="col-7">
+            <input type="text" class="form-control" name="employee_name" placeholder="Employee Name">
+        </div>
+        <div class="col-4">
+            <input type="number" class="form-control" name="hours" placeholder="Hours" step="0.5">
+        </div>
+        <div class="col-1">
+            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(row);
+}
+
+function calculateDrawerTotal() {
+    let total = 0;
+    document.querySelectorAll('.denomination').forEach(input => {
+        const count = parseFloat(input.value) || 0;
+        const value = parseFloat(input.dataset.value);
+        total += count * value;
+    });
+    
+    document.getElementById('drawerTotal').textContent = total.toFixed(2);
+    document.getElementById('drawerTotalInput').value = total.toFixed(2);
+    
+    // Recalculate deposit when drawer changes
+    calculateDeposit();
+}
+
+function calculateDeposit() {
+    // Get total sales from employee totals (not from old form fields)
+    const totalSales = parseFloat(document.getElementById('total_sales_calc').textContent) || 0;
+    const totalCash = parseFloat(document.getElementById('total_cash').textContent) || 0;
+    const totalCCTips = parseFloat(document.getElementById('total_cc_tips').textContent) || 0;
+    const totalCredit = parseFloat(document.getElementById('total_credit').textContent) || 0;
+    
+    // Get cash in drawer
+    const drawerCash = parseFloat(document.getElementById('drawerTotalInput').value) || 0;
+    
+    // Get total cash deductions
+    let deductionsTotal = 0;
+    document.querySelectorAll('.cash-deduction-amount').forEach(input => {
+        deductionsTotal += parseFloat(input.value) || 0;
+    });
+    
+    document.getElementById('totalCashDeductions').textContent = deductionsTotal.toFixed(2);
+    
+    // Update Deposit section with element checks
+    const depositTotalCashEl = document.getElementById('deposit_total_cash');
+    const depositTotalCCTipsEl = document.getElementById('deposit_total_cc_tips');
+    const depositCashDeductionsEl = document.getElementById('deposit_cash_deductions');
+    const expectedDepositEl = document.getElementById('expected_deposit');
+    
+    if (depositTotalCashEl) depositTotalCashEl.textContent = totalCash.toFixed(2);
+    if (depositTotalCCTipsEl) depositTotalCCTipsEl.textContent = totalCCTips.toFixed(2);
+    if (depositCashDeductionsEl) depositCashDeductionsEl.textContent = deductionsTotal.toFixed(2);
+    
+    // Deposit = Total Cash - Total CC Tips - Cash Deductions
+    const expectedDeposit = totalCash - totalCCTips - deductionsTotal;
+    if (expectedDepositEl) expectedDepositEl.textContent = expectedDeposit.toFixed(2);
+    
+    // Update hidden field for form submission
+    const depositHiddenField = document.getElementById('deposit_amount_hidden');
+    if (depositHiddenField) depositHiddenField.value = expectedDeposit.toFixed(2);
+    
+    // Update cash assistant difference
+    calculateCashAssistant();
+}
+
+function calculateCashAssistant() {
+    // Calculate each denomination and show individual totals
+    let totalCashCounted = 0;
+    
+    // Helper function to parse and validate integer input
+    const parseValue = (elementId) => {
+        const element = document.getElementById(elementId);
+        if (!element) return 0;
+        const value = element.value;
+        if (value === '' || value === null || value === undefined) return 0;
+        const num = parseInt(value, 10);
+        return isNaN(num) ? 0 : num;
+    };
+    
+    const hundreds = parseValue('ca_hundreds');
+    const hundredsTotal = hundreds * 100;
+    const hundredsTotalElement = document.getElementById('ca_hundreds_total');
+    if (hundredsTotalElement) hundredsTotalElement.textContent = hundredsTotal.toFixed(2);
+    totalCashCounted += hundredsTotal;
+    
+    const fifties = parseValue('ca_fifties');
+    const fiftiesTotal = fifties * 50;
+    const fiftiesTotalElement = document.getElementById('ca_fifties_total');
+    if (fiftiesTotalElement) fiftiesTotalElement.textContent = fiftiesTotal.toFixed(2);
+    totalCashCounted += fiftiesTotal;
+    
+    const twenties = parseValue('ca_twenties');
+    const twentiesTotal = twenties * 20;
+    const twentiesTotalElement = document.getElementById('ca_twenties_total');
+    if (twentiesTotalElement) twentiesTotalElement.textContent = twentiesTotal.toFixed(2);
+    totalCashCounted += twentiesTotal;
+    
+    const tens = parseValue('ca_tens');
+    const tensTotal = tens * 10;
+    const tensTotalElement = document.getElementById('ca_tens_total');
+    if (tensTotalElement) tensTotalElement.textContent = tensTotal.toFixed(2);
+    totalCashCounted += tensTotal;
+    
+    const fives = parseValue('ca_fives');
+    const fivesTotal = fives * 5;
+    const fivesTotalElement = document.getElementById('ca_fives_total');
+    if (fivesTotalElement) fivesTotalElement.textContent = fivesTotal.toFixed(2);
+    totalCashCounted += fivesTotal;
+    
+    const ones = parseValue('ca_ones');
+    const onesTotal = ones * 1;
+    const onesTotalElement = document.getElementById('ca_ones_total');
+    if (onesTotalElement) onesTotalElement.textContent = onesTotal.toFixed(2);
+    totalCashCounted += onesTotal;
+    
+    // Always update and ensure total cash counted is visible
+    const totalElement = document.getElementById('cash_assistant_total');
+    if (totalElement) {
+        totalElement.textContent = totalCashCounted.toFixed(2);
+        totalElement.style.display = ''; // Ensure it's visible
+    }
+    
+    // Always calculate and show difference
+    const expectedDepositElement = document.getElementById('expected_deposit');
+    const differenceElement = document.getElementById('cash_difference');
+    
+    if (expectedDepositElement && differenceElement) {
+        const expectedDeposit = parseFloat(expectedDepositElement.textContent) || 0;
+        const difference = expectedDeposit - totalCashCounted;
+        differenceElement.textContent = difference.toFixed(2);
+        differenceElement.style.display = ''; // Ensure it's visible
+    }
+}
+
+function addCashDeductionRow() {
+    const container = document.getElementById('cashDeductionsContainer');
+    const row = document.createElement('div');
+    row.className = 'row mb-2 cash-deduction-row g-2 small';
+    row.innerHTML = `
+        <div class="col-4">
+            <input type="text" class="form-control form-control-sm" name="deduction_desc" 
+                   placeholder="Description">
+        </div>
+        <div class="col-4">
+            <input type="text" class="form-control form-control-sm" name="deduction_location" 
+                   placeholder="Location">
+        </div>
+        <div class="col-3">
+            <input type="number" class="form-control form-control-sm cash-deduction-amount" name="deduction_amount" 
+                   placeholder="0.00" step="0.01" onchange="calculateDeposit()">
+        </div>
+        <div class="col-1">
+            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateDeposit()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(row);
+}
+
+function calculateRevenueCenters() {
+    console.log('========================================');
+    console.log('calculateRevenueCenters called');
+    console.log('Call stack:', new Error().stack);
+    console.log('Number of employees:', employees.length);
+    console.log('Employee data:', JSON.stringify(employees, null, 2));
+    console.log('========================================');
+    
+    // Initialize Day shift totals
+    let dayBar = 0;
+    let dayDining = 0;
+    let dayToGo = 0;
+    
+    // Initialize Night shift totals
+    let nightBar = 0;
+    let nightDining = 0;
+    let nightToGo = 0;
+    
+    // Aggregate employee sales by shift and area
+    employees.forEach(emp => {
+        // Calculate total sales for this employee
+        const employeeSales = (emp.beer || 0) + (emp.liquor || 0) + (emp.wine || 0) + (emp.food || 0);
+        
+        // Add to appropriate shift and area total
+        if (emp.shift === 'Day') {
+            if (emp.area === 'Bar') {
+                dayBar += employeeSales;
+            } else if (emp.area === 'Dining') {
+                dayDining += employeeSales;
+            } else if (emp.area === 'To Go') {
+                dayToGo += employeeSales;
+            }
+        } else if (emp.shift === 'Night') {
+            if (emp.area === 'Bar') {
+                nightBar += employeeSales;
+            } else if (emp.area === 'Dining') {
+                nightDining += employeeSales;
+            } else if (emp.area === 'To Go') {
+                nightToGo += employeeSales;
+            }
+        }
+    });
+    
+    // Update Day shift displays
+    const dayBarEl = document.getElementById('dayBar');
+    const dayDiningEl = document.getElementById('dayDining');
+    const dayToGoEl = document.getElementById('dayToGo');
+    if (dayBarEl) {
+        dayBarEl.innerHTML = dayBar.toFixed(2);
+        dayBarEl.parentElement.style.opacity = '0.99'; // Force re-render
+        setTimeout(() => { dayBarEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    if (dayDiningEl) {
+        dayDiningEl.innerHTML = dayDining.toFixed(2);
+        dayDiningEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { dayDiningEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    if (dayToGoEl) {
+        dayToGoEl.innerHTML = dayToGo.toFixed(2);
+        dayToGoEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { dayToGoEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    
+    // Update Night shift displays
+    const nightBarEl = document.getElementById('nightBar');
+    const nightDiningEl = document.getElementById('nightDining');
+    const nightToGoEl = document.getElementById('nightToGo');
+    if (nightBarEl) {
+        nightBarEl.innerHTML = nightBar.toFixed(2);
+        nightBarEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { nightBarEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    if (nightDiningEl) {
+        nightDiningEl.innerHTML = nightDining.toFixed(2);
+        nightDiningEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { nightDiningEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    if (nightToGoEl) {
+        nightToGoEl.innerHTML = nightToGo.toFixed(2);
+        nightToGoEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { nightToGoEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    
+    // Calculate and update combined totals
+    const totalBar = dayBar + nightBar;
+    const totalDining = dayDining + nightDining;
+    const totalToGo = dayToGo + nightToGo;
+    
+    const totalBarEl = document.getElementById('totalBar');
+    const totalDiningEl = document.getElementById('totalDining');
+    const totalToGoEl = document.getElementById('totalToGo');
+    if (totalBarEl) {
+        totalBarEl.innerHTML = totalBar.toFixed(2);
+        totalBarEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { totalBarEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    if (totalDiningEl) {
+        totalDiningEl.innerHTML = totalDining.toFixed(2);
+        totalDiningEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { totalDiningEl.parentElement.style.opacity = '1'; }, 10);
+    }
+    if (totalToGoEl) {
+        totalToGoEl.innerHTML = totalToGo.toFixed(2);
+        totalToGoEl.parentElement.style.opacity = '0.99';
+        setTimeout(() => { totalToGoEl.parentElement.style.opacity = '1'; }, 10);
+    }
+}
+
+function clearForm() {
+    if (confirm('Are you sure you want to clear all data?')) {
+        employees = [];
+        updateEmployeeList();
+        updateTotals();
+        document.querySelectorAll('.denomination').forEach(input => input.value = 0);
+        document.querySelectorAll('.cash-deduction-amount').forEach(input => input.value = 0);
+        calculateDrawerTotal();
+        calculateDeposit();
+    }
+}
+
+async function importCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const fileInput = event.target;
+    const btn = fileInput.previousElementSibling;
+    const originalText = btn.innerHTML;
+    
+    try {
+        // Show loading indicator
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importing...';
+        btn.disabled = true;
+        
+        const filename = file.name.toLowerCase();
+        
+        if (filename.endsWith('.xlsx')) {
+            // Excel file - send to backend
+            await importExcelFile(file);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        } else if (filename.endsWith('.csv')) {
+            // CSV file - parse client-side
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    parseAndFillCSV(content);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    fileInput.value = '';
+                } catch (error) {
+                    alert('CSV parsing failed: ' + error.message);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    fileInput.value = '';
+                }
+            };
+            reader.readAsText(file);
+        } else {
+            alert('Please select a .csv or .xlsx file');
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    } catch (error) {
+        alert('Import failed: ' + error.message);
+        fileInput.value = '';
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function importExcelFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/import-file', {
+        method: 'POST',
+        body: formData
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+        throw new Error(result.error || 'Import failed');
+    }
+    
+    // Fill form with Excel data
+    fillFormWithExcelData(result.data);
+    
+    // Reset button - find the import button properly
+    const fileInput = document.getElementById('csvImport');
+    if (fileInput && fileInput.previousElementSibling) {
+        fileInput.previousElementSibling.innerHTML = '<i class="bi bi-upload"></i> Import CSV/Excel';
+        fileInput.previousElementSibling.disabled = false;
+    }
+    
+    // Clear file input
+    if (fileInput) {
+        fileInput.value = '';
+    }
+}
+
+function fillFormWithExcelData(data) {
+    // Fill the employee entry form with imported Excel data
+    
+    // Check if all required elements exist
+    const requiredFields = ['emp_name', 'emp_cash', 'emp_cc_tips', 'emp_visa', 
+                           'emp_mastercard', 'emp_amex', 'emp_discover',
+                           'emp_beer', 'emp_liquor', 'emp_wine', 'emp_food', 'emp_voids'];
+    
+    for (const fieldId of requiredFields) {
+        if (!document.getElementById(fieldId)) {
+            alert('Error: Form not ready. Please refresh the page and try again.');
+            return;
+        }
+    }
+    
+    // Fill basic fields
+    document.getElementById('emp_name').value = 'Daily Total (from Excel)';
+    document.getElementById('emp_cash').value = (data.cash || 0).toFixed(2);
+    document.getElementById('emp_cc_tips').value = (data.cc_tips || 0).toFixed(2);
+    
+    // Update cash difference automatically
+    updateCashDifference();
+    
+    // Fill credit card fields by brand
+    document.getElementById('emp_visa').value = (data.visa || 0).toFixed(2);
+    document.getElementById('emp_mastercard').value = (data.mastercard || 0).toFixed(2);
+    document.getElementById('emp_amex').value = (data.amex || 0).toFixed(2);
+    document.getElementById('emp_discover').value = (data.discover || 0).toFixed(2);
+    
+    // Update credit total
+    updateEmpCreditTotal();
+    
+    // Fill sales fields
+    document.getElementById('emp_beer').value = (data.beer || 0).toFixed(2);
+    document.getElementById('emp_liquor').value = (data.liquor || 0).toFixed(2);
+    document.getElementById('emp_wine').value = (data.wine || 0).toFixed(2);
+    document.getElementById('emp_food').value = (data.food || 0).toFixed(2);
+    
+    // Fill voids field
+    document.getElementById('emp_voids').value = (data.voids || 0).toFixed(2);
+    
+    // Show success message
+    let message = '✅ Excel data imported successfully!\n\n';
+    message += 'The employee entry form has been filled with:\n\n';
+    message += `  Cash: $${(data.cash || 0).toFixed(2)}\n`;
+    message += `  CC Tips: $${(data.cc_tips || 0).toFixed(2)}\n\n`;
+    message += 'Credit Cards:\n';
+    message += `  Visa: $${(data.visa || 0).toFixed(2)}\n`;
+    message += `  Mastercard: $${(data.mastercard || 0).toFixed(2)}\n`;
+    message += `  Amex: $${(data.amex || 0).toFixed(2)}\n`;
+    message += `  Discover: $${(data.discover || 0).toFixed(2)}\n\n`;
+    message += 'Sales:\n';
+    message += `  Beer: $${(data.beer || 0).toFixed(2)}\n`;
+    message += `  Liquor: $${(data.liquor || 0).toFixed(2)}\n`;
+    message += `  Wine: $${(data.wine || 0).toFixed(2)}\n`;
+    message += `  Food: $${(data.food || 0).toFixed(2)}\n\n`;
+    message += `  Voids: $${(data.voids || 0).toFixed(2)}\n\n`;
+    message += '👉 Edit the employee name and click "Add Employee" to save!';
+    
+    alert(message);
+    
+    // Scroll to the form and focus on name field
+    const nameField = document.getElementById('emp_name');
+    if (nameField) {
+        nameField.focus();
+        nameField.select();
+    }
+}
+
+function parseAndFillCSV(csvContent) {
+    const lines = csvContent.split('\n').map(line => line.trim()).filter(line => line);
+    
+    // Clear existing employee rows
+    const employeeContainer = document.getElementById('employeeRows');
+    employeeContainer.innerHTML = '';
+    
+    let inEmployeeSection = false;
+    let inSalesSection = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const parts = line.split(',').map(p => p.trim());
+        
+        // Check for section headers
+        if (line.includes('Employee Hours')) {
+            inEmployeeSection = true;
+            inSalesSection = false;
+            continue;
+        }
+        if (line.includes('Sales Summary')) {
+            inEmployeeSection = false;
+            inSalesSection = true;
+            continue;
+        }
+        
+        // Parse employee data
+        if (inEmployeeSection && parts.length >= 2) {
+            const name = parts[0];
+            const hours = parts[1];
+            
+            if (name && hours && !isNaN(parseFloat(hours))) {
+                const row = document.createElement('div');
+                row.className = 'row mb-2 employee-row';
+                row.innerHTML = `
+                    <div class="col-7">
+                        <input type="text" class="form-control" name="employee_name" placeholder="Employee Name" value="${name}">
+                    </div>
+                    <div class="col-4">
+                        <input type="number" class="form-control" name="hours" placeholder="Hours" step="0.5" value="${hours}">
+                    </div>
+                    <div class="col-1">
+                        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove()">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                `;
+                employeeContainer.appendChild(row);
+            }
+        }
+        
+        // Parse sales data
+        if (inSalesSection && parts.length >= 2) {
+            const label = parts[0];
+            const value = parts[1];
+            
+            if (label.includes('Cash Sales')) {
+                document.getElementById('cash_sales').value = parseFloat(value) || 0;
+            } else if (label.includes('Visa')) {
+                document.getElementById('visa').value = parseFloat(value) || 0;
+            } else if (label.includes('Mastercard')) {
+                document.getElementById('mastercard').value = parseFloat(value) || 0;
+            } else if (label.includes('Amex')) {
+                document.getElementById('amex').value = parseFloat(value) || 0;
+            } else if (label.includes('Other Income')) {
+                document.getElementById('other_income').value = parseFloat(value) || 0;
+            }
+        }
+    }
+    
+    // If no employees were added, add one empty row
+    if (employeeContainer.children.length === 0) {
+        addEmployeeRow();
+    }
+    
+    // Recalculate totals
+    calculateCreditTotal();
+    calculateTotal();
+    
+    // Show success message
+    alert('CSV imported successfully!');
+}
+
+// Ensure employee data is saved before form submission
+document.getElementById('dailyLogForm').addEventListener('submit', function(e) {
+    // Update hidden field with current employee data
+    const hiddenField = document.getElementById('employee_data');
+    if (hiddenField) {
+        hiddenField.value = JSON.stringify(employees);
+    }
+    console.log('Submitting with employees:', employees.length);
+});
+
+// Initialize calculations on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Load existing employees if any
+    if (employees.length > 0) {
+        updateEmployeeList();
+    }
+    updateTotals();
+    calculateDrawerTotal();
+    calculateDeposit();
+    
+    // Load employee names for autocomplete
+    loadEmployeeNames();
+});
+
+// Load employee names from backend for autocomplete
+function loadEmployeeNames() {
+    // Try backend first
+    fetch('/api/employee-names')
+        .then(response => {
+            console.log('Employee names API response status:', response.status);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Employee names data:', data);
+            if (data.success && data.employees && data.employees.length > 0) {
+                console.log('Populating employee list with', data.employees.length, 'employees');
+                populateEmployeeNameList(data.employees);
+            } else {
+                console.log('No employees found in backend, trying localStorage');
+                loadEmployeeNamesFromLocalStorage();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading employee names from backend:', error);
+            console.log('Falling back to localStorage');
+            loadEmployeeNamesFromLocalStorage();
+        });
+}
+
+// Fallback to localStorage
+function loadEmployeeNamesFromLocalStorage() {
+    try {
+        const stored = localStorage.getItem('employees');
+        if (stored) {
+            const employees = JSON.parse(stored);
+            console.log('Loaded', employees.length, 'employees from localStorage');
+            populateEmployeeNameList(employees);
+        } else {
+            console.log('No employees in localStorage either');
+        }
+    } catch (e) {
+        console.error('Error loading from localStorage:', e);
+    }
+}
+
+// Populate the datalist with employee names
+function populateEmployeeNameList(employeeList) {
+    const datalist = document.getElementById('employeeNameList');
+    if (!datalist) {
+        console.error('Datalist element not found');
+        return;
+    }
+    
+    datalist.innerHTML = '';
+    
+    employeeList.forEach(emp => {
+        const option = document.createElement('option');
+        option.value = `${emp.firstName} ${emp.lastName}`;
+        datalist.appendChild(option);
+    });
+    
+    console.log('Added', employeeList.length, 'employee names to datalist');
+}
+
+function preparePrintSummary() {
+    // Ensure revenue centers are calculated before printing
+    calculateRevenueCenters();
+    
+    // Set date
+    const dateSelector = document.getElementById('dateSelector');
+    if (dateSelector) {
+        document.getElementById('print_date').textContent = dateSelector.value;
+    }
+    
+    // Populate employee entries
+    const employeesBody = document.getElementById('print_employees');
+    employeesBody.innerHTML = '';
+    employees.forEach(emp => {
+        const totalSales = (emp.beer || 0) + (emp.liquor || 0) + (emp.wine || 0) + (emp.food || 0);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${emp.name}</td>
+            <td>${emp.shift}</td>
+            <td>${emp.area}</td>
+            <td>$${(emp.cash || 0).toFixed(2)}</td>
+            <td>$${(emp.cc_tips || 0).toFixed(2)}</td>
+            <td>$${(emp.beer || 0).toFixed(2)}</td>
+            <td>$${(emp.liquor || 0).toFixed(2)}</td>
+            <td>$${(emp.wine || 0).toFixed(2)}</td>
+            <td>$${(emp.food || 0).toFixed(2)}</td>
+            <td>$${totalSales.toFixed(2)}</td>
+        `;
+        employeesBody.appendChild(row);
+    });
+    
+    // Helper function to safely get text content
+    const getText = (id) => {
+        const el = document.getElementById(id);
+        if (!el) {
+            console.log('Element not found:', id);
+            return '0.00';
+        }
+        const text = el.textContent || '0.00';
+        console.log(`${id}: ${text}`);
+        return text;
+    };
+    
+    // Populate totals
+    document.getElementById('print_day_cash').textContent = getText('day_total_cash');
+    document.getElementById('print_day_cc_tips').textContent = getText('day_total_cc_tips');
+    document.getElementById('print_day_credit').textContent = getText('day_total_credit');
+    document.getElementById('print_day_beer').textContent = getText('day_total_beer');
+    document.getElementById('print_day_liquor').textContent = getText('day_total_liquor');
+    document.getElementById('print_day_wine').textContent = getText('day_total_wine');
+    document.getElementById('print_day_food').textContent = getText('day_total_food');
+    document.getElementById('print_day_sales').textContent = getText('day_total_sales_calc');
+    
+    document.getElementById('print_night_cash').textContent = getText('night_total_cash');
+    document.getElementById('print_night_cc_tips').textContent = getText('night_total_cc_tips');
+    document.getElementById('print_night_credit').textContent = getText('night_total_credit');
+    document.getElementById('print_night_beer').textContent = getText('night_total_beer');
+    document.getElementById('print_night_liquor').textContent = getText('night_total_liquor');
+    document.getElementById('print_night_wine').textContent = getText('night_total_wine');
+    document.getElementById('print_night_food').textContent = getText('night_total_food');
+    document.getElementById('print_night_sales').textContent = getText('night_total_sales_calc');
+    
+    document.getElementById('print_total_cash').textContent = getText('total_cash');
+    document.getElementById('print_total_cc_tips').textContent = getText('total_cc_tips');
+    document.getElementById('print_total_credit').textContent = getText('total_credit');
+    document.getElementById('print_total_beer').textContent = getText('total_beer');
+    document.getElementById('print_total_liquor').textContent = getText('total_liquor');
+    document.getElementById('print_total_wine').textContent = getText('total_wine');
+    document.getElementById('print_total_food').textContent = getText('total_food');
+    document.getElementById('print_total_sales').textContent = getText('total_sales_calc');
+    
+    // Populate revenue centers - with additional wait to ensure calculation is complete
+    setTimeout(() => {
+        console.log('Populating revenue centers...');
+        const dayBar = getText('dayBar');
+        const dayDining = getText('dayDining');
+        const dayToGo = getText('dayToGo');
+        const nightBar = getText('nightBar');
+        const nightDining = getText('nightDining');
+        const nightToGo = getText('nightToGo');
+        const totalBar = getText('totalBar');
+        const totalDining = getText('totalDining');
+        const totalToGo = getText('totalToGo');
+        
+        document.getElementById('print_day_bar').textContent = dayBar;
+        document.getElementById('print_day_dining').textContent = dayDining;
+        document.getElementById('print_day_togo').textContent = dayToGo;
+        
+        document.getElementById('print_night_bar').textContent = nightBar;
+        document.getElementById('print_night_dining').textContent = nightDining;
+        document.getElementById('print_night_togo').textContent = nightToGo;
+        
+        document.getElementById('print_total_bar').textContent = totalBar;
+        document.getElementById('print_total_dining').textContent = totalDining;
+        document.getElementById('print_total_togo').textContent = totalToGo;
+        
+        console.log('Revenue centers populated');
+    }, 100);
+    
+    // Populate cash deductions
+    const deductionsBody = document.getElementById('print_deductions');
+    deductionsBody.innerHTML = '';
+    let totalDeductions = 0;
+    document.querySelectorAll('.cash-deduction-row').forEach(row => {
+        const desc = row.querySelector('input[name="deduction_desc"]')?.value || '';
+        const location = row.querySelector('input[name="deduction_location"]')?.value || '';
+        const amount = parseFloat(row.querySelector('input[name="deduction_amount"]')?.value) || 0;
+        
+        if (desc || location || amount > 0) {
+            totalDeductions += amount;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${desc}</td>
+                <td>${location}</td>
+                <td>$${amount.toFixed(2)}</td>
+            `;
+            deductionsBody.appendChild(tr);
+        }
+    });
+    document.getElementById('print_total_deductions').textContent = totalDeductions.toFixed(2);
+    
+    // Populate expected deposit
+    document.getElementById('print_deposit_cash').textContent = getText('deposit_total_cash');
+    document.getElementById('print_deposit_cc_tips').textContent = getText('deposit_total_cc_tips');
+    document.getElementById('print_deposit_deductions').textContent = getText('deposit_cash_deductions');
+    document.getElementById('print_expected_deposit').textContent = getText('expected_deposit');
+}
+</script>
+
+<style>
+.employee-row:hover {
+    background-color: #f8f9fa !important;
+}
+
+.print-only {
+    display: none;
+}
+
+@media print {
+    /* Hide all interactive elements and cards */
+    .btn, .card-header, .form-control, .form-select, 
+    input[type="date"], input[type="file"], form, 
+    .card, .container-fluid > .d-flex, .bi-chevron-down, 
+    .bi-chevron-up, nav, footer {
+        display: none !important;
+    }
+    
+    /* Show print summary */
+    .print-only {
+        display: block !important;
+    }
+    
+    /* Print layout - optimized for single page */
+    body {
+        font-size: 8pt;
+        line-height: 1.2;
+    }
+    
+    .print-header {
+        text-align: center;
+        margin-bottom: 10px;
+        border-bottom: 2px solid #000;
+        padding-bottom: 5px;
+    }
+    
+    .print-header h2 {
+        margin: 0;
+        font-size: 14pt;
+        font-weight: bold;
+    }
+    
+    .print-header p {
+        margin: 2px 0 0 0;
+        font-size: 9pt;
+    }
+    
+    .print-section {
+        margin-bottom: 12px;
+        page-break-inside: avoid;
+    }
+    
+    .print-section h3 {
+        font-size: 10pt;
+        font-weight: bold;
+        margin: 0 0 4px 0;
+        border-bottom: 1px solid #333;
+        padding-bottom: 2px;
+    }
+    
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 5px;
+        font-size: 7pt;
+    }
+    
+    .print-table th,
+    .print-table td {
+        border: 1px solid #333;
+        padding: 3px 4px;
+        text-align: left;
+    }
+    
+    .print-table th {
+        background-color: #e8e8e8;
+        font-weight: bold;
+        font-size: 7pt;
+    }
+    
+    .print-table .total-row {
+        background-color: #f0f0f0;
+        font-weight: bold;
+        border-top: 2px solid #000;
+    }
+    
+    .print-table .text-danger {
+        color: #000 !important;
+    }
+    
+    /* Compact specific sections */
+    #print_employees tr td {
+        padding: 2px 3px;
+    }
+    
+    /* Page setup */
+    @page {
+        size: letter;
+        margin: 0.3in 0.4in;
+    }
+    
+    /* Force compact layout */
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+</style>
+{% endblock %}
+

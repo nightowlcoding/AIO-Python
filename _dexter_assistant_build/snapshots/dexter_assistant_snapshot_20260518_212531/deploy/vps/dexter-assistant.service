@@ -1,0 +1,20 @@
+[Unit]
+Description=Dexter Assistant (Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/dexter-assistant
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/opt/dexter-assistant/.venv/bin
+ExecStart=/opt/dexter-assistant/.venv/bin/gunicorn --workers 2 --threads 4 --bind 127.0.0.1:5080 dexter_assistant:app
+Restart=always
+RestartSec=3
+
+# Keep file permissions predictable when writing runtime logs
+UMask=002
+
+[Install]
+WantedBy=multi-user.target

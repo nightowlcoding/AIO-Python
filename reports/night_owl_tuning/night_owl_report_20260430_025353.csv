@@ -1,0 +1,32 @@
+section,key,value
+meta,timestamp,2026-04-30T02:53:53.119447
+meta,action,Open Control Panel
+meta,action_status,error
+meta,action_error,Command failed with exit code 1
+system,hostname,LilChicoLaptop
+system,os,Windows-11-10.0.26200-SP0
+system,uptime,0d 0h 21m
+storage,c_total_gb,924.55
+storage,c_used_gb,644.52
+storage,c_free_gb,280.02
+storage,c_free_pct,30.29
+tuning,power_plan,Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+tuning,game_mode,ERROR: ERROR: The system was unable to find the specified registry key or value.
+tuning,defender_realtime_protection,True
+tuning,startup_count,11
+process,name,pid,memory
+process,WorkloadsSessionHost.exe,19660,"4,259,440 K"
+process,Code.exe,16032,"1,374,888 K"
+process,Code.exe,25000,"1,261,608 K"
+process,WorkloadsSessionHost.exe,32124,"870,864 K"
+process,GoogleDriveFS.exe,24828,"453,416 K"
+process,WorkloadsSessionHost.exe,13260,"415,308 K"
+process,WorkloadsSessionHost.exe,16764,"318,676 K"
+process,MsMpEng.exe,7336,"313,616 K"
+process,explorer.exe,13712,"306,512 K"
+process,ollama.exe,28048,"297,616 K"
+process,Code.exe,15252,"293,676 K"
+process,Code.exe,23052,"275,516 K"
+process,ChatGPT.exe,5708,"242,768 K"
+process,dwm.exe,2852,"226,628 K"
+process,MicrosoftSecurityApp.exe,27388,"226,216 K"

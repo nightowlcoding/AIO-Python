@@ -1,0 +1,5 @@
+captured_at,page_title,url,check_id,employee,datetime,location,action,reason,status,payment_type,balance_due,tip_amount,amount,void_amount,discount_amount,comp_amount,refund_amount
+2026-03-07T19:01:00Z,Order Details,https://www.toasttab.com/restaurants/admin/check/36,36,Isabella Salinas,"3/7/2026, 1:10 PM",Bar,open,"Captured from check list before opening ticket",Open,,19.25,0.00,19.25,0.00,0.00,0.00,0.00
+2026-03-07T19:05:00Z,Order Details,https://www.toasttab.com/restaurants/admin/check/26,26,Isabella Salinas,"3/7/2026, 12:36 PM",Bar,"status:paid",,"Paid",Card,0.00,0.00,24.61,0.00,0.00,0.00,0.00
+2026-03-07T21:15:00Z,Order Details,https://www.toasttab.com/restaurants/admin/check/99,99,John Doe,"3/7/2026, 2:13 AM",Bar,"void; override","Manager override",Open,Cash,0.00,0.00,40.00,18.00,8.00,0.00,0.00
+2026-03-07T21:20:00Z,Order Details,https://www.toasttab.com/restaurants/admin/check/100,100,John Doe,"3/7/2026, 2:20 AM",Bar,"refund","Guest complaint",Paid,Card,0.00,0.00,65.00,0.00,0.00,0.00,55.00

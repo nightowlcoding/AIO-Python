@@ -1,0 +1,43 @@
+Night Owl Tuning - Health Report
+============================================
+Timestamp: 2026-04-30T02:56:57.462957
+Action: Upgrade Installed Apps (winget)
+Action status: success
+
+System
+--------------------------------------------
+Hostname: LilChicoLaptop
+OS: Windows-11-10.0.26200-SP0
+Uptime: 0d 0h 24m
+
+Storage
+--------------------------------------------
+C: Total GB: 924.55
+C: Used GB: 632.85
+C: Free GB: 291.70
+C: Free %: 31.55
+
+Tuning Status
+--------------------------------------------
+Power plan query: Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
+Game mode query: ERROR: ERROR: The system was unable to find the specified registry key or value.
+Defender realtime protection: True
+Startup item count: 11
+
+Top Processes by Memory
+--------------------------------------------
+WorkloadsSessionHost.exe       PID= 19660  MEM=4,258,584 K
+Code.exe                       PID= 16032  MEM=1,373,676 K
+Code.exe                       PID= 25000  MEM=1,261,556 K
+WorkloadsSessionHost.exe       PID= 32124  MEM=870,628 K
+dllhost.exe                    PID= 33440  MEM=482,928 K
+GoogleDriveFS.exe              PID= 24828  MEM=456,288 K
+WorkloadsSessionHost.exe       PID= 13260  MEM=414,576 K
+MsMpEng.exe                    PID=  7336  MEM=398,336 K
+explorer.exe                   PID= 13712  MEM=378,028 K
+WorkloadsSessionHost.exe       PID= 16764  MEM=317,944 K
+ollama.exe                     PID= 28048  MEM=297,600 K
+Code.exe                       PID= 15252  MEM=294,376 K
+PowerToys.Settings.exe         PID= 29316  MEM=253,216 K
+ChatGPT.exe                    PID=  5708  MEM=242,728 K
+Code.exe                       PID= 23052  MEM=241,880 K

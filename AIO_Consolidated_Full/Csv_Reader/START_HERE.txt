@@ -1,0 +1,15 @@
+﻿App enclosure created from top-level Python file.
+
+Original source: C:\Users\arnol\OneDrive\Desktop\AIO-Python\Csv_Reader.py
+Copied entry file: source\\Csv_Reader.py
+
+Folders created:
+- source
+- data
+- config
+- logs
+- backups
+- docs
+- scripts
+
+This enclosure is additive and does not delete or move any originals.
