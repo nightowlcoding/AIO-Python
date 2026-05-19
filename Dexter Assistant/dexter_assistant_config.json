@@ -23,7 +23,10 @@
       "entrypoint": "app.py",
       "base_url": "http://127.0.0.1:5003",
       "health_path": "/",
-      "env": {}
+      "env": {
+        "IC3_FORCE_PROD": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
     }
   }
 }

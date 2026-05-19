@@ -2,6 +2,7 @@ from flask import jsonify
 from pathlib import Path
 import json
 import marshal
+import os
 import re
 from datetime import date, datetime, timedelta
 
@@ -2182,6 +2183,31 @@ def _exec_bytecode() -> None:
     exec(code, globals(), globals())
 
 
+def _force_production_flask_run() -> None:
+    try:
+        from flask import Flask
+    except Exception:
+        return
+
+    if getattr(Flask, "_ic3_run_patched", False):
+        return
+
+    original_run = Flask.run
+
+    def _run_with_safe_defaults(self, *args, **kwargs):
+        force_prod = os.getenv("IC3_FORCE_PROD", "1").strip().lower() not in {"0", "false", "no"}
+        if force_prod:
+            # Prevent Flask reloader/debug from forking and causing manager pid churn.
+            kwargs["debug"] = False
+            kwargs["use_reloader"] = False
+            kwargs.setdefault("host", "127.0.0.1")
+            kwargs.setdefault("port", 5003)
+        return original_run(self, *args, **kwargs)
+
+    Flask.run = _run_with_safe_defaults
+    Flask._ic3_run_patched = True
+
+
 def _find_icon_file() -> Path | None:
     for candidate in ICON_CANDIDATES:
         if candidate.exists():
@@ -2283,6 +2309,7 @@ def _patch_bulk_upload_limit_runtime() -> None:
 _install_global_flask_response_patch()
 _install_order_csv_rename_api_patch()
 _install_product_detail_api_patch()
+_force_production_flask_run()
 _exec_bytecode()
 _register_compat_inventory_endpoints(globals().get("app"))
 _register_invoice_import_log_endpoint(globals().get("app"))
