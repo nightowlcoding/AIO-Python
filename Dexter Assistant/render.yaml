@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: dexter-assistant
+    env: python
+    rootDir: Dexter Assistant
+    buildCommand: pip install -r requirements_dexter_assistant.txt
+    startCommand: gunicorn --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT dexter_assistant:app
+    healthCheckPath: /api/status
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PM_OPEN_BROWSER
+        value: "0"
+      - key: PM_DEBUG
+        value: "0"
