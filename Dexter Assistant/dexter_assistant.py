@@ -474,7 +474,7 @@ LOGIN_HTML = """
             <input id="login-password" type="password" name="password" required autocomplete="current-password" />
             <div class="row">
                 <label class="check"><input id="show-password" type="checkbox" /> Show password</label>
-                <label class="check"><input id="save-password" type="checkbox" /> Save password</label>
+                <label class="check"><input id="save-password" type="checkbox" /> Remember username</label>
             </div>
             <button type="submit">Sign In</button>
             {% if error %}<div class="error">{{ error }}</div>{% endif %}
@@ -493,7 +493,6 @@ LOGIN_HTML = """
                 const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
                 if (saved && typeof saved === 'object') {
                     if (typeof saved.username === 'string') usernameInput.value = saved.username;
-                    if (typeof saved.password === 'string') passwordInput.value = saved.password;
                     showPassword.checked = !!saved.showPassword;
                     savePassword.checked = !!saved.savePassword;
                     if (showPassword.checked) passwordInput.type = 'text';
@@ -510,7 +509,6 @@ LOGIN_HTML = """
                 if (savePassword.checked) {
                     localStorage.setItem(storageKey, JSON.stringify({
                         username: usernameInput.value,
-                        password: passwordInput.value,
                         showPassword: showPassword.checked,
                         savePassword: true
                     }));
