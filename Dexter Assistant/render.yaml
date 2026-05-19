@@ -4,6 +4,9 @@ services:
     env: python
     buildCommand: pip install -r "Dexter Assistant/requirements_dexter_assistant.txt"
     startCommand: gunicorn --chdir "Dexter Assistant" --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT dexter_assistant:app
+    domains:
+      - dexterassist.com
+      - www.dexterassist.com
     healthCheckPath: /api/status
     envVars:
       - key: PYTHON_VERSION
