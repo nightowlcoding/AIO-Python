@@ -15,11 +15,12 @@ from urllib.parse import urljoin
 from urllib.request import urlopen
 
 import requests
-from flask import Flask, Response, jsonify, redirect, render_template_string, request
+from flask import Flask, Response, jsonify, redirect, render_template_string, request, send_file
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "dexter_assistant_config.json"
 RUNTIME_LOG_DIR = ROOT / "runtime_logs"
+FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
 
 
 DASHBOARD_HTML = """
@@ -625,6 +626,13 @@ class AppManager:
 CONFIG = load_config()
 MANAGER = AppManager(CONFIG)
 app = Flask(__name__, static_folder=None)
+
+
+@app.route("/favicon.ico")
+def front_door_favicon() -> Response:
+    if FRONT_DOOR_FAVICON.exists():
+        return send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=3600)
+    return jsonify({"ok": False, "message": "Not found"}), 404
 
 
 @app.route("/")
