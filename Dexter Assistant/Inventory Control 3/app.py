@@ -1,13 +1,16 @@
-from flask import jsonify
+from flask import jsonify, request
 from pathlib import Path
 import json
 import marshal
 import os
 import re
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from datetime import date, datetime, timedelta
 
 ROOT = Path(__file__).resolve().parent
 INVOICE_IMPORT_LOG_PATH = ROOT / "data" / "invoice_import_log.json"
+PRODUCTMIX_SYNC_CACHE_PATH = ROOT / "data" / "productmix_sync_cache.json"
 BYTECODE_FILE = ROOT / "app.pyc"
 ICON_CANDIDATES = (
     ROOT / "favicon.ico",
@@ -18,6 +21,229 @@ ICON_CANDIDATES = (
 )
 
 ORDER_CSV_DATE_PREFIX = re.compile(r"^(\d{4})(\d{2})(\d{2})\d+\.csv$", re.IGNORECASE)
+
+
+def _read_productmix_sync_cache() -> dict:
+    try:
+        with PRODUCTMIX_SYNC_CACHE_PATH.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if isinstance(payload, dict):
+            return payload
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+    return {}
+
+
+def _write_productmix_sync_cache(payload: dict) -> None:
+    PRODUCTMIX_SYNC_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with PRODUCTMIX_SYNC_CACHE_PATH.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=True, indent=2)
+
+
+def _normalize_productmix_categories(payload: dict) -> dict:
+    categories = payload.get("categories") if isinstance(payload, dict) else []
+    if not isinstance(categories, list):
+        categories = []
+
+    normalized_rows = []
+    for row in categories:
+        if not isinstance(row, dict):
+            continue
+
+        normalized_rows.append(
+            {
+                "id": row.get("id"),
+                "name": str(row.get("name") or "").strip(),
+                "case_quantity": row.get("case_quantity"),
+                "is_weight_based": bool(row.get("is_weight_based")),
+                "oz_per_piece": row.get("oz_per_piece"),
+            }
+        )
+
+    return {
+        "restaurant": payload.get("restaurant") if isinstance(payload, dict) else None,
+        "categories": normalized_rows,
+        "category_count": len(normalized_rows),
+    }
+
+
+def _sync_productmix_categories_from_remote(base_url: str, timeout_seconds: float = 12.0) -> dict:
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        base = "http://127.0.0.1:5050"
+    target_url = f"{base}/api/categories"
+
+    req = urllib_request.Request(
+        target_url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "IC3-ProductMix-Sync/1.0",
+        },
+        method="GET",
+    )
+
+    with urllib_request.urlopen(req, timeout=timeout_seconds) as response:
+        status_code = int(getattr(response, "status", 200) or 200)
+        raw_text = response.read().decode("utf-8", errors="replace")
+
+    if status_code >= 400:
+        raise RuntimeError(f"ProductMix responded with status {status_code}")
+
+    parsed = json.loads(raw_text or "{}")
+    normalized = _normalize_productmix_categories(parsed)
+
+    return {
+        "source_url": target_url,
+        "synced_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "status": "ok",
+        **normalized,
+    }
+
+PRODUCTMIX_SYNC_UI_SCRIPT = r"""
+<script>
+(function () {
+    if (window.__ic3ProductMixSyncUiInstalled) return;
+    window.__ic3ProductMixSyncUiInstalled = true;
+
+    const styleId = 'ic3-productmix-sync-style';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.type = 'text/css';
+        style.textContent = [
+            '#ic3ProductMixSyncPanel { display: flex; align-items: center; gap: 8px; margin: 10px 0; flex-wrap: wrap; }',
+            '#ic3ProductMixSyncButton { min-height: 40px; border: 1px solid #1d4ed8; border-radius: 8px; background: #2563eb; color: #ffffff; font-weight: 700; padding: 8px 12px; cursor: pointer; }',
+            '#ic3ProductMixSyncButton[disabled] { opacity: 0.65; cursor: default; }',
+            '#ic3ProductMixSyncStatus { font-size: 0.9rem; color: #334155; }',
+            '@media (max-width: 768px) {',
+            '  #ic3ProductMixSyncPanel { display: grid; grid-template-columns: 1fr; gap: 8px; }',
+            '  #ic3ProductMixSyncButton { min-height: 44px; width: 100%; font-size: 1rem; }',
+            '}'
+        ].join('\n');
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function ensurePanel() {
+        const inventoryTab = document.getElementById('inventory');
+        const controls = document.querySelector('.inventory-controls-panel') || document.getElementById('categoriesContainer');
+        if (!inventoryTab || !controls || !controls.parentNode) {
+            return null;
+        }
+
+        let panel = document.getElementById('ic3ProductMixSyncPanel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'ic3ProductMixSyncPanel';
+            panel.innerHTML = [
+                '<button id="ic3ProductMixSyncButton" type="button">Sync ProductMix</button>',
+                '<span id="ic3ProductMixSyncStatus">Waiting for first sync check...</span>'
+            ].join('');
+
+            if (controls.classList && controls.classList.contains('inventory-controls-panel')) {
+                controls.parentNode.insertBefore(panel, controls.nextSibling);
+            } else {
+                controls.parentNode.insertBefore(panel, controls);
+            }
+        }
+
+        return panel;
+    }
+
+    function setStatus(message, isError) {
+        const el = document.getElementById('ic3ProductMixSyncStatus');
+        if (!el) return;
+        el.textContent = message;
+        el.style.color = isError ? '#991b1b' : '#334155';
+    }
+
+    function formatLastSync(isoText) {
+        const raw = String(isoText || '').trim();
+        if (!raw) {
+            return 'never';
+        }
+        const dt = new Date(raw);
+        if (Number.isNaN(dt.getTime())) {
+            return raw;
+        }
+        return dt.toLocaleString();
+    }
+
+    async function refreshStatus() {
+        try {
+            const response = await fetch('/api/sync/productmix/status');
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.message || 'Unable to load sync status');
+            }
+            const count = Number(payload.category_count || 0);
+            const lastSync = formatLastSync(payload.last_sync);
+            setStatus('Categories: ' + count + ' | Last sync: ' + lastSync, false);
+        } catch (error) {
+            setStatus('Status error: ' + error.message, true);
+        }
+    }
+
+    async function runSync() {
+        const button = document.getElementById('ic3ProductMixSyncButton');
+        if (!button) return;
+        button.disabled = true;
+        setStatus('Sync in progress...', false);
+
+        try {
+            const response = await fetch('/api/sync/productmix/categories', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.message || ('Sync failed (' + response.status + ')'));
+            }
+
+            const count = Number(payload.category_count || 0);
+            const lastSync = formatLastSync(payload.synced_at_utc);
+            setStatus('Sync complete. Categories: ' + count + ' | Last sync: ' + lastSync, false);
+        } catch (error) {
+            setStatus('Sync failed: ' + error.message, true);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    function install() {
+        const panel = ensurePanel();
+        if (!panel) {
+            return;
+        }
+
+        const button = document.getElementById('ic3ProductMixSyncButton');
+        if (button && button.dataset.ic3SyncBound !== '1') {
+            button.dataset.ic3SyncBound = '1';
+            button.addEventListener('click', function () {
+                runSync();
+            });
+        }
+
+        refreshStatus();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', install);
+    } else {
+        install();
+    }
+
+    const observer = new MutationObserver(function () {
+        if (!document.getElementById('ic3ProductMixSyncPanel')) {
+            install();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+"""
 
 OVERRIDE_SCRIPT = r"""
 <script>
@@ -1522,6 +1748,334 @@ PRODUCT_DETAIL_SCRIPT = r"""
 </script>
 """
 
+MOBILE_UI_SCRIPT = r"""
+<script>
+(function () {
+    if (window.__ic3MobileUiInstalled) return;
+    window.__ic3MobileUiInstalled = true;
+
+    const styleId = 'ic3-mobile-enhancement-style';
+    if (document.getElementById(styleId)) {
+        return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.type = 'text/css';
+    style.textContent = [
+        '@media (max-width: 768px) {',
+        '  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }',
+        '  body { font-size: 16px !important; line-height: 1.45; }',
+        '  .container { border-radius: 0 !important; }',
+        '  .header { padding: 18px 12px !important; }',
+        '  .header h1 { font-size: 2rem !important; line-height: 1.2 !important; }',
+        '  .header p { font-size: 1.05rem !important; margin-top: 6px !important; }',
+        '  .tabs { display: flex !important; overflow-x: auto !important; scroll-snap-type: x mandatory; }',
+        '  .tab { flex: 0 0 auto !important; min-width: 130px !important; padding: 14px 14px !important; font-size: 1rem !important; line-height: 1.2 !important; scroll-snap-align: start; }',
+        '  .tab-content { padding: 14px !important; }',
+        '  .location-selector, .date-selector { display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; align-items: stretch !important; }',
+        '  .location-option { min-height: 52px; padding: 10px 12px !important; }',
+        '  .location-option label { font-size: 1rem !important; }',
+        '  .location-option input[type="radio"] { width: 20px; height: 20px; }',
+        '  .date-selector label { font-size: 1rem !important; font-weight: 600; }',
+        '  .date-selector input, .date-selector button, .date-selector .btn { width: 100% !important; min-height: 46px !important; font-size: 1rem !important; }',
+        '  .inventory-controls-panel { grid-template-columns: 1fr !important; gap: 10px !important; padding: 12px !important; }',
+        '  .control-group label { font-size: 1rem !important; }',
+        '  .search-box, .control-group select { min-height: 44px !important; font-size: 1rem !important; padding: 10px 12px !important; }',
+        '  .btn { min-height: 46px !important; font-size: 1rem !important; padding: 10px 14px !important; }',
+        '  .quantity-input { width: 84px !important; min-height: 40px !important; font-size: 1rem !important; }',
+        '  .category-header { font-size: 1.15rem !important; padding: 10px !important; }',
+        '  .categories-container { padding: 8px !important; }',
+        '  .category-table { table-layout: fixed !important; width: 100% !important; }',
+        '  .category-table th, .category-table td { font-size: 0.9rem !important; padding: 8px 6px !important; overflow-wrap: anywhere; }',
+        '  .category-table th:nth-child(1), .category-table td:nth-child(1) { width: 42% !important; }',
+        '  .category-table th:nth-child(2), .category-table td:nth-child(2) { width: 24% !important; }',
+        '  .category-table th:nth-child(3), .category-table td:nth-child(3) { width: 14% !important; text-align: center !important; }',
+        '  .category-table th:nth-child(4), .category-table td:nth-child(4) { width: 20% !important; }',
+        '  .row-controls { align-items: flex-start !important; }',
+        '  .edit-btn { min-height: 34px !important; font-size: 0.85rem !important; }',
+        '  div[style*="text-align: center; margin: 20px 0;"] { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; }',
+        '  #ic3MobileViewToggle { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 12px 0; }',
+        '  #ic3MobileViewToggle button { min-height: 44px; border: 1px solid #d1d5db; border-radius: 8px; background: #f8fafc; color: #1f2937; font-size: 0.95rem; font-weight: 700; }',
+        '  #ic3MobileViewToggle button.active { background: #2563eb; border-color: #1d4ed8; color: #ffffff; }',
+        '  #ic3MobileCards { display: none; gap: 10px; margin-top: 8px; }',
+        '  #ic3MobileCards.cards-visible { display: grid !important; grid-template-columns: 1fr; }',
+        '  .ic3-mobile-card { border: 1px solid #dbe4f0; background: #ffffff; border-radius: 10px; padding: 10px; box-shadow: 0 2px 6px rgba(15,23,42,0.06); }',
+        '  .ic3-mobile-category { font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }',
+        '  .ic3-mobile-item { font-size: 0.95rem; font-weight: 700; color: #111827; line-height: 1.25; margin-bottom: 4px; }',
+        '  .ic3-mobile-meta { font-size: 0.82rem; color: #6b7280; margin-bottom: 8px; }',
+        '  .ic3-mobile-controls { display: grid; grid-template-columns: minmax(94px, 120px) 1fr; gap: 8px; align-items: center; }',
+        '  .ic3-mobile-controls input { min-height: 40px; font-size: 1rem; width: 100%; padding: 6px 10px; border: 2px solid #d1d5db; border-radius: 8px; }',
+        '  .ic3-mobile-controls button { min-height: 38px; font-size: 0.82rem; border-radius: 8px; }',
+        '  .ic3-table-hidden-mobile { display: none !important; }',
+        '}',
+        '@media (max-width: 480px) {',
+        '  .tab { min-width: 116px !important; font-size: 0.95rem !important; }',
+        '  .header h1 { font-size: 1.75rem !important; }',
+        '  .category-table th, .category-table td { font-size: 0.84rem !important; }',
+        '}'
+    ].join('\n');
+
+    const head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
+    head.appendChild(style);
+
+    const mobileQuery = window.matchMedia('(max-width: 768px)');
+    const storageKey = 'ic3-mobile-view-mode';
+    const state = {
+        mode: localStorage.getItem(storageKey) === 'table' ? 'table' : 'cards',
+        scheduled: false,
+    };
+
+    function isMobile() {
+        return !!mobileQuery.matches;
+    }
+
+    function ensureMobileHosts() {
+        const inventoryTab = document.getElementById('inventory');
+        const categories = document.getElementById('categoriesContainer');
+        if (!inventoryTab || !categories) {
+            return null;
+        }
+
+        let toggle = document.getElementById('ic3MobileViewToggle');
+        if (!toggle) {
+            toggle = document.createElement('div');
+            toggle.id = 'ic3MobileViewToggle';
+            toggle.innerHTML = [
+                '<button type="button" data-mode="cards">Card View</button>',
+                '<button type="button" data-mode="table">Table View</button>'
+            ].join('');
+            categories.parentNode.insertBefore(toggle, categories);
+            toggle.addEventListener('click', function (event) {
+                const button = event.target.closest('button[data-mode]');
+                if (!button) return;
+                state.mode = button.getAttribute('data-mode') || 'cards';
+                localStorage.setItem(storageKey, state.mode);
+                applyMode();
+            });
+        }
+
+        let cards = document.getElementById('ic3MobileCards');
+        if (!cards) {
+            cards = document.createElement('div');
+            cards.id = 'ic3MobileCards';
+            categories.parentNode.insertBefore(cards, categories.nextSibling);
+        }
+
+        return { toggle: toggle, cards: cards, categories: categories };
+    }
+
+    function safeText(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function buildCardDataFromRow(row) {
+        const cells = Array.from(row.cells || []);
+        const qtyInput = row.querySelector('input.quantity-input');
+        if (!qtyInput || !cells.length) {
+            return null;
+        }
+
+        const productId = safeText((qtyInput.id || '').replace(/^qty_/, ''));
+        const section = row.closest('.category-section');
+        const sectionHeader = section ? section.querySelector('.category-header') : null;
+        let category = safeText(sectionHeader ? sectionHeader.innerText : '');
+
+        const firstBadge = cells[0] ? cells[0].querySelector('span') : null;
+        const hasListBadge = !!firstBadge;
+        if (hasListBadge) {
+            category = safeText(firstBadge.innerText) || category;
+        }
+
+        let itemText = '';
+        let sizeText = '';
+        if (hasListBadge) {
+            itemText = safeText(cells[1] ? cells[1].innerText : '');
+            sizeText = safeText(cells[2] ? cells[2].innerText : '');
+        } else {
+            itemText = safeText(cells[0] ? cells[0].innerText : '');
+            sizeText = safeText(cells[1] ? cells[1].innerText : '');
+        }
+
+        const editButton = row.querySelector('button.edit-btn');
+        return {
+            category: category || 'Uncategorized',
+            item: itemText || ('Product ' + productId),
+            size: sizeText || '',
+            productId: productId,
+            qtyInput: qtyInput,
+            editButton: editButton,
+        };
+    }
+
+    function renderCards() {
+        const hosts = ensureMobileHosts();
+        if (!hosts) {
+            return;
+        }
+
+        const cardsRoot = hosts.cards;
+        cardsRoot.innerHTML = '';
+
+        const rows = Array.from(hosts.categories.querySelectorAll('tbody tr'));
+        const visibleRows = rows.filter(function (row) {
+            const input = row.querySelector('input.quantity-input');
+            if (!input) return false;
+            const styleInfo = window.getComputedStyle(row);
+            if (styleInfo.display === 'none' || styleInfo.visibility === 'hidden') return false;
+            return true;
+        });
+
+        if (!visibleRows.length) {
+            cardsRoot.innerHTML = '<div class="ic3-mobile-card"><div class="ic3-mobile-item">No items match the current filters.</div></div>';
+            return;
+        }
+
+        visibleRows.forEach(function (row) {
+            const data = buildCardDataFromRow(row);
+            if (!data) return;
+
+            const card = document.createElement('div');
+            card.className = 'ic3-mobile-card';
+
+            const category = document.createElement('div');
+            category.className = 'ic3-mobile-category';
+            category.textContent = data.category;
+
+            const item = document.createElement('div');
+            item.className = 'ic3-mobile-item';
+            item.textContent = data.item;
+
+            const meta = document.createElement('div');
+            meta.className = 'ic3-mobile-meta';
+            meta.textContent = (data.size ? data.size + ' | ' : '') + 'ID: ' + data.productId;
+
+            const controls = document.createElement('div');
+            controls.className = 'ic3-mobile-controls';
+
+            const cardQty = document.createElement('input');
+            cardQty.type = 'number';
+            cardQty.min = data.qtyInput.min || '0';
+            cardQty.step = data.qtyInput.step || '0.25';
+            cardQty.value = data.qtyInput.value || '0';
+            cardQty.setAttribute('inputmode', 'decimal');
+            cardQty.addEventListener('input', function () {
+                data.qtyInput.value = cardQty.value;
+                data.qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            cardQty.addEventListener('change', function () {
+                data.qtyInput.value = cardQty.value;
+                data.qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            controls.appendChild(cardQty);
+
+            const actionWrap = document.createElement('div');
+            if (data.editButton) {
+                const editAction = document.createElement('button');
+                editAction.type = 'button';
+                editAction.className = 'btn';
+                editAction.textContent = 'Edit';
+                editAction.addEventListener('click', function () {
+                    data.editButton.click();
+                });
+                actionWrap.appendChild(editAction);
+            }
+            controls.appendChild(actionWrap);
+
+            card.appendChild(category);
+            card.appendChild(item);
+            card.appendChild(meta);
+            card.appendChild(controls);
+            cardsRoot.appendChild(card);
+        });
+    }
+
+    function applyMode() {
+        const hosts = ensureMobileHosts();
+        if (!hosts) {
+            return;
+        }
+
+        const buttons = Array.from(hosts.toggle.querySelectorAll('button[data-mode]'));
+        buttons.forEach(function (button) {
+            const isActive = button.getAttribute('data-mode') === state.mode;
+            button.classList.toggle('active', isActive);
+        });
+
+        if (!isMobile()) {
+            hosts.toggle.style.display = 'none';
+            hosts.cards.classList.remove('cards-visible');
+            hosts.categories.classList.remove('ic3-table-hidden-mobile');
+            return;
+        }
+
+        hosts.toggle.style.display = 'grid';
+        renderCards();
+        const showCards = state.mode === 'cards';
+        hosts.cards.classList.toggle('cards-visible', showCards);
+        hosts.categories.classList.toggle('ic3-table-hidden-mobile', showCards);
+    }
+
+    function scheduleRefresh() {
+        if (state.scheduled) {
+            return;
+        }
+        state.scheduled = true;
+        window.requestAnimationFrame(function () {
+            state.scheduled = false;
+            applyMode();
+        });
+    }
+
+    function installRefreshHooks() {
+        const ids = ['searchBox', 'sortBy', 'viewMode', 'showEditButtons'];
+        ids.forEach(function (id) {
+            const el = document.getElementById(id);
+            if (!el || el.dataset.ic3MobileHooked === '1') {
+                return;
+            }
+            el.dataset.ic3MobileHooked = '1';
+            el.addEventListener('input', scheduleRefresh);
+            el.addEventListener('change', scheduleRefresh);
+        });
+
+        if (!document.body.dataset.ic3MobileObserverInstalled) {
+            const observer = new MutationObserver(function () {
+                scheduleRefresh();
+            });
+            observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+            document.body.dataset.ic3MobileObserverInstalled = '1';
+        }
+    }
+
+    if (mobileQuery && typeof mobileQuery.addEventListener === 'function') {
+        mobileQuery.addEventListener('change', scheduleRefresh);
+    } else if (mobileQuery && typeof mobileQuery.addListener === 'function') {
+        mobileQuery.addListener(scheduleRefresh);
+    }
+
+    const runInstall = function () {
+        installRefreshHooks();
+        applyMode();
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runInstall);
+    } else {
+        runInstall();
+    }
+
+    // Mobile smoke checklist:
+    // 1) Tabs readable + horizontally scrollable.
+    // 2) Location/date/search/sort controls are tap-friendly.
+    // 3) Card/Table toggle works and quantity edits stay in sync.
+    // 4) Quantity inputs and save/load buttons are easy to tap.
+    // 5) Desktop layout remains unchanged above 768px.
+})();
+</script>
+"""
+
 
 def _rewrite_bulk_upload_text(payload: str) -> str:
     literal_replacements = (
@@ -1571,6 +2125,12 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
 
     if "__ic3ProductDetailInstalled" not in updated and "</body>" in updated:
         updated = updated.replace("</body>", PRODUCT_DETAIL_SCRIPT + "\n</body>", 1)
+
+    if "__ic3MobileUiInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
+
+    if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", PRODUCTMIX_SYNC_UI_SCRIPT + "\n</body>", 1)
 
     return updated
 
@@ -2073,6 +2633,120 @@ def _register_invoice_import_log_endpoint(flask_app) -> None:
             return jsonify({"success": False, "message": str(exc)}), 500
 
 
+def _register_productmix_sync_endpoints(flask_app) -> None:
+    if flask_app is None:
+        return
+
+    def api_productmix_sync_status():
+        cache = _read_productmix_sync_cache()
+        return jsonify(
+            {
+                "success": True,
+                "configured_base_url": os.getenv("IC3_PRODUCTMIX_BASE_URL", "http://127.0.0.1:5050"),
+                "has_cache": bool(cache),
+                "last_sync": cache.get("synced_at_utc") if isinstance(cache, dict) else None,
+                "category_count": int((cache or {}).get("category_count") or 0),
+                "source_url": (cache or {}).get("source_url"),
+            }
+        )
+
+    def api_productmix_categories_sync():
+        if request.method == "GET":
+            cache = _read_productmix_sync_cache()
+            if not cache:
+                return jsonify({"success": True, "cached": False, "categories": [], "category_count": 0})
+            return jsonify({"success": True, "cached": True, **cache})
+
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            payload = {}
+
+        base_url = str(payload.get("base_url") or os.getenv("IC3_PRODUCTMIX_BASE_URL", "http://127.0.0.1:5050")).strip()
+        timeout_seconds = payload.get("timeout_seconds", 12)
+        try:
+            timeout_seconds = float(timeout_seconds)
+            if timeout_seconds <= 0:
+                timeout_seconds = 12.0
+            timeout_seconds = min(timeout_seconds, 60.0)
+        except (TypeError, ValueError):
+            timeout_seconds = 12.0
+
+        try:
+            synced = _sync_productmix_categories_from_remote(base_url, timeout_seconds=timeout_seconds)
+        except urllib_error.HTTPError as exc:
+            return jsonify({"success": False, "message": f"ProductMix HTTP error: {exc.code}", "source_url": base_url}), 502
+        except urllib_error.URLError as exc:
+            return jsonify({"success": False, "message": f"ProductMix connection error: {exc.reason}", "source_url": base_url}), 502
+        except json.JSONDecodeError as exc:
+            return jsonify({"success": False, "message": f"Invalid JSON from ProductMix: {exc}"}), 502
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+        _write_productmix_sync_cache(synced)
+        return jsonify({"success": True, **synced})
+
+    status_get_installed = False
+    categories_methods_installed = set()
+    for rule in flask_app.url_map.iter_rules():
+        if rule.rule == "/api/sync/productmix/status" and "GET" in rule.methods:
+            flask_app.view_functions[rule.endpoint] = api_productmix_sync_status
+            status_get_installed = True
+
+        if rule.rule == "/api/sync/productmix/categories":
+            if "GET" in rule.methods or "POST" in rule.methods:
+                flask_app.view_functions[rule.endpoint] = api_productmix_categories_sync
+            if "GET" in rule.methods:
+                categories_methods_installed.add("GET")
+            if "POST" in rule.methods:
+                categories_methods_installed.add("POST")
+
+    if not status_get_installed:
+        flask_app.add_url_rule(
+            "/api/sync/productmix/status",
+            endpoint="ic3_productmix_sync_status_runtime",
+            view_func=api_productmix_sync_status,
+            methods=["GET"],
+        )
+
+    missing_methods = [m for m in ("GET", "POST") if m not in categories_methods_installed]
+    if missing_methods:
+        flask_app.add_url_rule(
+            "/api/sync/productmix/categories",
+            endpoint="ic3_productmix_categories_sync_runtime_" + "_".join(missing_methods).lower(),
+            view_func=api_productmix_categories_sync,
+            methods=missing_methods,
+        )
+
+
+def _install_productmix_sync_api_patch() -> None:
+    try:
+        from flask import Flask
+    except Exception:
+        return
+
+    if getattr(Flask, "_ic3_productmix_sync_patch_installed", False):
+        return
+
+    original_init = Flask.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        try:
+            _register_productmix_sync_endpoints(self)
+        except Exception:
+            pass
+
+    Flask.__init__ = patched_init
+    Flask._ic3_productmix_sync_patch_installed = True
+
+    existing_app = globals().get("app")
+    if existing_app is not None:
+        try:
+            _register_productmix_sync_endpoints(existing_app)
+        except Exception:
+            pass
+
+
 def _register_compat_inventory_endpoints(flask_app) -> None:
     if flask_app is None:
         return
@@ -2298,6 +2972,12 @@ def _patch_bulk_upload_limit_runtime() -> None:
         if "__ic3ProductDetailInstalled" not in updated and "</body>" in updated:
             updated = updated.replace("</body>", PRODUCT_DETAIL_SCRIPT + "\n</body>", 1)
 
+        if "__ic3MobileUiInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
+
+        if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace("</body>", PRODUCTMIX_SYNC_UI_SCRIPT + "\n</body>", 1)
+
         if updated != body:
             response.set_data(updated)
             if "Content-Length" in response.headers:
@@ -2309,9 +2989,11 @@ def _patch_bulk_upload_limit_runtime() -> None:
 _install_global_flask_response_patch()
 _install_order_csv_rename_api_patch()
 _install_product_detail_api_patch()
+_install_productmix_sync_api_patch()
 _force_production_flask_run()
 _exec_bytecode()
 _register_compat_inventory_endpoints(globals().get("app"))
 _register_invoice_import_log_endpoint(globals().get("app"))
+_register_productmix_sync_endpoints(globals().get("app"))
 _patch_favicon_endpoint()
 _patch_bulk_upload_limit_runtime()
