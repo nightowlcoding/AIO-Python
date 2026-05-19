@@ -454,6 +454,9 @@ LOGIN_HTML = """
         p { margin: 0 0 18px; color: var(--muted); }
         label { display: block; margin: 10px 0 6px; font-size: 14px; }
         input { width: 100%; padding: 10px 12px; border: 1px solid #c7d2c4; border-radius: 10px; font-size: 14px; }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+        .check input { width: auto; margin: 0; }
         button { margin-top: 14px; width: 100%; border: 1px solid #0b645e; background: var(--brand); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; }
         .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
         .links { margin-top: 12px; font-size: 13px; color: var(--muted); }
@@ -466,14 +469,57 @@ LOGIN_HTML = """
             <h1>Dexter Assistant</h1>
             <p>Sign in to access app controls and protected routes.</p>
             <label>Username</label>
-            <input type="text" name="username" required autofocus />
+            <input id="login-username" type="text" name="username" required autofocus autocomplete="username" />
             <label>Password</label>
-            <input type="password" name="password" required />
+            <input id="login-password" type="password" name="password" required autocomplete="current-password" />
+            <div class="row">
+                <label class="check"><input id="show-password" type="checkbox" /> Show password</label>
+                <label class="check"><input id="save-password" type="checkbox" /> Save password</label>
+            </div>
             <button type="submit">Sign In</button>
             {% if error %}<div class="error">{{ error }}</div>{% endif %}
             <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a></div>
         </form>
     </div>
+    <script>
+        (function () {
+            const usernameInput = document.getElementById('login-username');
+            const passwordInput = document.getElementById('login-password');
+            const showPassword = document.getElementById('show-password');
+            const savePassword = document.getElementById('save-password');
+            const storageKey = 'dexterAssistantLogin';
+
+            try {
+                const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+                if (saved && typeof saved === 'object') {
+                    if (typeof saved.username === 'string') usernameInput.value = saved.username;
+                    if (typeof saved.password === 'string') passwordInput.value = saved.password;
+                    showPassword.checked = !!saved.showPassword;
+                    savePassword.checked = !!saved.savePassword;
+                    if (showPassword.checked) passwordInput.type = 'text';
+                }
+            } catch (e) {
+                // Ignore malformed stored data.
+            }
+
+            showPassword.addEventListener('change', () => {
+                passwordInput.type = showPassword.checked ? 'text' : 'password';
+            });
+
+            document.querySelector('form.card').addEventListener('submit', () => {
+                if (savePassword.checked) {
+                    localStorage.setItem(storageKey, JSON.stringify({
+                        username: usernameInput.value,
+                        password: passwordInput.value,
+                        showPassword: showPassword.checked,
+                        savePassword: true
+                    }));
+                } else {
+                    localStorage.removeItem(storageKey);
+                }
+            });
+        })();
+    </script>
 </body>
 </html>
 """
