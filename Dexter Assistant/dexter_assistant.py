@@ -557,9 +557,9 @@ DASHBOARD_HTML = """
                     '</div>' +
                     '<div class="meta">key: ' + htmlEscape(name) + ' | url: ' + htmlEscape(state.base_url) + ' | pid: ' + htmlEscape(pid) + '</div>' +
                     '<div class="btns">' +
-                        '<button class="primary" onclick="act(\'/api/apps/' + htmlEscape(name) + '/start\')" ' + disabledStart + '>Start</button>' +
-                        '<button onclick="act(\'/api/apps/' + htmlEscape(name) + '/restart\')">Restart</button>' +
-                        '<button class="warning" onclick="act(\'/api/apps/' + htmlEscape(name) + '/stop\')" ' + disabledStop + '>Stop</button>' +
+                        '<button class="primary" onclick="act(\\'/api/apps/' + htmlEscape(name) + '/start\\')" ' + disabledStart + '>Start</button>' +
+                        '<button onclick="act(\\'/api/apps/' + htmlEscape(name) + '/restart\\')">Restart</button>' +
+                        '<button class="warning" onclick="act(\\'/api/apps/' + htmlEscape(name) + '/stop\\')" ' + disabledStop + '>Stop</button>' +
                         '<a class="btn secondary" href="/portal/' + htmlEscape(name) + '">Open</a>' +
                         '<a class="btn" href="/app/' + htmlEscape(name) + '/" target="_blank" rel="noopener">Raw</a>' +
                     '</div>' +
