@@ -36,180 +36,546 @@ DASHBOARD_HTML = """
 <!doctype html>
 <html lang=\"en\">
 <head>
-    <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
-    <title>Dexter Assistant</title>
-    <style>
-        :root {
-            --bg:#f4f7f0;
-            --panel:#ffffff;
-            --ink:#1f2a1f;
-            --muted:#5e6a5e;
-            --ok:#2e7d32;
-            --warn:#ef6c00;
-            --bad:#c62828;
-            --accent:#005f73;
-            --edge:#d7dfd3;
-        }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
-            color: var(--ink);
-            background:
-                radial-gradient(circle at 10% 0%, #d9ead3 0%, rgba(217,234,211,0) 40%),
-                radial-gradient(circle at 90% 10%, #dceefb 0%, rgba(220,238,251,0) 35%),
-                var(--bg);
-        }
-        .wrap {
-            max-width: 1080px;
-            margin: 0 auto;
-            padding: 28px 20px 40px;
-        }
-        h1 { margin: 0 0 10px; font-size: 32px; }
-        .subtitle { margin: 0 0 24px; color: var(--muted); }
-        .banner {
-            border: 1px solid #b7d4bf;
-            background: #edf8ef;
-            border-radius: 12px;
-            padding: 12px 14px;
-            margin-bottom: 16px;
-            color: #215b2b;
-        }
-        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 14px; }
-        .card {
-            background: var(--panel);
-            border: 1px solid var(--edge);
-            border-radius: 14px;
-            padding: 14px;
-            box-shadow: 0 8px 24px rgba(33, 48, 33, 0.06);
-        }
-        .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .name { font-size: 20px; font-weight: 600; }
-        .pill {
-            border-radius: 999px;
-            padding: 4px 10px;
-            font-size: 12px;
-            font-weight: 600;
-            border: 1px solid transparent;
-        }
-        .running { color: #1b5e20; background: #e8f5e9; border-color: #b7dfbb; }
-        .stopped { color: #5d4037; background: #fbe9e7; border-color: #f5c9c1; }
-        .error { color: #7f1d1d; background: #fee2e2; border-color: #fecaca; }
-        .meta { color: var(--muted); font-size: 13px; margin: 8px 0 10px; }
-        .btns { display: flex; gap: 8px; flex-wrap: wrap; }
-        button, a.btn {
-            appearance: none;
-            border: 1px solid #c4d1bd;
-            background: #fff;
-            color: #213021;
-            border-radius: 10px;
-            padding: 8px 12px;
-            font-size: 13px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 82px;
-        }
-        button.primary { background: var(--accent); color: #fff; border-color: #004553; }
-        button.warning { background: #9a3412; color: #fff; border-color: #7c2d12; }
-        button:disabled { opacity: 0.55; cursor: not-allowed; }
-        .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
-        pre {
-            margin-top: 10px;
-            border-radius: 10px;
-            border: 1px solid var(--edge);
-            background: #f8faf7;
-            padding: 8px;
-            max-height: 160px;
-            overflow: auto;
-            font-size: 12px;
-        }
-        @media (max-width: 700px) {
-            .wrap { padding: 10px 2px 18px; }
-            h1 { font-size: 1.3rem; }
-            .actions { gap: 6px; }
-            .card { padding: 8px; border-radius: 8px; }
-            .grid { gap: 8px; }
-        }
-    </style>
+        <meta charset=\"utf-8\" />
+        <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
+        <title>Dexter Assistant Control Center</title>
+        <style>
+                :root {
+                    --bg:#f3f4f6;
+                        --panel:#ffffff;
+                        --ink:#1f2937;
+                        --muted:#6b7280;
+                        --ok:#166534;
+                        --bad:#991b1b;
+                    --accent:#ea580c;
+                    --accent2:#0f766e;
+                        --edge:#d1d5db;
+                        --left:#f8fafc;
+                        --left2:#f3f4f6;
+                }
+                * { box-sizing: border-box; }
+                body {
+                        margin: 0;
+                        font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
+                        color: var(--ink);
+                    background: linear-gradient(145deg, #f8fafc 0%, #f9fafb 45%, #eef2ff 100%);
+                        min-height: 100vh;
+                }
+                .shell {
+                        display: grid;
+                        grid-template-columns: 220px 220px minmax(0, 1fr);
+                        min-height: 100vh;
+                }
+                .left-primary,
+                .left-sub {
+                        border-right: 1px solid var(--edge);
+                        overflow: auto;
+                }
+                .left-primary {
+                        background: var(--left);
+                        padding: 12px 10px;
+                }
+                .left-sub {
+                        background: var(--left2);
+                        padding: 14px 10px;
+                }
+                .brand-row {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        margin-bottom: 14px;
+                        gap: 8px;
+                }
+                .brand {
+                        font-size: 23px;
+                        font-weight: 800;
+                        color: #0f172a;
+                }
+                .menu-btn {
+                        border: 1px solid var(--edge);
+                        background: #fff;
+                        color: #334155;
+                        border-radius: 10px;
+                        width: 36px;
+                        height: 36px;
+                        cursor: pointer;
+                }
+                .primary-menu,
+                .sub-menu {
+                        display: flex;
+                        flex-direction: column;
+                        gap: 6px;
+                }
+                .primary-menu button,
+                .sub-menu button {
+                        border: 1px solid transparent;
+                        background: transparent;
+                        text-align: left;
+                        color: #1f2937;
+                        border-radius: 10px;
+                        padding: 9px 10px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: 600;
+                }
+                .primary-menu button:hover,
+                .sub-menu button:hover {
+                        background: #e5e7eb;
+                }
+                .primary-menu button.active,
+                .sub-menu button.active {
+                    background: #ffedd5;
+                    border-color: #fed7aa;
+                    color: #c2410c;
+                }
+                .sub-head {
+                        font-size: 11px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.08em;
+                        color: #64748b;
+                        margin: 4px 8px;
+                }
+                body.collapsed .shell {
+                        grid-template-columns: 72px 220px minmax(0, 1fr);
+                }
+                body.collapsed .brand {
+                        display: none;
+                }
+                body.collapsed .primary-menu button {
+                        font-size: 0;
+                        min-height: 38px;
+                        position: relative;
+                }
+                body.collapsed .primary-menu button::before {
+                        content: attr(data-short);
+                        font-size: 13px;
+                        font-weight: 700;
+                        color: #334155;
+                }
+                .mobile-top {
+                        display: none;
+                        padding: 10px 10px 0;
+                }
+                .main {
+                        min-width: 0;
+                        padding: 20px;
+                }
+                .topbar {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 12px;
+                        flex-wrap: wrap;
+                        margin-bottom: 14px;
+                }
+                .title {
+                        margin: 0;
+                        font-size: 34px;
+                        font-weight: 800;
+                        color: #111827;
+                }
+                .subtitle {
+                        margin: 6px 0 0;
+                        color: var(--muted);
+                }
+                .actions {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                }
+                button,
+                a.btn {
+                        border: 1px solid #cbd5e1;
+                        background: #fff;
+                        color: #1f2937;
+                        border-radius: 10px;
+                        padding: 8px 12px;
+                        font-size: 13px;
+                        cursor: pointer;
+                        text-decoration: none;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        min-width: 88px;
+                        font-weight: 600;
+                }
+                .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
+                .warning { background: #9a3412; color: #fff; border-color: #7c2d12; }
+                .secondary { background: var(--accent2); color: #fff; border-color: #115e59; }
+                button:disabled { opacity: 0.55; cursor: not-allowed; }
+                .pane {
+                        display: none;
+                        background: var(--panel);
+                        border: 1px solid var(--edge);
+                        border-radius: 16px;
+                        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+                        padding: 16px;
+                }
+                .pane.active { display: block; }
+                .banner {
+                    border: 1px solid #fed7aa;
+                    background: #fff7ed;
+                    color: #9a3412;
+                        border-radius: 12px;
+                        padding: 10px 12px;
+                        margin-bottom: 14px;
+                }
+                .stats {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                        gap: 10px;
+                        margin-bottom: 14px;
+                }
+                .stat {
+                        border: 1px solid var(--edge);
+                        border-radius: 12px;
+                        padding: 12px;
+                        background: #f9fafb;
+                }
+                .stat .label {
+                        color: #64748b;
+                        font-size: 12px;
+                        margin-bottom: 6px;
+                }
+                .stat .value {
+                        font-size: 24px;
+                        font-weight: 800;
+                        color: #0f172a;
+                }
+                .grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                        gap: 12px;
+                }
+                .card {
+                        border: 1px solid var(--edge);
+                        border-radius: 14px;
+                        padding: 14px;
+                        background: var(--panel);
+                        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+                }
+                .row {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 8px;
+                }
+                .name {
+                        font-size: 20px;
+                        font-weight: 700;
+                        color: #0f172a;
+                }
+                .pill {
+                        border-radius: 999px;
+                        padding: 4px 10px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        border: 1px solid transparent;
+                }
+                .running { color: var(--ok); background: #dcfce7; border-color: #86efac; }
+                .stopped { color: #78350f; background: #ffedd5; border-color: #fed7aa; }
+                .error { color: var(--bad); background: #fee2e2; border-color: #fecaca; }
+                .meta {
+                        color: var(--muted);
+                        font-size: 13px;
+                        margin: 8px 0 10px;
+                        word-break: break-word;
+                }
+                .btns {
+                        display: flex;
+                        gap: 8px;
+                        flex-wrap: wrap;
+                }
+                .list {
+                        border: 1px solid var(--edge);
+                        border-radius: 12px;
+                        overflow: hidden;
+                }
+                .list-row {
+                        display: grid;
+                        grid-template-columns: 1.3fr 0.8fr 1fr;
+                        gap: 8px;
+                        padding: 10px 12px;
+                        border-bottom: 1px solid #e5e7eb;
+                        align-items: center;
+                        font-size: 13px;
+                }
+                .list-row:last-child { border-bottom: 0; }
+                .list-head {
+                    background: #fff7ed;
+                        font-weight: 700;
+                    color: #7c2d12;
+                }
+                .footer {
+                        margin-top: 14px;
+                        color: var(--muted);
+                        font-size: 12px;
+                }
+                pre {
+                        margin-top: 12px;
+                        border-radius: 10px;
+                        border: 1px solid var(--edge);
+                        background: #f8fafc;
+                        padding: 8px;
+                        max-height: 160px;
+                        overflow: auto;
+                        font-size: 12px;
+                }
+                @media (max-width: 980px) {
+                        .shell {
+                                grid-template-columns: minmax(0, 1fr);
+                        }
+                        .left-primary,
+                        .left-sub {
+                                position: fixed;
+                                top: 0;
+                                bottom: 0;
+                                z-index: 20;
+                                transform: translateX(-100%);
+                                transition: transform 0.2s ease;
+                        }
+                        .left-primary {
+                                width: 230px;
+                                left: 0;
+                        }
+                        .left-sub {
+                                width: 220px;
+                                left: 230px;
+                                border-left: 1px solid var(--edge);
+                        }
+                        .shell.menu-open .left-primary,
+                        .shell.menu-open .left-sub {
+                                transform: translateX(0);
+                        }
+                        .mobile-top { display: flex; }
+                        .main { padding: 12px; }
+                        .title { font-size: 28px; }
+                        .list-row { grid-template-columns: 1fr; gap: 2px; }
+                }
+        </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>Dexter Assistant</h1>
-    <p class="subtitle">Single front door for exact copied apps with start, stop, health, and proxy routing.</p>
-    <div class="banner">Original source folders stay untouched. This dashboard controls only copied apps in this Dexter Assistant directory.</div>
-    <div class="actions">
-      <button class="primary" onclick="act('/api/start-all')">Start All</button>
-      <button class="warning" onclick="act('/api/stop-all')">Stop All</button>
-      <button onclick="refreshState()">Refresh</button>
-            <a class="btn" href="/auth/logout">Logout</a>
-    </div>
-    <div id="grid" class="grid"></div>
-    <div class="footer">Front door: {{ host }}:{{ port }}</div>
-  </div>
-  <script>
-    async function act(url, body) {
-      const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : '{}'});
-      if (!res.ok) {
-        const txt = await res.text();
-        alert('Action failed: ' + txt);
-      }
-      await refreshState();
-    }
-
-    function badgeClass(state) {
-      if (state.running && state.healthy) return 'pill running';
-      if (state.running && !state.healthy) return 'pill error';
-      return 'pill stopped';
-    }
-
-    function badgeText(state) {
-      if (state.running && state.healthy) return 'Running';
-      if (state.running && !state.healthy) return 'Running (unhealthy)';
-      return 'Stopped';
-    }
-
-    function card(name, state) {
-      const c = document.createElement('div');
-      c.className = 'card';
-      const safeLog = (state.log_tail || '').replace(/[<>&]/g, (m) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
-      c.innerHTML = `
-        <div class="row">
-          <div class="name">${state.display_name}</div>
-          <div class="${badgeClass(state)}">${badgeText(state)}</div>
+        <div class="mobile-top">
+                <button class="menu-btn" onclick="toggleMobileMenu()">Menu</button>
         </div>
-        <div class="meta">key: ${name} | url: ${state.base_url} | pid: ${state.pid || 'n/a'}</div>
-        <div class="btns">
-          <button class="primary" onclick="act('/api/apps/${name}/start')" ${state.running ? 'disabled' : ''}>Start</button>
-          <button onclick="act('/api/apps/${name}/restart')">Restart</button>
-          <button class="warning" onclick="act('/api/apps/${name}/stop')" ${state.running ? '' : 'disabled'}>Stop</button>
-          <a class="btn" href="/app/${name}/" target="_blank" rel="noopener">Open</a>
+
+        <div id="shell" class="shell">
+                <aside class="left-primary">
+                        <div class="brand-row">
+                                <div class="brand">Dexter Ops</div>
+                                <button class="menu-btn" onclick="toggleCollapsed()">||</button>
+                        </div>
+                        <nav id="primaryNav" class="primary-menu">
+                                <button data-short="HM" data-section="overview" class="active" onclick="setSection('overview')">Home</button>
+                                <button data-short="AP" data-section="apps" onclick="setSection('apps')">Apps</button>
+                                <button data-short="OP" data-section="operations" onclick="setSection('operations')">Operations</button>
+                        </nav>
+                </aside>
+
+                <aside class="left-sub">
+                        <div class="sub-head">Sub Menu</div>
+                        <nav id="subNav" class="sub-menu"></nav>
+                </aside>
+
+                <main class="main">
+                        <div class="topbar">
+                                <div>
+                                        <h1 id="pageTitle" class="title">Control Center</h1>
+                                        <p class="subtitle">Left menus control context. Main display lives on the right, with quick app actions.</p>
+                                </div>
+                                <div class="actions">
+                                        <button class="primary" onclick="act('/api/start-all')">Start All</button>
+                                        <button class="warning" onclick="act('/api/stop-all')">Stop All</button>
+                                        <button onclick="refreshState()">Refresh</button>
+                                        <a class="btn secondary" href="/portal/ic3">Open IC3 View</a>
+                                        <a class="btn" href="/auth/logout">Logout</a>
+                                </div>
+                        </div>
+
+                        <section id="pane-overview" class="pane active">
+                                <div class="banner">Original source folders stay untouched. This dashboard controls copied apps in this Dexter Assistant directory.</div>
+                                <div class="stats">
+                                        <div class="stat"><div class="label">Total Apps</div><div id="statTotal" class="value">0</div></div>
+                                        <div class="stat"><div class="label">Running</div><div id="statRunning" class="value">0</div></div>
+                                        <div class="stat"><div class="label">Healthy</div><div id="statHealthy" class="value">0</div></div>
+                                        <div class="stat"><div class="label">Unhealthy</div><div id="statUnhealthy" class="value">0</div></div>
+                                </div>
+                                <div class="footer">Front door: {{ host }}:{{ port }}</div>
+                        </section>
+
+                        <section id="pane-apps" class="pane">
+                                <div id="grid" class="grid"></div>
+                        </section>
+
+                        <section id="pane-operations" class="pane">
+                                <div class="list">
+                                        <div class="list-row list-head">
+                                                <div>Application</div>
+                                                <div>Status</div>
+                                                <div>Endpoint</div>
+                                        </div>
+                                        <div id="opsRows"></div>
+                                </div>
+                                <pre id="opsLog">No runtime log yet.</pre>
+                        </section>
+                </main>
         </div>
-        <pre>${safeLog || 'No runtime log yet.'}</pre>
-      `;
-      return c;
-    }
 
-    async function refreshState() {
-      const res = await fetch('/api/status');
-      const data = await res.json();
-      const grid = document.getElementById('grid');
-      grid.innerHTML = '';
-      Object.entries(data.apps).forEach(([name, state]) => grid.appendChild(card(name, state)));
-    }
+        <script>
+                const subMenus = {
+                        overview: [
+                                { id: 'overview', label: 'Summary' },
+                                { id: 'apps', label: 'Quick App Cards' },
+                        ],
+                        apps: [
+                                { id: 'apps', label: 'All Applications' },
+                                { id: 'operations', label: 'Status Matrix' },
+                        ],
+                        operations: [
+                                { id: 'operations', label: 'Operations Board' },
+                                { id: 'apps', label: 'Card Controls' },
+                        ],
+                };
 
-    refreshState();
-    setInterval(refreshState, 2500);
-  </script>
+                async function act(url, body) {
+                        const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: body ? JSON.stringify(body) : '{}'});
+                        if (!res.ok) {
+                                const txt = await res.text();
+                                alert('Action failed: ' + txt);
+                        }
+                        await refreshState();
+                }
+
+                function badgeClass(state) {
+                        if (state.running && state.healthy) return 'pill running';
+                        if (state.running && !state.healthy) return 'pill error';
+                        return 'pill stopped';
+                }
+
+                function badgeText(state) {
+                        if (state.running && state.healthy) return 'Running';
+                        if (state.running && !state.healthy) return 'Running (unhealthy)';
+                        return 'Stopped';
+                }
+
+                function toggleCollapsed() {
+                        document.body.classList.toggle('collapsed');
+                }
+
+                function toggleMobileMenu() {
+                        document.getElementById('shell').classList.toggle('menu-open');
+                }
+
+                function setSection(section) {
+                        document.querySelectorAll('#primaryNav button').forEach((b) => {
+                                b.classList.toggle('active', b.dataset.section === section);
+                        });
+                        document.querySelectorAll('.pane').forEach((pane) => {
+                                pane.classList.toggle('active', pane.id === `pane-${section}`);
+                        });
+
+                        const title = document.getElementById('pageTitle');
+                        const titles = {
+                                overview: 'Control Center',
+                                apps: 'Applications',
+                                operations: 'Operations',
+                        };
+                        title.textContent = titles[section] || 'Control Center';
+                        renderSubmenu(section);
+
+                        if (window.innerWidth <= 980) {
+                                document.getElementById('shell').classList.remove('menu-open');
+                        }
+                }
+
+                function setPaneFromSubmenu(targetPane) {
+                        const mapped = targetPane === 'operations' ? 'operations' : (targetPane === 'apps' ? 'apps' : 'overview');
+                        setSection(mapped);
+                }
+
+                function renderSubmenu(section) {
+                        const nav = document.getElementById('subNav');
+                        nav.innerHTML = '';
+                        (subMenus[section] || []).forEach((item) => {
+                                const btn = document.createElement('button');
+                                btn.textContent = item.label;
+                                btn.classList.toggle('active', item.id === section);
+                                btn.onclick = () => setPaneFromSubmenu(item.id);
+                                nav.appendChild(btn);
+                        });
+                }
+
+                function renderCard(name, state) {
+                        const c = document.createElement('div');
+                        c.className = 'card';
+                        const safeLog = (state.log_tail || '').replace(/[<>&]/g, (m) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]));
+                        c.innerHTML = `
+                                <div class="row">
+                                        <div class="name">${state.display_name}</div>
+                                        <div class="${badgeClass(state)}">${badgeText(state)}</div>
+                                </div>
+                                <div class="meta">key: ${name} | url: ${state.base_url} | pid: ${state.pid || 'n/a'}</div>
+                                <div class="btns">
+                                        <button class="primary" onclick="act('/api/apps/${name}/start')" ${state.running ? 'disabled' : ''}>Start</button>
+                                        <button onclick="act('/api/apps/${name}/restart')">Restart</button>
+                                        <button class="warning" onclick="act('/api/apps/${name}/stop')" ${state.running ? '' : 'disabled'}>Stop</button>
+                                        <a class="btn secondary" href="/portal/${name}">Open</a>
+                                        <a class="btn" href="/app/${name}/" target="_blank" rel="noopener">Raw</a>
+                                </div>
+                                <pre>${safeLog || 'No runtime log yet.'}</pre>
+                        `;
+                        return c;
+                }
+
+                function renderOpsRows(apps) {
+                        const rows = document.getElementById('opsRows');
+                        rows.innerHTML = '';
+                        const combinedLogs = [];
+                        Object.entries(apps).forEach(([name, state]) => {
+                                const row = document.createElement('div');
+                                row.className = 'list-row';
+                                row.innerHTML = `
+                                        <div><strong>${state.display_name}</strong><br/><span style="color:#64748b">${name}</span></div>
+                                        <div><span class="${badgeClass(state)}">${badgeText(state)}</span></div>
+                                        <div>${state.base_url}</div>
+                                `;
+                                rows.appendChild(row);
+                                if (state.log_tail) {
+                                        combinedLogs.push(`=== ${state.display_name} ===\n${state.log_tail}`);
+                                }
+                        });
+                        document.getElementById('opsLog').textContent = combinedLogs.length ? combinedLogs.join('\n\n') : 'No runtime log yet.';
+                }
+
+                function renderStats(apps) {
+                        const values = Object.values(apps);
+                        document.getElementById('statTotal').textContent = String(values.length);
+                        document.getElementById('statRunning').textContent = String(values.filter((s) => s.running).length);
+                        document.getElementById('statHealthy').textContent = String(values.filter((s) => s.running && s.healthy).length);
+                        document.getElementById('statUnhealthy').textContent = String(values.filter((s) => s.running && !s.healthy).length);
+                }
+
+                async function refreshState() {
+                        const res = await fetch('/api/status');
+                        const data = await res.json();
+                        const apps = data.apps || {};
+
+                        const grid = document.getElementById('grid');
+                        grid.innerHTML = '';
+                        Object.entries(apps).forEach(([name, state]) => grid.appendChild(renderCard(name, state)));
+
+                        renderStats(apps);
+                        renderOpsRows(apps);
+                }
+
+                renderSubmenu('overview');
+                setSection('overview');
+                refreshState();
+                setInterval(refreshState, 2500);
+        </script>
 </body>
 </html>
 """
-
-
 PORTAL_HOME_HTML = """
 <!doctype html>
 <html lang=\"en\">
@@ -432,9 +798,9 @@ PORTAL_APP_HTML = """
         <div class="brand">{{ app_title }}</div>
         <div class="nav">
             <a href="/">Home</a>
+            <a class="primary" href="/">Main Page</a>
             <a href="/portal/productmix">ProductMix</a>
             <a href="/portal/ic3">Inventory Control 3</a>
-            <a href="/admin">Admin</a>
             <button class="primary" onclick="restart()">Restart This App</button>
             <a href="/auth/logout">Logout</a>
         </div>
@@ -1042,7 +1408,7 @@ def require_auth_for_protected_routes() -> Response | None:
 @app.route("/auth/login", methods=["GET", "POST"])
 def auth_login() -> Response:
     if session.get(SESSION_USER_KEY):
-        return redirect(get_next_path("/admin"))
+        return redirect(get_next_path("/portal/ic3"))
 
     error = ""
     if request.method == "POST":
@@ -1061,7 +1427,7 @@ def auth_login() -> Response:
             }
             session.permanent = True
             MANAGER.start_all()
-            return redirect(get_next_path("/admin"))
+            return redirect(get_next_path("/portal/ic3"))
         error = "Invalid username or password."
 
     return Response(
@@ -1078,7 +1444,7 @@ def auth_login() -> Response:
 @app.route("/auth/register", methods=["GET", "POST"])
 def auth_register() -> Response:
     if session.get(SESSION_USER_KEY):
-        return redirect(get_next_path("/admin"))
+        return redirect(get_next_path("/portal/ic3"))
 
     error = ""
     if request.method == "POST":
@@ -1111,7 +1477,7 @@ def auth_register() -> Response:
                 save_auth_users(users)
                 session[SESSION_USER_KEY] = {"username": username, "is_admin": False, "email": username}
                 session.permanent = True
-                return redirect(get_next_path("/admin"))
+                return redirect(get_next_path("/portal/ic3"))
 
     return Response(
         render_template_string(
@@ -1146,7 +1512,7 @@ def index() -> str:
 
     fd = CONFIG.get("front_door", {})
     return render_template_string(
-        PORTAL_HOME_HTML,
+        DASHBOARD_HTML,
         host=fd.get("host", "127.0.0.1"),
         port=fd.get("port", 5080),
     )
@@ -1155,9 +1521,15 @@ def index() -> str:
 @app.route("/admin")
 @login_required
 def admin() -> str:
+    return redirect("/")
+
+
+@app.route("/portal")
+@login_required
+def portal_home() -> str:
     fd = CONFIG.get("front_door", {})
     return render_template_string(
-        DASHBOARD_HTML,
+        PORTAL_HOME_HTML,
         host=fd.get("host", "127.0.0.1"),
         port=fd.get("port", 5080),
     )
