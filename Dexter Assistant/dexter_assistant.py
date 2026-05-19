@@ -336,13 +336,26 @@ DASHBOARD_HTML = """
                 pre {
                         margin-top: 12px;
                         border-radius: 10px;
-                        border: 1px solid var(--edge);
-                        background: #f8fafc;
-                        padding: 8px;
-                        max-height: 160px;
+                        border: 1px solid #334155;
+                        background: #1e293b;
+                        color: #e2e8f0;
+                        padding: 10px 12px;
+                        max-height: 300px;
                         overflow: auto;
-                        font-size: 12px;
+                        font-size: 11.5px;
+                        font-family: 'Cascadia Code', 'Consolas', monospace;
+                        line-height: 1.5;
+                        white-space: pre-wrap;
+                        word-break: break-all;
                 }
+                .stat.ok-stat { border-left: 4px solid #86efac; }
+                .stat.bad-stat { border-left: 4px solid #fca5a5; }
+                .stat.warn-stat { border-left: 4px solid #fcd34d; }
+                .toast-wrap { position:fixed; bottom:22px; right:22px; display:flex; flex-direction:column; gap:8px; z-index:9999; pointer-events:none; }
+                .toast { background:#1f2937; color:#fff; border-radius:10px; padding:11px 18px; font-size:13px; font-weight:600; opacity:0; transform:translateY(10px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; max-width:340px; box-shadow:0 4px 16px rgba(0,0,0,0.18); }
+                .toast.show { opacity:1; transform:translateY(0); }
+                .toast.error { background:#991b1b; }
+                .toast.ok { background:#166534; }
                 @media (max-width: 980px) {
                         .shell {
                                 grid-template-columns: minmax(0, 1fr);
@@ -382,6 +395,7 @@ DASHBOARD_HTML = """
         </div>
 
         <div id="shell" class="shell">
+        <div class="toast-wrap" id="toastWrap"></div>
                 <aside class="left-primary">
                         <div class="brand-row">
                         <div class="brand-mark">
@@ -409,8 +423,8 @@ DASHBOARD_HTML = """
                                         <p class="subtitle">Left menus control context. Main display lives on the right, with quick app actions.</p>
                                 </div>
                                 <div class="actions">
-                                        <button class="primary" onclick="act('/api/start-all')">Start All</button>
-                                        <button class="warning" onclick="act('/api/stop-all')">Stop All</button>
+                                        <button class="primary" onclick="act('/api/start-all', null, this)">Start All</button>
+                                        <button class="warning" onclick="act('/api/stop-all', null, this)">Stop All</button>
                                         <button onclick="refreshState()">Refresh</button>
                                         <a class="btn secondary" href="/portal/ic3">Open IC3 View</a>
                                         <a class="btn" href="/auth/logout">Logout</a>
@@ -470,15 +484,37 @@ DASHBOARD_HTML = """
                 });
             }
 
-            async function act(url, body) {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: body ? JSON.stringify(body) : '{}'
-                });
-                if (!res.ok) {
-                    const txt = await res.text();
-                    alert('Action failed: ' + txt);
+            function showToast(msg, type) {
+                var wrap = document.getElementById('toastWrap');
+                var t = document.createElement('div');
+                t.className = 'toast' + (type ? ' ' + type : '');
+                t.textContent = msg;
+                wrap.appendChild(t);
+                requestAnimationFrame(function() { t.classList.add('show'); });
+                setTimeout(function() {
+                    t.classList.remove('show');
+                    setTimeout(function() { t.remove(); }, 300);
+                }, 3200);
+            }
+
+            async function act(url, body, btn) {
+                if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '...'; }
+                try {
+                    var res = await fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: body ? JSON.stringify(body) : '{}'
+                    });
+                    if (!res.ok) {
+                        var txt = await res.text();
+                        showToast('Action failed: ' + txt, 'error');
+                    } else {
+                        showToast('Done.', 'ok');
+                    }
+                } catch (e) {
+                    showToast('Request failed: ' + e.message, 'error');
+                } finally {
+                    if (btn) { btn.disabled = false; btn.textContent = origText; }
                 }
                 await refreshState();
             }
@@ -594,29 +630,59 @@ DASHBOARD_HTML = """
 
             function renderStats(apps) {
                 const values = Object.values(apps);
-                document.getElementById('statTotal').textContent = String(values.length);
-                document.getElementById('statRunning').textContent = String(values.filter(function(s) { return s.running; }).length);
-                document.getElementById('statHealthy').textContent = String(values.filter(function(s) { return s.running && s.healthy; }).length);
-                document.getElementById('statUnhealthy').textContent = String(values.filter(function(s) { return s.running && !s.healthy; }).length);
+                const total = values.length;
+                const running = values.filter(function(s) { return s.running; }).length;
+                const healthy = values.filter(function(s) { return s.running && s.healthy; }).length;
+                const unhealthy = values.filter(function(s) { return s.running && !s.healthy; }).length;
+
+                document.getElementById('statTotal').textContent = String(total);
+                document.getElementById('statRunning').textContent = String(running);
+                document.getElementById('statHealthy').textContent = String(healthy);
+                document.getElementById('statUnhealthy').textContent = String(unhealthy);
+
+                var statTotal = document.getElementById('statTotal').closest('.stat');
+                var statRunning = document.getElementById('statRunning').closest('.stat');
+                var statHealthy = document.getElementById('statHealthy').closest('.stat');
+                var statUnhealthy = document.getElementById('statUnhealthy').closest('.stat');
+
+                statRunning.className = 'stat' + (running > 0 ? ' ok-stat' : '');
+                statHealthy.className = 'stat' + (healthy > 0 ? ' ok-stat' : '');
+                statUnhealthy.className = 'stat' + (unhealthy > 0 ? ' bad-stat' : '');
+                statTotal.className = 'stat';
             }
 
+            var _pollTimer = null;
+            function startPoll() {
+                if (_pollTimer) return;
+                _pollTimer = setInterval(refreshState, 2500);
+            }
+            function stopPoll() {
+                if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+            }
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden) { stopPoll(); } else { refreshState(); startPoll(); }
+            });
+
             async function refreshState() {
-                const res = await fetch('/api/status');
-                const data = await res.json();
-                const apps = data.apps || {};
-                const grid = document.getElementById('grid');
-                grid.innerHTML = '';
-                Object.entries(apps).forEach(function(entry) {
-                    grid.appendChild(renderCard(entry[0], entry[1]));
-                });
-                renderStats(apps);
-                renderOpsRows(apps);
+                try {
+                    var res = await fetch('/api/status');
+                    if (!res.ok) return;
+                    var data = await res.json();
+                    var apps = data.apps || {};
+                    var grid = document.getElementById('grid');
+                    grid.innerHTML = '';
+                    Object.entries(apps).forEach(function(entry) {
+                        grid.appendChild(renderCard(entry[0], entry[1]));
+                    });
+                    renderStats(apps);
+                    renderOpsRows(apps);
+                } catch (e) { /* network hiccup — skip silently */ }
             }
 
             renderSubmenu('overview');
             setSection('overview');
             refreshState();
-            setInterval(refreshState, 2500);
+            startPoll();
         </script>
 </body>
 </html>
@@ -630,91 +696,106 @@ PORTAL_HOME_HTML = """
     <title>Dexter Assistant Portal</title>
     <style>
         :root {
-            --ink:#1d2a28;
-            --muted:#51615c;
-            --bg:#eef3ea;
+            --accent:#ea580c;
+            --accent2:#0f766e;
+            --ink:#1f2937;
+            --muted:#6b7280;
+            --bg:linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#eef2ff 100%);
             --panel:#ffffff;
-            --edge:#d5ddd2;
-            --brand:#0f766e;
-            --brand-2:#166534;
-            --danger:#8b1d1d;
+            --edge:#d1d5db;
+            --ok:#166534;
+            --bad:#991b1b;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
             font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
             color: var(--ink);
-            background:
-                radial-gradient(circle at 0% 0%, #d9efe4 0%, rgba(217,239,228,0) 45%),
-                radial-gradient(circle at 100% 10%, #e8f0d8 0%, rgba(232,240,216,0) 35%),
-                var(--bg);
+            background: var(--bg);
             min-height: 100vh;
         }
         .topbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 14px 18px;
+            padding: 12px 18px;
             border-bottom: 1px solid var(--edge);
-            background: #f8fbf6;
+            background: #ffffff;
             position: sticky;
             top: 0;
             z-index: 5;
+            box-shadow: 0 1px 4px rgba(15,23,42,0.06);
         }
-        .brand { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; }
+        .brand { font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: 0.2px; }
         .brand-wrap { display: flex; align-items: center; gap: 10px; }
-        .brand-logo { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; background: #fff; border: 1px solid #d8e2d7; padding: 2px; }
+        .brand-logo { width: 30px; height: 30px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
         .nav { display: flex; gap: 8px; flex-wrap: wrap; }
         .nav a, .nav button {
-            border: 1px solid #c6d2c7;
+            border: 1px solid var(--edge);
             background: #fff;
-            color: #1f2d2b;
+            color: var(--ink);
             border-radius: 10px;
-            padding: 8px 12px;
+            padding: 8px 13px;
             text-decoration: none;
             font-size: 13px;
+            font-weight: 600;
             cursor: pointer;
         }
-        .nav .primary { background: var(--brand); color: #fff; border-color: #0c5b55; }
-        .nav .danger { background: var(--danger); color: #fff; border-color: #6f1717; }
+        .nav a:hover, .nav button:hover { background: #f1f5f9; }
+        .nav .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
+        .nav .primary:hover { background: #c2410c; }
+        .nav .danger { background: var(--bad); color: #fff; border-color: #7f1d1d; }
+        .nav .danger:hover { background: #7f1d1d; }
+        .nav button:disabled { opacity: 0.55; cursor: not-allowed; }
         .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 18px 36px; }
-        h1 { margin: 0 0 6px; font-size: 34px; }
+        h1 { margin: 0 0 6px; font-size: 34px; font-weight: 800; color: #111827; }
         .subtitle { color: var(--muted); margin: 0 0 18px; }
         .banner {
-            border: 1px solid #b9d7c3;
-            background: #eaf8ef;
+            border: 1px solid #fed7aa;
+            background: #fff7ed;
             border-radius: 12px;
-            padding: 10px 12px;
-            color: #245538;
+            padding: 10px 14px;
+            color: #9a3412;
             margin-bottom: 18px;
+            font-size: 13px;
         }
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
         .card {
             background: var(--panel);
             border: 1px solid var(--edge);
-            border-radius: 14px;
-            padding: 16px;
-            box-shadow: 0 10px 22px rgba(33, 48, 33, 0.06);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 8px 24px rgba(15,23,42,0.07);
         }
-        .card h2 { margin: 0 0 6px; font-size: 21px; }
-        .card p { margin: 0 0 12px; color: var(--muted); }
+        .card h2 { margin: 0 0 6px; font-size: 21px; font-weight: 700; color: #0f172a; }
+        .card p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
         .actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .actions a {
-            border: 1px solid #c6d2c7;
+            border: 1px solid var(--edge);
             background: #fff;
-            color: #1f2d2b;
+            color: var(--ink);
             border-radius: 10px;
-            padding: 8px 12px;
+            padding: 8px 13px;
             text-decoration: none;
             font-size: 13px;
+            font-weight: 600;
         }
-        .actions a.primary { background: var(--brand-2); color: #fff; border-color: #0f4d26; }
+        .actions a:hover { background: #f1f5f9; }
+        .actions a.primary { background: var(--accent); color: #fff; border-color: #c2410c; }
+        .actions a.primary:hover { background: #c2410c; }
+        .actions a.secondary { background: var(--accent2); color: #fff; border-color: #0c5b55; }
         .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+        .toast-wrap { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:9999; pointer-events:none; }
+        .toast { background:#1f2937; color:#fff; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:600; opacity:0; transform:translateY(10px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; max-width:320px; }
+        .toast.show { opacity:1; transform:translateY(0); }
+        .toast.error { background:#991b1b; }
+        .toast.ok { background:#166534; }
         @media (max-width: 700px) {
-            .wrap { padding: 10px 2px 18px; }
-            h1 { font-size: 1.3rem; }
-            .cards { gap: 8px; }
-            .card { padding: 8px; border-radius: 8px; }
+            .wrap { padding: 12px 10px 18px; }
+            h1 { font-size: 1.5rem; }
+            .cards { gap: 10px; }
+            .card { padding: 12px; }
+            .topbar { flex-wrap: wrap; gap: 8px; }
         }
     </style>
 </head>
@@ -722,21 +803,21 @@ PORTAL_HOME_HTML = """
     <div class="topbar">
         <div class="brand-wrap">
             <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
-            <div class="brand">Dexter Assistant Portal</div>
+            <div class="brand">Dexter Ops Portal</div>
         </div>
         <div class="nav">
             <a href="/">Home</a>
             <a href="/portal/productmix">ProductMix</a>
             <a href="/portal/ic3">Inventory Control 3</a>
-            <a href="/admin">Admin</a>
-            <button class="primary" onclick="act('/api/start-all')">Start All</button>
-            <button class="danger" onclick="act('/api/stop-all')">Stop All</button>
+            <button class="primary" id="btnStartAll" onclick="act('/api/start-all', this)">Start All</button>
+            <button class="danger" id="btnStopAll" onclick="act('/api/stop-all', this)">Stop All</button>
             <a href="/auth/logout">Logout</a>
         </div>
     </div>
+    <div class="toast-wrap" id="toastWrap"></div>
     <div class="wrap">
         <h1>Restaurant Management</h1>
-        <p class="subtitle">Run both systems under one website and switch between them from shared navigation.</p>
+        <p class="subtitle">Run both systems under one portal and switch between them from shared navigation.</p>
         <div class="banner">Both copied apps are hosted behind this portal. Original source folders remain untouched.</div>
         <div class="cards">
             <div class="card">
@@ -744,26 +825,47 @@ PORTAL_HOME_HTML = """
                 <p>Upload and analyze product mixes, production lists, and report views.</p>
                 <div class="actions">
                     <a class="primary" href="/portal/productmix">Open ProductMix</a>
-                    <a href="/app/productmix/" target="_blank" rel="noopener">Open Raw App</a>
+                    <a class="secondary" href="/app/productmix/" target="_blank" rel="noopener">Open Raw</a>
                 </div>
             </div>
             <div class="card">
                 <h2>Inventory Control 3</h2>
                 <p>Inventory tracking, invoice imports, and usage analytics for locations.</p>
                 <div class="actions">
-                    <a class="primary" href="/portal/ic3">Open Inventory Control 3</a>
-                    <a href="/app/ic3/" target="_blank" rel="noopener">Open Raw App</a>
+                    <a class="primary" href="/portal/ic3">Open IC3</a>
+                    <a class="secondary" href="/app/ic3/" target="_blank" rel="noopener">Open Raw</a>
                 </div>
             </div>
         </div>
         <div class="footer">Front door: {{ host }}:{{ port }}</div>
     </div>
     <script>
-        async function act(url) {
-            const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-            if (!res.ok) {
-                const txt = await res.text();
-                alert('Action failed: ' + txt);
+        function showToast(msg, type) {
+            var wrap = document.getElementById('toastWrap');
+            var t = document.createElement('div');
+            t.className = 'toast' + (type ? ' ' + type : '');
+            t.textContent = msg;
+            wrap.appendChild(t);
+            requestAnimationFrame(function() { t.classList.add('show'); });
+            setTimeout(function() {
+                t.classList.remove('show');
+                setTimeout(function() { t.remove(); }, 300);
+            }, 3200);
+        }
+        async function act(url, btn) {
+            if (btn) { btn.disabled = true; var orig = btn.textContent; btn.textContent = '...'; }
+            try {
+                var res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+                if (!res.ok) {
+                    var txt = await res.text();
+                    showToast('Action failed: ' + txt, 'error');
+                } else {
+                    showToast('Done.', 'ok');
+                }
+            } catch (e) {
+                showToast('Request failed: ' + e.message, 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = orig; }
             }
         }
     </script>
@@ -778,22 +880,23 @@ PORTAL_APP_HTML = """
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
-    <title>{{ app_title }} - Dexter Assistant</title>
+    <title>{{ app_title }} - Dexter Ops</title>
     <style>
         :root {
-            --ink:#1d2a28;
-            --bg:#eef3ea;
+            --accent:#ea580c;
+            --accent2:#0f766e;
+            --ink:#1f2937;
+            --muted:#6b7280;
             --panel:#ffffff;
-            --edge:#d5ddd2;
-            --brand:#0f766e;
-            --muted:#55655f;
+            --edge:#d1d5db;
+            --bad:#991b1b;
         }
         * { box-sizing: border-box; }
         body {
             margin: 0;
             font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
             color: var(--ink);
-            background: var(--bg);
+            background: linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#eef2ff 100%);
             min-height: 100vh;
             display: grid;
             grid-template-rows: auto auto 1fr;
@@ -802,78 +905,121 @@ PORTAL_APP_HTML = """
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 14px;
+            padding: 11px 16px;
             border-bottom: 1px solid var(--edge);
-            background: #f8fbf6;
+            background: #ffffff;
+            box-shadow: 0 1px 4px rgba(15,23,42,0.06);
         }
-        .brand { font-size: 18px; font-weight: 700; }
-        .brand-wrap { display: flex; align-items: center; gap: 8px; }
-        .brand-logo { width: 24px; height: 24px; object-fit: contain; border-radius: 6px; background: #fff; border: 1px solid #d6dfd4; padding: 2px; }
-        .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+        .brand { font-size: 17px; font-weight: 800; color: #0f172a; }
+        .brand-wrap { display: flex; align-items: center; gap: 9px; }
+        .brand-logo { width: 26px; height: 26px; object-fit: contain; border-radius: 7px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        .nav { display: flex; gap: 7px; flex-wrap: wrap; }
         .nav a, .nav button {
-            border: 1px solid #c6d2c7;
+            border: 1px solid var(--edge);
             background: #fff;
-            color: #1f2d2b;
+            color: var(--ink);
             border-radius: 10px;
-            padding: 7px 10px;
+            padding: 7px 12px;
             text-decoration: none;
             font-size: 12px;
+            font-weight: 600;
             cursor: pointer;
         }
-        .nav .primary { background: var(--brand); color: #fff; border-color: #0c5b55; }
+        .nav a:hover, .nav button:hover { background: #f1f5f9; }
+        .nav .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
+        .nav .primary:hover { background: #c2410c; }
+        .nav .secondary { background: var(--accent2); color: #fff; border-color: #0c5b55; }
+        .nav button:disabled { opacity: 0.55; cursor: not-allowed; }
         .subbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
             border-bottom: 1px solid var(--edge);
-            background: #fff;
-            padding: 8px 14px;
+            background: #f9fafb;
+            padding: 7px 16px;
             color: var(--muted);
-            font-size: 13px;
+            font-size: 12px;
         }
+        .subbar a { color: var(--accent2); font-weight: 600; text-decoration: none; }
+        .subbar a:hover { text-decoration: underline; }
         iframe {
             width: 100%;
-            height: calc(100vh - 104px);
             border: 0;
             background: #fff;
+            display: block;
         }
+        .toast-wrap { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:9999; pointer-events:none; }
+        .toast { background:#1f2937; color:#fff; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:600; opacity:0; transform:translateY(10px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; max-width:320px; }
+        .toast.show { opacity:1; transform:translateY(0); }
+        .toast.error { background:#991b1b; }
+        .toast.ok { background:#166534; }
         @media (max-width: 700px) {
-            .topbar, .subbar { flex-direction: column; align-items: flex-start; padding: 8px 4px; }
-            .brand { font-size: 1.1rem; }
+            .topbar { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+            .brand { font-size: 1rem; }
             .nav { gap: 4px; }
-            iframe { height: 60vh; }
         }
     </style>
 </head>
 <body>
-    <div class="topbar">
+    <div class="topbar" id="topbar">
         <div class="brand-wrap">
             <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
             <div class="brand">{{ app_title }}</div>
         </div>
         <div class="nav">
             <a href="/">Home</a>
-            <a class="primary" href="/">Main Page</a>
             <a href="/portal/productmix">ProductMix</a>
-            <a href="/portal/ic3">Inventory Control 3</a>
-            <button class="primary" onclick="restart()">Restart This App</button>
+            <a href="/portal/ic3">IC3</a>
+            <button class="primary" id="btnRestart" onclick="doRestart(this)">Restart App</button>
             <a href="/auth/logout">Logout</a>
         </div>
     </div>
-    <div class="subbar">
-        <span>Embedded via Dexter Assistant portal routing.</span>
-        <a href="{{ raw_url }}" target="_blank" rel="noopener">Open Raw App</a>
+    <div class="subbar" id="subbar">
+        <span>Embedded via Dexter Ops portal routing &mdash; {{ app_title }}</span>
+        <a href="{{ raw_url }}" target="_blank" rel="noopener">Open Raw &rarr;</a>
     </div>
-    <iframe src="{{ raw_url }}"></iframe>
+    <div class="toast-wrap" id="toastWrap"></div>
+    <iframe id="appFrame" src="{{ raw_url }}"></iframe>
     <script>
-        async function restart() {
-            const res = await fetch('/api/apps/{{ app_key }}/restart', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-            if (!res.ok) {
-                const txt = await res.text();
-                alert('Restart failed: ' + txt);
-                return;
+        function showToast(msg, type) {
+            var wrap = document.getElementById('toastWrap');
+            var t = document.createElement('div');
+            t.className = 'toast' + (type ? ' ' + type : '');
+            t.textContent = msg;
+            wrap.appendChild(t);
+            requestAnimationFrame(function() { t.classList.add('show'); });
+            setTimeout(function() {
+                t.classList.remove('show');
+                setTimeout(function() { t.remove(); }, 300);
+            }, 3200);
+        }
+        function setFrameHeight() {
+            var tb = document.getElementById('topbar');
+            var sb = document.getElementById('subbar');
+            var used = (tb ? tb.offsetHeight : 0) + (sb ? sb.offsetHeight : 0);
+            document.getElementById('appFrame').style.height = (window.innerHeight - used) + 'px';
+        }
+        setFrameHeight();
+        window.addEventListener('resize', setFrameHeight);
+        async function doRestart(btn) {
+            btn.disabled = true;
+            var orig = btn.textContent;
+            btn.textContent = '...';
+            try {
+                var res = await fetch('/api/apps/{{ app_key }}/restart', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+                if (!res.ok) {
+                    var txt = await res.text();
+                    showToast('Restart failed: ' + txt, 'error');
+                } else {
+                    showToast('Restarting...', 'ok');
+                    setTimeout(function() { window.location.reload(); }, 1400);
+                }
+            } catch (e) {
+                showToast('Request error: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = orig;
             }
-            window.location.reload();
         }
     </script>
 </body>
@@ -887,33 +1033,32 @@ LOGIN_HTML = """
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
-    <title>Dexter Assistant Login</title>
+    <title>Dexter Assistant &mdash; Sign In</title>
     <style>
         :root {
-            --bg: #eef3ea;
-            --panel: #fff;
-            --ink: #1f2a1f;
-            --muted: #5f6a60;
-            --edge: #d7dfd3;
-            --brand: #0f766e;
-            --brand2: #2563eb;
-            --danger: #991b1b;
-            --accent: #fbbf24;
+            --accent:#ea580c;
+            --accent-dark:#c2410c;
+            --accent2:#0f766e;
+            --ink:#1f2937;
+            --muted:#6b7280;
+            --edge:#d1d5db;
+            --panel:#ffffff;
+            --danger:#991b1b;
         }
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; color: var(--ink); background: var(--bg); }
+        body { margin: 0; font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; color: var(--ink); }
         .wrap {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 24px 8px;
-            background: linear-gradient(120deg, #e0f2fe 0%, #f1f5f9 100%);
+            background: linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#fff7ed 100%);
         }
         .container {
             display: flex;
             flex-direction: row;
-            gap: 36px;
+            gap: 40px;
             width: 100%;
             max-width: 900px;
             align-items: center;
@@ -926,123 +1071,98 @@ LOGIN_HTML = """
             flex-direction: column;
             align-items: flex-start;
             justify-content: center;
-            padding: 32px 0 32px 0;
+            padding: 32px 0;
         }
         .logo {
-            width: 96px;
-            height: 96px;
+            width: 80px;
+            height: 80px;
             margin-bottom: 18px;
             object-fit: contain;
             border-radius: 14px;
-            border: 1px solid #d7dfd3;
+            border: 1px solid var(--edge);
             background: #fff;
-            padding: 6px;
+            padding: 5px;
         }
         .hero-title {
-            font-size: 2.2rem;
-            font-weight: 800;
-            margin: 0 0 10px 0;
-            color: var(--brand2);
-            letter-spacing: 0.5px;
+            font-size: 2.3rem;
+            font-weight: 900;
+            margin: 0 0 10px;
+            color: #0f172a;
+            letter-spacing: 0.3px;
         }
+        .hero-accent { color: var(--accent); }
         .hero-tagline {
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             color: var(--muted);
-            margin-bottom: 18px;
+            margin-bottom: 20px;
+            line-height: 1.5;
         }
-        .features {
-            list-style: none;
-            padding: 0;
-            margin: 0 0 18px 0;
-        }
+        .features { list-style: none; padding: 0; margin: 0 0 20px; }
         .features li {
             display: flex;
             align-items: center;
             gap: 10px;
-            font-size: 1rem;
+            font-size: 0.97rem;
             margin-bottom: 10px;
             color: var(--ink);
         }
-        .features svg {
-            width: 22px;
-            height: 22px;
-            color: var(--brand2);
-            flex-shrink: 0;
-        }
-        .contact-link {
-            margin-top: 10px;
-            font-size: 1rem;
-            color: var(--brand2);
-            text-decoration: underline;
-            cursor: pointer;
-        }
+        .features svg { width: 20px; height: 20px; color: var(--accent); flex-shrink: 0; }
+        .contact-link { font-size: 0.9rem; color: var(--accent2); text-decoration: underline; }
         .card {
             flex: 1 1 0;
             min-width: 0;
-            max-width: 410px;
+            max-width: 400px;
             background: var(--panel);
             border: 1.5px solid var(--edge);
-            border-radius: 16px;
-            padding: 28px 22px 22px 22px;
-            box-shadow: 0 10px 32px rgba(33, 48, 33, 0.10);
+            border-radius: 18px;
+            padding: 30px 26px 24px;
+            box-shadow: 0 12px 40px rgba(15,23,42,0.10);
             display: flex;
             flex-direction: column;
             align-items: stretch;
         }
-        .card h2 {
-            margin: 0 0 8px 0;
-            font-size: 1.7rem;
-            font-weight: 700;
-            color: var(--brand2);
-        }
-        .card p { margin: 0 0 18px; color: var(--muted); }
-        label { display: block; margin: 10px 0 6px; font-size: 14px; }
-        input {
+        .card h2 { margin: 0 0 6px; font-size: 1.65rem; font-weight: 800; color: #0f172a; }
+        .card p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+        label { display: block; margin: 10px 0 5px; font-size: 13px; font-weight: 600; color: #374151; }
+        input[type=text], input[type=password] {
             width: 100%;
             padding: 11px 13px;
-            border: 1px solid #c7d2c4;
+            border: 1px solid var(--edge);
             border-radius: 10px;
             font-size: 15px;
-            margin-bottom: 2px;
+            outline: none;
+            transition: border-color 0.15s;
         }
-        .row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-top: 10px;
-            flex-wrap: wrap;
-        }
-        .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-        .check input { width: auto; margin: 0; }
-        button {
-            margin-top: 16px;
+        input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(234,88,12,0.12); }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        .check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; }
+        .check input { width: auto; margin: 0; cursor: pointer; }
+        button[type=submit] {
+            margin-top: 18px;
             width: 100%;
-            border: 1px solid var(--brand2);
-            background: linear-gradient(90deg, var(--brand2) 60%, var(--accent) 100%);
+            border: none;
+            background: var(--accent);
             color: #fff;
             border-radius: 10px;
             padding: 12px 0;
-            font-size: 1.1rem;
-            font-weight: 600;
+            font-size: 1rem;
+            font-weight: 700;
             cursor: pointer;
-            box-shadow: 0 2px 8px rgba(37,99,235,0.08);
-            transition: background 0.2s;
+            transition: background 0.15s;
+            letter-spacing: 0.2px;
         }
-        button:hover { background: linear-gradient(90deg, var(--brand2) 80%, var(--accent) 100%); }
-        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
+        button[type=submit]:hover { background: var(--accent-dark); }
+        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; font-weight: 600; }
         .links { margin-top: 14px; font-size: 13px; color: var(--muted); text-align: center; }
-        .links a { color: var(--brand2); text-decoration: underline; }
-        @media (max-width: 900px) {
-            .container { flex-direction: column; gap: 18px; align-items: stretch; }
+        .links a { color: var(--accent); text-decoration: underline; font-weight: 600; }
+        @media (max-width: 860px) {
+            .container { flex-direction: column; gap: 20px; align-items: stretch; }
             .marketing, .card { max-width: 100%; }
         }
-        @media (max-width: 600px) {
-            .wrap { padding: 10px 2px; }
-            .container { gap: 0; }
-            .marketing { padding: 18px 0 10px 0; }
-            .hero-title { font-size: 1.3rem; }
-            .card { padding: 18px 6px 14px 6px; border-radius: 10px; }
+        @media (max-width: 520px) {
+            .wrap { padding: 10px 4px; }
+            .hero-title { font-size: 1.5rem; }
+            .card { padding: 20px 12px 16px; border-radius: 12px; }
         }
     </style>
 </head>
@@ -1051,8 +1171,8 @@ LOGIN_HTML = """
         <div class="container">
             <div class="marketing">
                 <img class="logo" src="/branding/logo" alt="Dexter Assistant Logo" />
-                <div class="hero-title">Dexter Assistant</div>
-                <div class="hero-tagline">All your restaurant management apps, one secure dashboard.</div>
+                <div class="hero-title">Dexter <span class="hero-accent">Assistant</span></div>
+                <div class="hero-tagline">All your restaurant management apps,<br>one secure ops dashboard.</div>
                 <ul class="features">
                     <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Start, stop, and monitor apps instantly</li>
                     <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Secure, password-protected access</li>
@@ -1079,13 +1199,13 @@ LOGIN_HTML = """
     </div>
     <script>
         (function () {
-            const usernameInput = document.getElementById('login-username');
-            const passwordInput = document.getElementById('login-password');
-            const showPassword = document.getElementById('show-password');
-            const savePassword = document.getElementById('save-password');
-            const storageKey = 'dexterAssistantLogin';
+            var usernameInput = document.getElementById('login-username');
+            var passwordInput = document.getElementById('login-password');
+            var showPassword = document.getElementById('show-password');
+            var savePassword = document.getElementById('save-password');
+            var storageKey = 'dexterAssistantLogin';
             try {
-                const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+                var saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
                 if (saved && typeof saved === 'object') {
                     if (typeof saved.username === 'string') usernameInput.value = saved.username;
                     showPassword.checked = !!saved.showPassword;
@@ -1093,10 +1213,10 @@ LOGIN_HTML = """
                     if (showPassword.checked) passwordInput.type = 'text';
                 }
             } catch (e) {}
-            showPassword.addEventListener('change', () => {
+            showPassword.addEventListener('change', function() {
                 passwordInput.type = showPassword.checked ? 'text' : 'password';
             });
-            document.querySelector('form.card').addEventListener('submit', () => {
+            document.querySelector('form.card').addEventListener('submit', function() {
                 if (savePassword.checked) {
                     localStorage.setItem(storageKey, JSON.stringify({
                         username: usernameInput.value,
@@ -1120,26 +1240,75 @@ REGISTER_HTML = """
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dexter Assistant Register</title>
+    <title>Dexter Assistant &mdash; Register</title>
     <style>
-        :root { --bg:#eef3ea; --panel:#fff; --ink:#1f2a1f; --muted:#5f6a60; --edge:#d7dfd3; --brand:#166534; --danger:#991b1b; }
+        :root {
+            --accent:#ea580c;
+            --accent-dark:#c2410c;
+            --accent2:#0f766e;
+            --ink:#1f2937;
+            --muted:#6b7280;
+            --edge:#d1d5db;
+            --panel:#ffffff;
+            --danger:#991b1b;
+        }
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: "Segoe UI", "Trebuchet MS", sans-serif; color: var(--ink); background: var(--bg); }
-        .wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
-        .card { width: 100%; max-width: 460px; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; padding: 20px; box-shadow: 0 10px 26px rgba(33, 48, 33, 0.08); }
-        .brand-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-        .brand-logo { width: 34px; height: 34px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid #d7dfd3; padding: 2px; }
-        h1 { margin: 0 0 8px; font-size: 28px; }
-        p { margin: 0 0 18px; color: var(--muted); }
-        label { display: block; margin: 10px 0 6px; font-size: 14px; }
-        input { width: 100%; padding: 10px 12px; border: 1px solid #c7d2c4; border-radius: 10px; font-size: 14px; }
-        .row { display: flex; align-items: center; justify-content: flex-start; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
-        .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-        .check input { width: auto; margin: 0; }
-        button { margin-top: 14px; width: 100%; border: 1px solid #14532d; background: var(--brand); color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; }
-        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
-        .links { margin-top: 12px; font-size: 13px; color: var(--muted); }
-        .links a { color: #0b5a56; text-decoration: none; }
+        body { margin: 0; font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; color: var(--ink); }
+        .wrap {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px 8px;
+            background: linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#fff7ed 100%);
+        }
+        .card {
+            width: 100%;
+            max-width: 460px;
+            background: var(--panel);
+            border: 1.5px solid var(--edge);
+            border-radius: 18px;
+            padding: 28px 26px 22px;
+            box-shadow: 0 12px 40px rgba(15,23,42,0.10);
+        }
+        .brand-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .brand-logo { width: 34px; height: 34px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        h1 { margin: 0; font-size: 1.7rem; font-weight: 800; color: #0f172a; }
+        p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+        label { display: block; margin: 10px 0 5px; font-size: 13px; font-weight: 600; color: #374151; }
+        input[type=text], input[type=password] {
+            width: 100%;
+            padding: 11px 13px;
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(234,88,12,0.12); }
+        .row { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        .check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; }
+        .check input { width: auto; margin: 0; cursor: pointer; }
+        button[type=submit] {
+            margin-top: 18px;
+            width: 100%;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 0;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        button[type=submit]:hover { background: var(--accent-dark); }
+        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; font-weight: 600; }
+        .links { margin-top: 14px; font-size: 13px; color: var(--muted); }
+        .links a { color: var(--accent); text-decoration: underline; font-weight: 600; }
+        @media (max-width: 520px) {
+            .wrap { padding: 10px 4px; }
+            .card { padding: 20px 12px 16px; border-radius: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -1149,9 +1318,9 @@ REGISTER_HTML = """
                 <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
                 <h1>Create Account</h1>
             </div>
-            <p>Basic local auth for Dexter Assistant.</p>
+            <p>Create your Dexter Assistant login.</p>
             <label>Username</label>
-            <input type="text" name="username" required minlength="3" autofocus />
+            <input type="text" name="username" required minlength="3" autofocus autocomplete="username" />
             <label>Password</label>
             <input id="register-password" type="password" name="password" required minlength="8" autocomplete="new-password" />
             <label>Confirm Password</label>
@@ -1159,21 +1328,20 @@ REGISTER_HTML = """
             <div class="row">
                 <label class="check"><input id="register-show-password" type="checkbox" /> Show password</label>
             </div>
-            <button type="submit">Register</button>
+            <button type="submit">Create Account</button>
             {% if error %}<div class="error">{{ error }}</div>{% endif %}
             <div class="links">Already have an account? <a href="{{ login_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Sign in</a></div>
         </form>
     </div>
     <script>
         (function () {
-            const showPassword = document.getElementById('register-show-password');
-            const passwordInput = document.getElementById('register-password');
-            const confirmInput = document.getElementById('register-confirm-password');
-
-            showPassword.addEventListener('change', () => {
-                const nextType = showPassword.checked ? 'text' : 'password';
-                passwordInput.type = nextType;
-                confirmInput.type = nextType;
+            var showPassword = document.getElementById('register-show-password');
+            var passwordInput = document.getElementById('register-password');
+            var confirmInput = document.getElementById('register-confirm-password');
+            showPassword.addEventListener('change', function() {
+                var t = showPassword.checked ? 'text' : 'password';
+                passwordInput.type = t;
+                confirmInput.type = t;
             });
         })();
     </script>
@@ -1199,13 +1367,20 @@ def load_auth_users() -> dict[str, Any]:
 
 
 def ensure_default_admin_user() -> None:
+    admin_username = os.environ.get("DEXTER_ADMIN_USER", "").strip()
+    admin_password = os.environ.get("DEXTER_ADMIN_PASS", "").strip()
+    if not admin_username or not admin_password:
+        print(
+            "[dexter] WARNING: DEXTER_ADMIN_USER / DEXTER_ADMIN_PASS env vars not set. "
+            "Default admin account will NOT be created automatically.",
+            file=sys.stderr,
+        )
+        return
     users = load_auth_users()
-    admin_username = "arnoldrjr@gmail.com"
-    admin_password_hash = generate_password_hash("Passramirez4!")
     current = users.get(admin_username)
     if not current or not current.get("is_admin"):
         users[admin_username] = {
-            "password_hash": admin_password_hash,
+            "password_hash": generate_password_hash(admin_password),
             "created_at": current.get("created_at") if isinstance(current, dict) else datetime.now().isoformat(timespec="seconds"),
             "last_login": current.get("last_login") if isinstance(current, dict) else None,
             "is_admin": True,
@@ -1345,22 +1520,44 @@ class AppManager:
             lines = f.readlines()
         return "".join(lines[-max_lines:])
 
+    def _rotate_log(self, name: str) -> None:
+        log_file = self._log_file(name)
+        if log_file.exists() and log_file.stat().st_size > 200 * 1024:
+            old = log_file.with_suffix(".log.old")
+            try:
+                log_file.rename(old)
+            except OSError:
+                pass
+
     def status(self) -> dict[str, Any]:
-        out: dict[str, Any] = {}
+        # Snapshot process states under the lock — do NOT call check_health() under lock
+        # because HTTP calls may block and prevent start/stop from acquiring the lock.
+        snapshots: dict[str, dict[str, Any]] = {}
         with self._lock:
             for name, app in self.config["apps"].items():
                 proc = self._procs.get(name)
                 running = proc is not None and proc.poll() is None
-                health_url = urljoin(app["base_url"], app.get("health_path", "/"))
-                healthy = check_health(health_url)
-                out[name] = {
+                snapshots[name] = {
                     "display_name": app["display_name"],
                     "base_url": app["base_url"],
+                    "health_url": urljoin(app["base_url"], app.get("health_path", "/")),
                     "running": running,
-                    "healthy": healthy,
                     "pid": proc.pid if running else None,
                     "log_tail": self._tail_log(name),
                 }
+
+        # Health checks outside the lock — safe to block here
+        out: dict[str, Any] = {}
+        for name, snap in snapshots.items():
+            healthy = check_health(snap["health_url"]) if snap["running"] else False
+            out[name] = {
+                "display_name": snap["display_name"],
+                "base_url": snap["base_url"],
+                "running": snap["running"],
+                "healthy": healthy,
+                "pid": snap["pid"],
+                "log_tail": snap["log_tail"],
+            }
         return out
 
     def preflight(self) -> dict[str, Any]:
@@ -1399,6 +1596,7 @@ class AppManager:
             env = os.environ.copy()
             env.update(app.get("env", {}))
             log_file = self._log_file(name)
+            self._rotate_log(name)
             with log_file.open("a", encoding="utf-8") as lf:
                 lf.write(f"\n=== START {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
 
@@ -1449,7 +1647,15 @@ class AppManager:
 CONFIG = load_config()
 MANAGER = AppManager(CONFIG)
 app = Flask(__name__, static_folder=None)
-app.secret_key = os.environ.get("DEXTER_SECRET_KEY") or os.environ.get("SECRET_KEY") or "dexter-assistant-local-secret"
+_secret = os.environ.get("DEXTER_SECRET_KEY") or os.environ.get("SECRET_KEY")
+if not _secret:
+    _secret = os.urandom(32)
+    print(
+        "[dexter] WARNING: DEXTER_SECRET_KEY env var not set. "
+        "Using a random secret — all sessions will be invalidated on restart.",
+        file=sys.stderr,
+    )
+app.secret_key = _secret
 ensure_default_admin_user()
 
 
@@ -1460,7 +1666,7 @@ def require_auth_for_protected_routes() -> Response | None:
         "/auth/register",
         "/branding/logo",
         "/favicon.ico",
-        "/api/status",
+        "/api/health",
     )
     if request.path.startswith(public_prefixes):
         return None
@@ -1640,7 +1846,13 @@ def portal_ic3_alias() -> Response:
     return redirect("/portal/ic3")
 
 
+@app.route("/api/health")
+def api_health() -> Response:
+    return jsonify({"ok": True})
+
+
 @app.route("/api/status")
+@login_required
 def api_status() -> Response:
     return jsonify({"apps": MANAGER.status(), "preflight": MANAGER.preflight()})
 
