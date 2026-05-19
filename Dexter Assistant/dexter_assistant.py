@@ -1140,6 +1140,10 @@ def front_door_favicon() -> Response:
 @app.route("/")
 @login_required
 def index() -> str:
+    referer = request.headers.get("Referer", "")
+    if "/app/productmix/" in referer or "/portal/productmix" in referer:
+        return _proxy("productmix", "")
+
     fd = CONFIG.get("front_door", {})
     return render_template_string(
         PORTAL_HOME_HTML,
@@ -1341,6 +1345,17 @@ def contextual_proxy(path: str) -> Response:
         return jsonify({"ok": False, "message": "Not found"}), 404
 
     referer = request.headers.get("Referer", "")
+    productmix_prefixes = (
+        "product-mix",
+        "reports",
+        "item/",
+        "categories",
+        "production-list",
+        "restaurant-setup",
+        "upload",
+        "export",
+        "auth/",
+    )
     if path.startswith("api/"):
         if "/app/productmix/" in referer or "/portal/productmix" in referer:
             return _proxy("productmix", path)
@@ -1350,9 +1365,11 @@ def contextual_proxy(path: str) -> Response:
         # Default IC3 API passthrough for direct calls from the inventory UI.
         if path.startswith(("api/products", "api/inventory", "api/invoices")):
             return _proxy("ic3", path)
+        if path.startswith("api/restaurants"):
+            return _proxy("productmix", path)
         return jsonify({"ok": False, "message": "Not found"}), 404
 
-    if "/app/productmix/" in referer or path.startswith("product-mix"):
+    if "/app/productmix/" in referer or path.startswith(productmix_prefixes):
         return _proxy("productmix", path)
     if "/app/ic3/" in referer:
         return _proxy("ic3", path)
