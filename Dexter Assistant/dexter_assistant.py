@@ -895,6 +895,7 @@ def auth_login() -> Response:
                 "email": user.get("email") or key or username,
             }
             session.permanent = True
+            MANAGER.start_all()
             return redirect(get_next_path("/admin"))
         error = "Invalid username or password."
 
