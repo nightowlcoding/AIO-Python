@@ -539,6 +539,22 @@ def load_auth_users() -> dict[str, Any]:
         return {}
 
 
+def ensure_default_admin_user() -> None:
+    users = load_auth_users()
+    admin_username = "arnoldrjr@gmail.com"
+    admin_password_hash = generate_password_hash("Passramirez4!")
+    current = users.get(admin_username)
+    if not current or not current.get("is_admin"):
+        users[admin_username] = {
+            "password_hash": admin_password_hash,
+            "created_at": current.get("created_at") if isinstance(current, dict) else datetime.now().isoformat(timespec="seconds"),
+            "last_login": current.get("last_login") if isinstance(current, dict) else None,
+            "is_admin": True,
+            "email": admin_username,
+        }
+        save_auth_users(users)
+
+
 def save_auth_users(users: dict[str, Any]) -> None:
     with AUTH_USERS_PATH.open("w", encoding="utf-8") as f:
         json.dump(users, f, indent=2)
@@ -549,6 +565,25 @@ def get_next_path(default_path: str = "/admin") -> str:
     if not next_path.startswith("/") or next_path.startswith("//"):
         return default_path
     return next_path
+
+
+def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
+    users = load_auth_users()
+    normalized = identifier.strip().lower()
+    if not normalized:
+        return None, None
+
+    direct = users.get(identifier)
+    if isinstance(direct, dict):
+        return identifier, direct
+
+    for username, user in users.items():
+        if not isinstance(user, dict):
+            continue
+        if username.lower() == normalized or str(user.get("email", "")).strip().lower() == normalized:
+            return username, user
+
+    return None, None
 
 
 def login_required(view_func):
@@ -756,6 +791,7 @@ CONFIG = load_config()
 MANAGER = AppManager(CONFIG)
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("DEXTER_SECRET_KEY") or os.environ.get("SECRET_KEY") or "dexter-assistant-local-secret"
+ensure_default_admin_user()
 
 
 @app.before_request
@@ -784,12 +820,17 @@ def auth_login() -> Response:
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
-        users = load_auth_users()
-        user = users.get(username)
+        key, user = find_auth_user(username)
         if user and check_password_hash(str(user.get("password_hash", "")), password):
-            users[username]["last_login"] = datetime.now().isoformat(timespec="seconds")
-            save_auth_users(users)
-            session[SESSION_USER_KEY] = username
+            users = load_auth_users()
+            if key and key in users:
+                users[key]["last_login"] = datetime.now().isoformat(timespec="seconds")
+                save_auth_users(users)
+            session[SESSION_USER_KEY] = {
+                "username": key or username,
+                "is_admin": bool(user.get("is_admin", False)),
+                "email": user.get("email") or key or username,
+            }
             session.permanent = True
             return redirect(get_next_path("/admin"))
         error = "Invalid username or password."
@@ -824,16 +865,22 @@ def auth_register() -> Response:
             error = "Passwords do not match."
         else:
             users = load_auth_users()
-            if username in users:
+            if any(
+                username.lower() == existing.lower() or username.lower() == str(user.get("email", "")).strip().lower()
+                for existing, user in users.items()
+                if isinstance(user, dict)
+            ):
                 error = "Username already exists."
             else:
                 users[username] = {
                     "password_hash": generate_password_hash(password),
                     "created_at": datetime.now().isoformat(timespec="seconds"),
                     "last_login": None,
+                    "is_admin": False,
+                    "email": username,
                 }
                 save_auth_users(users)
-                session[SESSION_USER_KEY] = username
+                session[SESSION_USER_KEY] = {"username": username, "is_admin": False, "email": username}
                 session.permanent = True
                 return redirect(get_next_path("/admin"))
 
