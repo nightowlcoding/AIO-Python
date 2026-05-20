@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sqlite3
 import socket
 import subprocess
 import sys
@@ -17,7 +19,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import urlopen
 
 import requests
@@ -60,6 +62,9 @@ DASHBOARD_HTML = """
                         margin: 0;
                         font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
                         color: var(--ink);
+                            display: flex;
+                            flex-direction: column;
+                            min-height: 0;
                     background: linear-gradient(145deg, #f8fafc 0%, #f9fafb 45%, #eef2ff 100%);
                         min-height: 100vh;
                 }
@@ -70,28 +75,32 @@ DASHBOARD_HTML = """
                 }
                 .left-primary,
                 .left-sub {
-                        border-right: 1px solid var(--edge);
-                        overflow: auto;
+                    border-right: 1px solid var(--edge);
+                    overflow: auto;
                 }
                 .left-primary {
-                        background: var(--left);
-                        padding: 12px 10px;
+                    background: var(--left);
+                    padding: 12px 10px;
                 }
                 .left-sub {
-                        background: var(--left2);
-                        padding: 14px 10px;
+                    background: var(--left2);
+                    padding: 0;
+                    width: 0;
+                    overflow: hidden;
+                    opacity: 0;
+                    pointer-events: none;
                 }
                 .brand-row {
-                        display: flex;
-                        align-items: center;
-                        justify-content: space-between;
-                        margin-bottom: 14px;
-                        gap: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 14px;
+                    gap: 8px;
                 }
                 .brand {
-                        font-size: 23px;
-                        font-weight: 800;
-                        color: #0f172a;
+                    font-size: 23px;
+                    font-weight: 800;
+                    color: #0f172a;
                 }
                 .brand-mark {
                     display: flex;
@@ -110,19 +119,62 @@ DASHBOARD_HTML = """
                     flex-shrink: 0;
                 }
                 .menu-btn {
-                        border: 1px solid var(--edge);
-                        background: #fff;
-                        color: #334155;
-                        border-radius: 10px;
-                        width: 36px;
-                        height: 36px;
-                        cursor: pointer;
+                    border: 1px solid var(--edge);
+                    background: #fff;
+                    color: #334155;
+                    border-radius: 10px;
+                    width: 36px;
+                    height: 36px;
+                    cursor: pointer;
                 }
                 .primary-menu,
                 .sub-menu {
-                        display: flex;
-                        flex-direction: column;
-                        gap: 6px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+                .primary-menu button,
+                .sub-menu button {
+                    border: 1px solid transparent;
+                    background: transparent;
+                    text-align: left;
+                    color: #1f2937;
+                    border-radius: 10px;
+                    padding: 9px 10px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 600;
+                }
+                .primary-menu button:hover,
+                .sub-menu button:hover {
+                    background: #e5e7eb;
+                }
+                .primary-menu button.active,
+                .sub-menu button.active {
+                    background: #ffedd5;
+                    border-color: #fed7aa;
+                    color: #c2410c;
+                }
+                .sub-head {
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    color: #64748b;
+                    margin: 4px 8px;
+                }
+                .shell.group-open {
+                    grid-template-columns: 220px 220px minmax(0, 1fr);
+                }
+                body.collapsed .shell.group-open {
+                    grid-template-columns: 72px 220px minmax(0, 1fr);
+                }
+                .shell.group-open .left-sub {
+                    width: auto;
+                    padding: 14px 10px;
+                    border-left: 1px solid var(--edge);
+                    overflow: auto;
+                    opacity: 1;
+                    pointer-events: auto;
                 }
                 .primary-menu button,
                 .sub-menu button {
@@ -154,7 +206,7 @@ DASHBOARD_HTML = """
                         margin: 4px 8px;
                 }
                 body.collapsed .shell {
-                        grid-template-columns: 72px 220px minmax(0, 1fr);
+                    grid-template-columns: 72px 0 minmax(0, 1fr);
                 }
                 body.collapsed .brand {
                         display: none;
@@ -162,6 +214,15 @@ DASHBOARD_HTML = """
                 body.collapsed .brand-logo {
                     width: 28px;
                     height: 28px;
+                }
+                body.collapsed .left-sub {
+                    width: 0;
+                    padding: 0;
+                    border-right: 0;
+                    border-left: 0;
+                    overflow: hidden;
+                    opacity: 0;
+                    pointer-events: none;
                 }
                 body.collapsed .primary-menu button {
                         font-size: 0;
@@ -181,6 +242,26 @@ DASHBOARD_HTML = """
                 .main {
                         min-width: 0;
                         padding: 20px;
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 0;
+                }
+                .viewer-pane {
+                    display: flex;
+                    flex: 1;
+                    min-height: 0;
+                    padding: 0;
+                    overflow: hidden;
+                }
+                .app-frame {
+                    width: 100%;
+                    height: 100%;
+                    border: 0;
+                    display: block;
+                    flex: 1;
+                    min-height: 0;
+                    background: #fff;
+                    border-radius: 16px;
                 }
                 .topbar {
                         display: flex;
@@ -234,6 +315,23 @@ DASHBOARD_HTML = """
                         padding: 16px;
                 }
                 .pane.active { display: block; }
+                    .viewer-pane {
+                        display: flex;
+                        flex: 1;
+                        min-height: 0;
+                        padding: 0;
+                        overflow: hidden;
+                    }
+                    .app-frame {
+                        width: 100%;
+                        height: 100%;
+                        border: 0;
+                        display: block;
+                        flex: 1;
+                        min-height: 0;
+                        background: #fff;
+                        border-radius: 16px;
+                    }
                 .banner {
                     border: 1px solid #fed7aa;
                     background: #fff7ed;
@@ -378,8 +476,10 @@ DASHBOARD_HTML = """
                                 left: 230px;
                                 border-left: 1px solid var(--edge);
                         }
-                        .shell.menu-open .left-primary,
-                        .shell.menu-open .left-sub {
+                        .shell.menu-open .left-primary {
+                                transform: translateX(0);
+                        }
+                        .shell.menu-open.group-open .left-sub {
                                 transform: translateX(0);
                         }
                         .mobile-top { display: flex; }
@@ -405,76 +505,120 @@ DASHBOARD_HTML = """
                                 <button class="menu-btn" onclick="toggleCollapsed()">||</button>
                         </div>
                         <nav id="primaryNav" class="primary-menu">
-                                <button data-short="HM" data-section="overview" class="active" onclick="setSection('overview')">Home</button>
-                                <button data-short="AP" data-section="apps" onclick="setSection('apps')">Apps</button>
-                                <button data-short="OP" data-section="operations" onclick="setSection('operations')">Operations</button>
+                        <button data-short="IC" data-section="inventory" class="active" onclick="setSection('inventory')">Inventory Control</button>
+                        <button data-short="PM" data-section="productmix" onclick="setSection('productmix')">Product Mix</button>
+                        <button data-short="MG" data-section="managerapp" onclick="setSection('managerapp')">Manager App</button>
+                        <button data-short="AD" data-section="admin" onclick="setSection('admin')">Admin</button>
                         </nav>
                 </aside>
 
                 <aside class="left-sub">
-                        <div class="sub-head">Sub Menu</div>
+                    <div class="sub-head" id="subHead">Sub Menu</div>
                         <nav id="subNav" class="sub-menu"></nav>
                 </aside>
 
                 <main class="main">
                         <div class="topbar">
                                 <div>
-                                        <h1 id="pageTitle" class="title">Control Center</h1>
-                                        <p class="subtitle">Left menus control context. Main display lives on the right, with quick app actions.</p>
+                            <h1 id="pageTitle" class="title">Inventory Control</h1>
+                            <p id="pageSubtitle" class="subtitle">Choose a top-level app group, then pick the submenu item to load it full screen on the right.</p>
                                 </div>
                                 <div class="actions">
-                                        <button class="primary" onclick="act('/api/start-all', null, this)">Start All</button>
-                                        <button class="warning" onclick="act('/api/stop-all', null, this)">Stop All</button>
-                                        <button onclick="refreshState()">Refresh</button>
-                                        <a class="btn secondary" href="/portal/ic3">Open IC3 View</a>
                                         <a class="btn" href="/auth/logout">Logout</a>
                                 </div>
                         </div>
 
-                        <section id="pane-overview" class="pane active">
-                                <div class="banner">Original source folders stay untouched. This dashboard controls copied apps in this Dexter Assistant directory.</div>
-                                <div class="stats">
-                                        <div class="stat"><div class="label">Total Apps</div><div id="statTotal" class="value">0</div></div>
-                                        <div class="stat"><div class="label">Running</div><div id="statRunning" class="value">0</div></div>
-                                        <div class="stat"><div class="label">Healthy</div><div id="statHealthy" class="value">0</div></div>
-                                        <div class="stat"><div class="label">Unhealthy</div><div id="statUnhealthy" class="value">0</div></div>
-                                </div>
-                                <div class="footer">Front door: {{ host }}:{{ port }}</div>
-                        </section>
-
-                        <section id="pane-apps" class="pane">
-                                <div id="grid" class="grid"></div>
-                        </section>
-
-                        <section id="pane-operations" class="pane">
-                                <div class="list">
-                                        <div class="list-row list-head">
-                                                <div>Application</div>
-                                                <div>Status</div>
-                                                <div>Endpoint</div>
-                                        </div>
-                                        <div id="opsRows"></div>
-                                </div>
-                                <pre id="opsLog">No runtime log yet.</pre>
+                        <section id="pane-viewer" class="pane viewer-pane active">
+                                <iframe id="appFrame" class="app-frame" src="/app/ic3/"></iframe>
                         </section>
                 </main>
         </div>
 
         <script>
-            const subMenus = {
-                overview: [
-                    { id: 'overview', label: 'Summary' },
-                    { id: 'apps', label: 'Quick App Cards' }
-                ],
-                apps: [
-                    { id: 'apps', label: 'All Applications' },
-                    { id: 'operations', label: 'Status Matrix' }
-                ],
-                operations: [
-                    { id: 'operations', label: 'Operations Board' },
-                    { id: 'apps', label: 'Card Controls' }
-                ]
+            const menuGroups = {
+                inventory: {
+                    title: 'Inventory Control',
+                    subtitle: 'Inventory apps and operational tools for the inventory workflow.',
+                    items: [
+                        { id: 'ic3-home', label: 'Inventory Control 3', url: '/app/ic3/' },
+                        { id: 'ic3-enter', label: 'Enter Inventory', url: '/app/ic3/', ic3TabText: 'Enter Inventory' },
+                        { id: 'ic3-saved', label: 'Saved Inventories', url: '/app/ic3/', ic3TabText: 'Saved Inventories' },
+                        { id: 'ic3-est-vs-act', label: 'Estimated vs Actual', url: '/app/ic3/', ic3TabText: 'Estimated vs Actual' },
+                        { id: 'ic3-orders', label: 'Orders', url: '/app/ic3/', ic3TabText: 'Orders' },
+                        { id: 'ic3-manage', label: 'Manage Products', url: '/app/ic3/', ic3TabText: 'Manage Products' },
+                        { id: 'ic3-forecast', label: 'Forecast', url: '/app/ic3/', ic3TabText: 'Forecast' },
+                        { id: 'ic3-reports', label: 'Reports', url: '/app/ic3/', ic3TabText: 'Reports' },
+                        { id: 'ic3-analytics', label: 'Analytics', url: '/app/ic3/', ic3TabText: 'Analytics' }
+                    ]
+                },
+                productmix: {
+                    title: 'Product Mix',
+                    subtitle: 'Product mix reporting and production planning tools.',
+                    items: [
+                        { id: 'pm-home', label: 'Product Mix Home', url: '/app/productmix/product-mix' },
+                        { id: 'pm-reports', label: 'Reports Overview', url: '/app/productmix/reports' },
+                        { id: 'pm-production', label: 'Production Report', url: '/app/productmix/reports/production' },
+                        { id: 'pm-categories', label: 'Categories', url: '/app/productmix/categories' },
+                        { id: 'pm-production-list', label: 'Production List', url: '/app/productmix/production-list' }
+                    ]
+                },
+                managerapp: {
+                    title: 'Manager App',
+                    subtitle: 'Restaurant manager dashboard and operations workspace.',
+                    items: [
+                        { id: 'mgr-home', label: 'Manager Home', url: '/app/managerapp/' },
+                        { id: 'mgr-dashboard', label: 'Dashboard', url: '/app/managerapp/dashboard' }
+                    ]
+                },
+                admin: {
+                    title: 'Admin',
+                    subtitle: 'Shared restaurant configuration and administrative tools.',
+                    items: [
+                        { id: 'admin-restaurant-setup', label: 'Restaurant Setup', url: '/app/productmix/restaurant-setup' },
+                        { id: 'admin-productmix-dashboard', label: 'ProductMix Admin Dashboard', url: '/app/productmix/admin' }
+                    ]
+                }
             };
+
+            let activeGroup = 'inventory';
+            let activeApp = 'ic3-home';
+
+            function normalizeLabel(value) {
+                return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            }
+
+            function activateIc3Tab(item, attemptsLeft) {
+                var frame = document.getElementById('appFrame');
+                if (!frame || !item || !item.ic3TabText) return;
+                if (typeof attemptsLeft !== 'number') attemptsLeft = 12;
+
+                try {
+                    var win = frame.contentWindow;
+                    var doc = win ? win.document : null;
+                    if (!doc || !doc.body) throw new Error('Frame not ready');
+
+                    var target = normalizeLabel(item.ic3TabText);
+                    var candidates = Array.prototype.slice.call(
+                        doc.querySelectorAll('.tab, button, [role="tab"], .nav-link, a')
+                    );
+                    var btn = candidates.find(function(el) {
+                        return normalizeLabel(el.textContent).indexOf(target) !== -1;
+                    });
+
+                    if (btn) {
+                        btn.click();
+                        return;
+                    }
+                } catch (e) {
+                    // Frame still loading; retry below.
+                }
+
+                if (attemptsLeft > 0) {
+                    setTimeout(function() {
+                        activateIc3Tab(item, attemptsLeft - 1);
+                    }, 180);
+                }
+            }
 
             function htmlEscape(value) {
                 return String(value || '').replace(/[<>&]/g, function(m) {
@@ -540,115 +684,68 @@ DASHBOARD_HTML = """
             }
 
             function setSection(section) {
+                if (!menuGroups[section]) return;
+                activeGroup = section;
                 document.querySelectorAll('#primaryNav button').forEach(function(b) {
                     b.classList.toggle('active', b.dataset.section === section);
                 });
-                document.querySelectorAll('.pane').forEach(function(pane) {
-                    pane.classList.toggle('active', pane.id === ('pane-' + section));
-                });
 
                 const title = document.getElementById('pageTitle');
-                const titles = {
-                    overview: 'Control Center',
-                    apps: 'Applications',
-                    operations: 'Operations'
-                };
-                title.textContent = titles[section] || 'Control Center';
+                const subtitle = document.getElementById('pageSubtitle');
+                title.textContent = menuGroups[section].title;
+                subtitle.textContent = menuGroups[section].subtitle;
+                document.getElementById('shell').classList.add('group-open');
                 renderSubmenu(section);
-
-                if (window.innerWidth <= 980) {
-                    document.getElementById('shell').classList.remove('menu-open');
-                }
+                openApp(menuGroups[section].items[0]);
             }
 
-            function setPaneFromSubmenu(targetPane) {
-                const mapped = targetPane === 'operations' ? 'operations' : (targetPane === 'apps' ? 'apps' : 'overview');
-                setSection(mapped);
+            function openApp(item) {
+                if (!item) return;
+                activeApp = item.id;
+                var frame = document.getElementById('appFrame');
+                var nextUrl = item.url || '/app/ic3/';
+                var currentUrl = frame.getAttribute('src') || '';
+                var isIc3Loaded = currentUrl.indexOf('/app/ic3/') !== -1;
+
+                if (item.ic3TabText) {
+                    if (!isIc3Loaded) {
+                        frame.onload = function() {
+                            activateIc3Tab(item, 12);
+                        };
+                        frame.src = '/app/ic3/';
+                    } else {
+                        frame.onload = null;
+                        activateIc3Tab(item, 12);
+                    }
+                } else {
+                    frame.onload = null;
+                    if (currentUrl !== nextUrl) {
+                        frame.src = nextUrl;
+                    }
+                }
+
+                document.querySelectorAll('#subNav button').forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.app === item.id);
+                });
+                if (window.innerWidth <= 980) {
+                    document.getElementById('shell').classList.remove('menu-open');
+                    document.getElementById('shell').classList.remove('group-open');
+                }
             }
 
             function renderSubmenu(section) {
                 const nav = document.getElementById('subNav');
+                const head = document.getElementById('subHead');
                 nav.innerHTML = '';
-                (subMenus[section] || []).forEach(function(item) {
+                head.textContent = menuGroups[section].title;
+                (menuGroups[section].items || []).forEach(function(item) {
                     const btn = document.createElement('button');
                     btn.textContent = item.label;
-                    btn.classList.toggle('active', item.id === section);
-                    btn.onclick = function() { setPaneFromSubmenu(item.id); };
+                    btn.dataset.app = item.id;
+                    btn.classList.toggle('active', item.id === activeApp);
+                    btn.onclick = function() { openApp(item); };
                     nav.appendChild(btn);
                 });
-            }
-
-            function renderCard(name, state) {
-                const card = document.createElement('div');
-                card.className = 'card';
-                const safeLog = htmlEscape(state.log_tail || '');
-                const pid = state.pid || 'n/a';
-                const disabledStart = state.running ? 'disabled' : '';
-                const disabledStop = state.running ? '' : 'disabled';
-
-                card.innerHTML =
-                    '<div class="row">' +
-                        '<div class="name">' + htmlEscape(state.display_name) + '</div>' +
-                        '<div class="' + badgeClass(state) + '">' + badgeText(state) + '</div>' +
-                    '</div>' +
-                    '<div class="meta">key: ' + htmlEscape(name) + ' | url: ' + htmlEscape(state.base_url) + ' | pid: ' + htmlEscape(pid) + '</div>' +
-                    '<div class="btns">' +
-                        '<button class="primary" onclick="act(\\'/api/apps/' + htmlEscape(name) + '/start\\')" ' + disabledStart + '>Start</button>' +
-                        '<button onclick="act(\\'/api/apps/' + htmlEscape(name) + '/restart\\')">Restart</button>' +
-                        '<button class="warning" onclick="act(\\'/api/apps/' + htmlEscape(name) + '/stop\\')" ' + disabledStop + '>Stop</button>' +
-                        '<a class="btn secondary" href="/portal/' + htmlEscape(name) + '">Open</a>' +
-                        '<a class="btn" href="/app/' + htmlEscape(name) + '/" target="_blank" rel="noopener">Raw</a>' +
-                    '</div>' +
-                    '<pre>' + (safeLog || 'No runtime log yet.') + '</pre>';
-
-                return card;
-            }
-
-            function renderOpsRows(apps) {
-                const rows = document.getElementById('opsRows');
-                rows.innerHTML = '';
-                const combinedLogs = [];
-
-                Object.entries(apps).forEach(function(entry) {
-                    const name = entry[0];
-                    const state = entry[1];
-                    const row = document.createElement('div');
-                    row.className = 'list-row';
-                    row.innerHTML =
-                        '<div><strong>' + htmlEscape(state.display_name) + '</strong><br/><span style="color:#64748b">' + htmlEscape(name) + '</span></div>' +
-                        '<div><span class="' + badgeClass(state) + '">' + badgeText(state) + '</span></div>' +
-                        '<div>' + htmlEscape(state.base_url) + '</div>';
-                    rows.appendChild(row);
-
-                    if (state.log_tail) {
-                        combinedLogs.push('=== ' + state.display_name + ' ===\\n' + state.log_tail);
-                    }
-                });
-
-                document.getElementById('opsLog').textContent = combinedLogs.length ? combinedLogs.join('\\n\\n') : 'No runtime log yet.';
-            }
-
-            function renderStats(apps) {
-                const values = Object.values(apps);
-                const total = values.length;
-                const running = values.filter(function(s) { return s.running; }).length;
-                const healthy = values.filter(function(s) { return s.running && s.healthy; }).length;
-                const unhealthy = values.filter(function(s) { return s.running && !s.healthy; }).length;
-
-                document.getElementById('statTotal').textContent = String(total);
-                document.getElementById('statRunning').textContent = String(running);
-                document.getElementById('statHealthy').textContent = String(healthy);
-                document.getElementById('statUnhealthy').textContent = String(unhealthy);
-
-                var statTotal = document.getElementById('statTotal').closest('.stat');
-                var statRunning = document.getElementById('statRunning').closest('.stat');
-                var statHealthy = document.getElementById('statHealthy').closest('.stat');
-                var statUnhealthy = document.getElementById('statUnhealthy').closest('.stat');
-
-                statRunning.className = 'stat' + (running > 0 ? ' ok-stat' : '');
-                statHealthy.className = 'stat' + (healthy > 0 ? ' ok-stat' : '');
-                statUnhealthy.className = 'stat' + (unhealthy > 0 ? ' bad-stat' : '');
-                statTotal.className = 'stat';
             }
 
             var _pollTimer = null;
@@ -667,20 +764,11 @@ DASHBOARD_HTML = """
                 try {
                     var res = await fetch('/api/status');
                     if (!res.ok) return;
-                    var data = await res.json();
-                    var apps = data.apps || {};
-                    var grid = document.getElementById('grid');
-                    grid.innerHTML = '';
-                    Object.entries(apps).forEach(function(entry) {
-                        grid.appendChild(renderCard(entry[0], entry[1]));
-                    });
-                    renderStats(apps);
-                    renderOpsRows(apps);
                 } catch (e) { /* network hiccup — skip silently */ }
             }
 
-            renderSubmenu('overview');
-            setSection('overview');
+            renderSubmenu('inventory');
+            setSection('inventory');
             refreshState();
             startPoll();
         </script>
@@ -809,6 +897,7 @@ PORTAL_HOME_HTML = """
             <a href="/">Home</a>
             <a href="/portal/productmix">ProductMix</a>
             <a href="/portal/ic3">Inventory Control 3</a>
+            <a href="/portal/managerapp">Manager App</a>
             <button class="primary" id="btnStartAll" onclick="act('/api/start-all', this)">Start All</button>
             <button class="danger" id="btnStopAll" onclick="act('/api/stop-all', this)">Stop All</button>
             <a href="/auth/logout">Logout</a>
@@ -834,6 +923,14 @@ PORTAL_HOME_HTML = """
                 <div class="actions">
                     <a class="primary" href="/portal/ic3">Open IC3</a>
                     <a class="secondary" href="/app/ic3/" target="_blank" rel="noopener">Open Raw</a>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Manager App</h2>
+                <p>Manager workflows for daily logs, employees, and operational reports.</p>
+                <div class="actions">
+                    <a class="primary" href="/portal/managerapp">Open Manager App</a>
+                    <a class="secondary" href="/app/managerapp/" target="_blank" rel="noopener">Open Raw</a>
                 </div>
             </div>
         </div>
@@ -970,6 +1067,7 @@ PORTAL_APP_HTML = """
             <a href="/">Home</a>
             <a href="/portal/productmix">ProductMix</a>
             <a href="/portal/ic3">IC3</a>
+            <a href="/portal/managerapp">Manager App</a>
             <button class="primary" id="btnRestart" onclick="doRestart(this)">Restart App</button>
             <a href="/auth/logout">Logout</a>
         </div>
@@ -1680,7 +1778,7 @@ def require_auth_for_protected_routes() -> Response | None:
 @app.route("/auth/login", methods=["GET", "POST"])
 def auth_login() -> Response:
     if session.get(SESSION_USER_KEY):
-        return redirect(get_next_path("/portal/ic3"))
+        return redirect(get_next_path("/"))
 
     error = ""
     if request.method == "POST":
@@ -1699,7 +1797,7 @@ def auth_login() -> Response:
             }
             session.permanent = True
             MANAGER.start_all()
-            return redirect(get_next_path("/portal/ic3"))
+            return redirect(get_next_path("/"))
         error = "Invalid username or password."
 
     return Response(
@@ -1716,7 +1814,7 @@ def auth_login() -> Response:
 @app.route("/auth/register", methods=["GET", "POST"])
 def auth_register() -> Response:
     if session.get(SESSION_USER_KEY):
-        return redirect(get_next_path("/portal/ic3"))
+        return redirect(get_next_path("/"))
 
     error = ""
     if request.method == "POST":
@@ -1749,7 +1847,7 @@ def auth_register() -> Response:
                 save_auth_users(users)
                 session[SESSION_USER_KEY] = {"username": username, "is_admin": False, "email": username}
                 session.permanent = True
-                return redirect(get_next_path("/portal/ic3"))
+                return redirect(get_next_path("/"))
 
     return Response(
         render_template_string(
@@ -1846,6 +1944,12 @@ def portal_ic3_alias() -> Response:
     return redirect("/portal/ic3")
 
 
+@app.route("/manager")
+@login_required
+def portal_manager_alias() -> Response:
+    return redirect("/portal/managerapp")
+
+
 @app.route("/api/health")
 def api_health() -> Response:
     return jsonify({"ok": True})
@@ -1855,6 +1959,54 @@ def api_health() -> Response:
 @login_required
 def api_status() -> Response:
     return jsonify({"apps": MANAGER.status(), "preflight": MANAGER.preflight()})
+
+
+@app.route("/api/shared/restaurants")
+@login_required
+def api_shared_restaurants() -> Response:
+    """Shared restaurant source of truth for all embedded apps.
+
+    Reads ProductMix restaurants directly from product_mix.db so IC3 and
+    Manager App can reuse one master list managed from Restaurant Setup.
+    """
+    productmix_cfg = CONFIG.get("apps", {}).get("productmix", {})
+    productmix_cwd = str(productmix_cfg.get("cwd") or "ProductMixRestaurantDB").strip() or "ProductMixRestaurantDB"
+    pm_db_path = ROOT / productmix_cwd / "product_mix.db"
+    if not pm_db_path.exists():
+        return jsonify({"ok": False, "message": f"Shared restaurant DB not found: {pm_db_path}"}), 404
+
+    conn = sqlite3.connect(pm_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, name, location, city, state
+            FROM restaurants
+            ORDER BY id ASC
+            """
+        ).fetchall()
+    except sqlite3.Error as exc:
+        return jsonify({"ok": False, "message": f"Failed reading shared restaurants: {exc}"}), 500
+    finally:
+        conn.close()
+
+    restaurants: list[dict[str, Any]] = []
+    for row in rows:
+        name = str(row["name"] or "").strip()
+        location = str(row["location"] or "").strip()
+        label = f"{name} - {location}" if location else name
+        restaurants.append(
+            {
+                "id": int(row["id"]),
+                "name": name,
+                "location": location,
+                "city": str(row["city"] or "").strip(),
+                "state": str(row["state"] or "").strip(),
+                "label": label,
+            }
+        )
+
+    return jsonify({"ok": True, "restaurants": restaurants, "count": len(restaurants)})
 
 
 @app.route("/api/start-all", methods=["POST"])
@@ -1905,6 +2057,35 @@ def _proxy(name: str, path: str) -> Response:
         time.sleep(0.6)
 
     upstream_base = CONFIG["apps"][name]["base_url"].rstrip("/") + "/"
+    upstream_origin = urlparse(upstream_base)
+
+    def rewrite_location_header(location: str) -> str:
+        # Keep upstream redirects inside Dexter's proxied app namespace so
+        # absolute locations like /login become /app/<name>/login.
+        if not location:
+            return location
+        if location.startswith("/"):
+            if location.startswith(f"/app/{name}/"):
+                return location
+            if location == "/":
+                return f"/app/{name}/"
+            return f"/app/{name}{location}"
+
+        parsed = urlparse(location)
+        if parsed.scheme and parsed.netloc and parsed.netloc == upstream_origin.netloc:
+            proxied_path = parsed.path or "/"
+            if proxied_path == "/":
+                new_location = f"/app/{name}/"
+            else:
+                new_location = f"/app/{name}{proxied_path}"
+            if parsed.query:
+                new_location = f"{new_location}?{parsed.query}"
+            if parsed.fragment:
+                new_location = f"{new_location}#{parsed.fragment}"
+            return new_location
+
+        return location
+
     target = urljoin(upstream_base, path)
     if request.query_string:
         target = f"{target}?{request.query_string.decode('utf-8', errors='ignore')}"
@@ -1918,6 +2099,13 @@ def _proxy(name: str, path: str) -> Response:
     forward_headers = {
         k: v for k, v in request.headers.items() if k.lower() not in excluded_req_headers
     }
+    if name == "managerapp":
+        dexter_user = session.get(SESSION_USER_KEY) or {}
+        if dexter_user:
+            forward_headers["X-Dexter-Auth"] = "1"
+            forward_headers["X-Dexter-User"] = str(dexter_user.get("username", ""))
+            forward_headers["X-Dexter-Email"] = str(dexter_user.get("email", ""))
+            forward_headers["X-Dexter-Is-Admin"] = "1" if dexter_user.get("is_admin") else "0"
 
     try:
         upstream = requests.request(
@@ -1937,23 +2125,45 @@ def _proxy(name: str, path: str) -> Response:
         "transfer-encoding",
         "connection",
     }
-    response_headers = [
-        (k, v)
-        for (k, v) in upstream.headers.items()
-        if k.lower() not in excluded_resp_headers
-    ]
 
-    if "Location" in upstream.headers:
-        loc = upstream.headers["Location"]
-        base = CONFIG["apps"][name]["base_url"]
-        if loc.startswith(base):
-            rewritten = "/app/{}/{}".format(name, loc[len(base):].lstrip("/"))
-            response_headers = [
-                (k, rewritten if k.lower() == "location" else v)
-                for (k, v) in response_headers
-            ]
+    content_type = upstream.headers.get("Content-Type", "")
+    response_body = upstream.content
+    if name == "managerapp" and "text/html" in content_type.lower():
+        try:
+            html = upstream.content.decode(upstream.encoding or "utf-8", errors="replace")
 
-    return Response(upstream.content, upstream.status_code, response_headers)
+            def _rewrite_attr(match: re.Match[str]) -> str:
+                attr = match.group("attr")
+                quoted_path = match.group("path")
+                if quoted_path.startswith("/app/managerapp/"):
+                    return f"{attr}{quoted_path}"
+                if quoted_path == "/":
+                    return f"{attr}/app/managerapp/"
+                return f"{attr}/app/managerapp{quoted_path}"
+
+            # Keep root-absolute links/forms/scripts in proxied manager namespace.
+            html = re.sub(
+                r'(?P<attr>\b(?:href|src|action)\s*=\s*["\'])(?P<path>/[^"\']*)',
+                _rewrite_attr,
+                html,
+                flags=re.IGNORECASE,
+            )
+            response_body = html.encode("utf-8")
+        except Exception:
+            response_body = upstream.content
+
+    response_headers: list[tuple[str, str]] = []
+    for (k, v) in upstream.headers.items():
+        k_lower = k.lower()
+        if k_lower in excluded_resp_headers:
+            continue
+        if k_lower == "content-length":
+            continue
+        if k_lower == "location":
+            v = rewrite_location_header(v)
+        response_headers.append((k, v))
+
+    return Response(response_body, upstream.status_code, response_headers)
 
 
 @app.route("/app/<name>/")
@@ -1981,6 +2191,8 @@ def open_app(name: str) -> Response:
 def contextual_static_proxy(path: str) -> Response:
     # Embedded apps may request absolute /static/... URLs.
     referer = request.headers.get("Referer", "")
+    if "/app/managerapp/" in referer or "/portal/managerapp" in referer:
+        return _proxy("managerapp", f"static/{path}")
     if "/app/ic3/" in referer or "/portal/ic3" in referer:
         return _proxy("ic3", f"static/{path}")
     return _proxy("productmix", f"static/{path}")
@@ -2000,6 +2212,7 @@ def contextual_proxy(path: str) -> Response:
         "admin",
         "productmix",
         "inventory",
+        "manager",
         "static/",
     )
     if path.startswith(reserved_prefixes):
@@ -2018,6 +2231,8 @@ def contextual_proxy(path: str) -> Response:
         "auth/",
     )
     if path.startswith("api/"):
+        if "/app/managerapp/" in referer or "/portal/managerapp" in referer:
+            return _proxy("managerapp", path)
         if "/app/productmix/" in referer or "/portal/productmix" in referer:
             return _proxy("productmix", path)
         if "/app/ic3/" in referer or "/portal/ic3" in referer:
@@ -2034,6 +2249,8 @@ def contextual_proxy(path: str) -> Response:
         return _proxy("productmix", path)
     if "/app/ic3/" in referer:
         return _proxy("ic3", path)
+    if "/app/managerapp/" in referer:
+        return _proxy("managerapp", path)
 
     return jsonify({"ok": False, "message": "Not found"}), 404
 

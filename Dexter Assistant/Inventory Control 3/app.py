@@ -212,6 +212,47 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
         }
     }
 
+    async function syncSharedLocations() {
+        const selectIds = ['reportLocation', 'location', 'inventoryLocation', 'invoiceLocation', 'bulkInvoiceLocation'];
+        try {
+            const response = await fetch('/api/shared/restaurants');
+            const payload = await response.json();
+            const restaurants = Array.isArray(payload && payload.restaurants) ? payload.restaurants : [];
+            if (!restaurants.length) return;
+
+            function labelOf(row) {
+                const name = String((row && row.name) || '').trim();
+                const location = String((row && row.location) || '').trim();
+                if (name && location) return name + ' - ' + location;
+                return name || location;
+            }
+
+            for (const id of selectIds) {
+                const select = document.getElementById(id);
+                if (!select || select.tagName !== 'SELECT') continue;
+
+                const existing = String(select.value || '').trim();
+                const options = ['<option value="">Select Location</option>'];
+                for (const row of restaurants) {
+                    const label = labelOf(row);
+                    if (!label) continue;
+                    options.push('<option value="' + label.replace(/"/g, '&quot;') + '">' + label + '</option>');
+                }
+                select.innerHTML = options.join('');
+
+                const values = Array.from(select.options).map(function (opt) { return String(opt.value || ''); });
+                if (existing && values.includes(existing)) {
+                    select.value = existing;
+                } else {
+                    const first = values.find(function (v) { return v && v.trim(); }) || '';
+                    select.value = first;
+                }
+            }
+        } catch (_error) {
+            // Keep existing IC3 behavior if shared restaurants endpoint is unavailable.
+        }
+    }
+
     function install() {
         const panel = ensurePanel();
         if (!panel) {
@@ -227,6 +268,7 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
         }
 
         refreshStatus();
+        syncSharedLocations();
     }
 
     if (document.readyState === 'loading') {
@@ -238,7 +280,118 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
     const observer = new MutationObserver(function () {
         if (!document.getElementById('ic3ProductMixSyncPanel')) {
             install();
+            return;
         }
+        syncSharedLocations();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+"""
+
+LOCATION_OPTIONS_SYNC_SCRIPT = r"""
+<script>
+(function () {
+    if (window.__ic3SharedLocationsInstalled) return;
+    window.__ic3SharedLocationsInstalled = true;
+
+    const SELECT_IDS = ['reportLocation', 'location', 'inventoryLocation', 'invoiceLocation', 'bulkInvoiceLocation'];
+    let refreshTimer = null;
+    let inFlight = false;
+    let lastAppliedSignature = '';
+
+    function buildLabel(row) {
+        const name = String(row && row.name || '').trim();
+        const location = String(row && row.location || '').trim();
+        if (name && location) return name + ' - ' + location;
+        return name || location;
+    }
+
+    function applyToSelect(select, restaurants) {
+        if (!select || !restaurants || !restaurants.length) return;
+        const existing = String(select.value || '').trim();
+
+        const opts = ['<option value="">Select Location</option>'];
+        for (const row of restaurants) {
+            const label = buildLabel(row);
+            if (!label) continue;
+            opts.push('<option value="' + label.replace(/"/g, '&quot;') + '">' + label + '</option>');
+        }
+        select.innerHTML = opts.join('');
+
+        const values = Array.from(select.options).map(function (o) { return String(o.value || ''); });
+        if (existing && values.includes(existing)) {
+            select.value = existing;
+        } else {
+            const first = values.find(function (v) { return v && v.trim(); }) || '';
+            select.value = first;
+        }
+    }
+
+    function computeSignature(restaurants) {
+        return (restaurants || []).map(function (row) {
+            return buildLabel(row);
+        }).filter(Boolean).join('|');
+    }
+
+    async function refreshLocations() {
+        if (inFlight) return;
+        inFlight = true;
+        try {
+            const res = await fetch('/api/shared/restaurants');
+            const payload = await res.json();
+            const restaurants = Array.isArray(payload && payload.restaurants) ? payload.restaurants : [];
+            if (!restaurants.length) return;
+
+            const signature = computeSignature(restaurants);
+            const hasAnySelect = SELECT_IDS.some(function (id) {
+                const el = document.getElementById(id);
+                return el && el.tagName === 'SELECT';
+            });
+            if (!hasAnySelect) return;
+
+            // Skip pointless re-renders when options list has not changed.
+            if (signature && signature === lastAppliedSignature) return;
+
+            for (const id of SELECT_IDS) {
+                const select = document.getElementById(id);
+                if (select && select.tagName === 'SELECT') {
+                    applyToSelect(select, restaurants);
+                }
+            }
+
+            lastAppliedSignature = signature || lastAppliedSignature;
+
+            const prefixInput = document.getElementById('renameLocationPrefix');
+            if (prefixInput && !String(prefixInput.value || '').trim()) {
+                const first = buildLabel(restaurants[0]);
+                if (first) prefixInput.value = first;
+            }
+        } catch (_err) {
+            // Keep existing behavior when shared list is unavailable.
+        } finally {
+            inFlight = false;
+        }
+    }
+
+    function scheduleRefresh() {
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+        }
+        refreshTimer = setTimeout(function () {
+            refreshTimer = null;
+            refreshLocations();
+        }, 250);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scheduleRefresh);
+    } else {
+        scheduleRefresh();
+    }
+
+    const observer = new MutationObserver(function () {
+        scheduleRefresh();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 })();
@@ -2130,7 +2283,14 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
 
     if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
-        updated = updated.replace("</body>", PRODUCTMIX_SYNC_UI_SCRIPT + "\n</body>", 1)
+        updated = updated.replace(
+            "</body>",
+            PRODUCTMIX_SYNC_UI_SCRIPT + "\n" + LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>",
+            1,
+        )
+
+    if "__ic3SharedLocationsInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
 
     return updated
 
@@ -2824,23 +2984,30 @@ def _install_global_flask_response_patch() -> None:
         return
 
     original_process_response = Flask.process_response
+    rewrite_func = _rewrite_bulk_upload_text
 
     def patched_process_response(self, response):
+        # Let Flask and app-specific after_request hooks produce the final
+        # response first, then apply our runtime HTML rewrites last.
+        response = original_process_response(self, response)
+
         try:
             response.headers["X-IC3-BulkPatch"] = "active"
             content_type = (response.content_type or "").lower()
             if "text/html" in content_type or "javascript" in content_type:
-                if not response.direct_passthrough:
-                    body = response.get_data(as_text=True)
-                    rewritten = _rewrite_bulk_upload_text(body)
-                    if rewritten != body:
-                        response.set_data(rewritten)
-                        if "Content-Length" in response.headers:
-                            response.headers["Content-Length"] = str(len(response.get_data()))
+                if response.direct_passthrough:
+                    response.direct_passthrough = False
+
+                body = response.get_data(as_text=True)
+                rewritten = rewrite_func(body)
+                if rewritten != body:
+                    response.set_data(rewritten)
+                    if "Content-Length" in response.headers:
+                        response.headers["Content-Length"] = str(len(response.get_data()))
         except Exception:
             pass
 
-        return original_process_response(self, response)
+        return response
 
     Flask.process_response = patched_process_response
     Flask._ic3_bulk_patch_installed = True
@@ -2868,7 +3035,34 @@ def _force_production_flask_run() -> None:
 
     original_run = Flask.run
 
+    def _ensure_shared_locations_hook(flask_app) -> None:
+        if getattr(flask_app, "_ic3_shared_locations_run_hook", False):
+            return
+
+        @flask_app.after_request
+        def _inject_shared_locations_on_run(response):
+            content_type = (response.content_type or "").lower()
+            if "text/html" not in content_type:
+                return response
+
+            if response.direct_passthrough:
+                response.direct_passthrough = False
+
+            body = response.get_data(as_text=True)
+            if "__ic3SharedLocationsInstalled" in body or "</body>" not in body:
+                return response
+
+            updated = body.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
+            response.set_data(updated)
+            if "Content-Length" in response.headers:
+                response.headers["Content-Length"] = str(len(response.get_data()))
+            return response
+
+        flask_app._ic3_shared_locations_run_hook = True
+
     def _run_with_safe_defaults(self, *args, **kwargs):
+        _ensure_shared_locations_hook(self)
+
         force_prod = os.getenv("IC3_FORCE_PROD", "1").strip().lower() not in {"0", "false", "no"}
         if force_prod:
             # Prevent Flask reloader/debug from forking and causing manager pid churn.
@@ -2976,7 +3170,14 @@ def _patch_bulk_upload_limit_runtime() -> None:
             updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
 
         if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
-            updated = updated.replace("</body>", PRODUCTMIX_SYNC_UI_SCRIPT + "\n</body>", 1)
+            updated = updated.replace(
+                "</body>",
+                PRODUCTMIX_SYNC_UI_SCRIPT + "\n" + LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>",
+                1,
+            )
+
+        if "__ic3SharedLocationsInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
 
         if updated != body:
             response.set_data(updated)
@@ -2991,9 +3192,53 @@ _install_order_csv_rename_api_patch()
 _install_product_detail_api_patch()
 _install_productmix_sync_api_patch()
 _force_production_flask_run()
-_exec_bytecode()
+_original_module_name = globals().get("__name__", "__main__")
+if _original_module_name == "__main__":
+    globals()["__name__"] = "__ic3_runtime_wrapper__"
+try:
+    _exec_bytecode()
+finally:
+    globals()["__name__"] = _original_module_name
 _register_compat_inventory_endpoints(globals().get("app"))
 _register_invoice_import_log_endpoint(globals().get("app"))
 _register_productmix_sync_endpoints(globals().get("app"))
 _patch_favicon_endpoint()
 _patch_bulk_upload_limit_runtime()
+
+
+def _install_shared_locations_failsafe_patch() -> None:
+    target_app = globals().get("app")
+    if target_app is None:
+        return
+
+    @target_app.after_request
+    def _inject_shared_locations_failsafe(response):
+        content_type = (response.content_type or "").lower()
+        if "text/html" not in content_type:
+            return response
+
+        # Some IC3 routes stream templated HTML with passthrough enabled;
+        # disable it so we can append the shared-locations script.
+        if response.direct_passthrough:
+            response.direct_passthrough = False
+
+        body = response.get_data(as_text=True)
+        if "__ic3SharedLocationsInstalled" in body:
+            return response
+        if "</body>" not in body:
+            return response
+
+        updated = body.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
+        response.set_data(updated)
+        if "Content-Length" in response.headers:
+            response.headers["Content-Length"] = str(len(response.get_data()))
+        return response
+
+
+_install_shared_locations_failsafe_patch()
+
+
+if __name__ == "__main__":
+    runtime_app = globals().get("app")
+    if runtime_app is not None:
+        runtime_app.run()
