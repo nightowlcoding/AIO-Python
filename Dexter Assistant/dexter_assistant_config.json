@@ -11,7 +11,7 @@
       "cwd": "ProductMixRestaurantDB",
       "entrypoint": "app.py",
       "base_url": "http://127.0.0.1:5050",
-      "health_path": "/",
+      "health_path": "/health",
       "env": {
         "PM_DEBUG": "0",
         "PM_OPEN_BROWSER": "0"
@@ -27,6 +27,14 @@
         "IC3_FORCE_PROD": "1",
         "PYTHONUNBUFFERED": "1"
       }
+    },
+    "managerapp": {
+      "display_name": "Manager App",
+      "cwd": "Manager App",
+      "entrypoint": "manager_app.py",
+      "base_url": "http://127.0.0.1:8000",
+      "health_path": "/",
+      "env": {}
     }
   }
 }
