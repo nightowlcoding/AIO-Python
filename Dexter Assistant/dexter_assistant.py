@@ -1598,9 +1598,27 @@ class AppManager:
         RUNTIME_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     def _app_cfg(self, name: str) -> dict[str, Any]:
-        if name not in self.config["apps"]:
+        name = self.resolve_name(name)
+        if not name:
             raise KeyError(f"Unknown app: {name}")
         return self.config["apps"][name]
+
+    def resolve_name(self, name: str) -> str | None:
+        candidate = (name or "").strip().lower()
+        if not candidate:
+            return None
+        if candidate in self.config["apps"]:
+            return candidate
+
+        # Backward-compatible app key aliases.
+        alias_pairs = {
+            "manager": "managerapp",
+            "managerapp": "manager",
+        }
+        alias = alias_pairs.get(candidate)
+        if alias and alias in self.config["apps"]:
+            return alias
+        return None
 
     def _parse_host_port(self, base_url: str) -> tuple[str, int]:
         parts = base_url.replace("http://", "").replace("https://", "").split("/")[0]
@@ -1676,11 +1694,15 @@ class AppManager:
         return {"ok": len(issues) == 0, "issues": issues}
 
     def start(self, name: str) -> dict[str, Any]:
+        resolved_name = self.resolve_name(name)
+        if not resolved_name:
+            return {"ok": False, "message": f"Unknown app: {name}"}
+
         with self._lock:
-            app = self._app_cfg(name)
-            proc = self._procs.get(name)
+            app = self._app_cfg(resolved_name)
+            proc = self._procs.get(resolved_name)
             if proc is not None and proc.poll() is None:
-                return {"ok": True, "message": f"{name} already running"}
+                return {"ok": True, "message": f"{resolved_name} already running"}
 
             cwd = ROOT / app["cwd"]
             entry = cwd / app["entrypoint"]
@@ -1693,8 +1715,8 @@ class AppManager:
 
             env = os.environ.copy()
             env.update(app.get("env", {}))
-            log_file = self._log_file(name)
-            self._rotate_log(name)
+            log_file = self._log_file(resolved_name)
+            self._rotate_log(resolved_name)
             with log_file.open("a", encoding="utf-8") as lf:
                 lf.write(f"\n=== START {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
 
@@ -1706,15 +1728,19 @@ class AppManager:
                 stdout=stdout_stream,
                 stderr=subprocess.STDOUT,
             )
-            self._procs[name] = proc
-            return {"ok": True, "message": f"Started {name}", "pid": proc.pid}
+            self._procs[resolved_name] = proc
+            return {"ok": True, "message": f"Started {resolved_name}", "pid": proc.pid}
 
     def stop(self, name: str) -> dict[str, Any]:
+        resolved_name = self.resolve_name(name)
+        if not resolved_name:
+            return {"ok": False, "message": f"Unknown app: {name}"}
+
         with self._lock:
-            proc = self._procs.get(name)
+            proc = self._procs.get(resolved_name)
             if proc is None or proc.poll() is not None:
-                self._procs[name] = None
-                return {"ok": True, "message": f"{name} already stopped"}
+                self._procs[resolved_name] = None
+                return {"ok": True, "message": f"{resolved_name} already stopped"}
 
             proc.terminate()
             try:
@@ -1722,8 +1748,8 @@ class AppManager:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=5)
-            self._procs[name] = None
-            return {"ok": True, "message": f"Stopped {name}"}
+            self._procs[resolved_name] = None
+            return {"ok": True, "message": f"Stopped {resolved_name}"}
 
     def restart(self, name: str) -> dict[str, Any]:
         self.stop(name)
@@ -1919,16 +1945,17 @@ def portal_home() -> str:
 @app.route("/portal/<name>")
 @login_required
 def portal_app(name: str) -> Response:
-    if name not in CONFIG["apps"]:
+    resolved_name = MANAGER.resolve_name(name)
+    if not resolved_name:
         return jsonify({"ok": False, "message": f"Unknown app: {name}"}), 404
 
-    MANAGER.start(name)
-    app_cfg = CONFIG["apps"][name]
+    MANAGER.start(resolved_name)
+    app_cfg = CONFIG["apps"][resolved_name]
     return render_template_string(
         PORTAL_APP_HTML,
-        app_key=name,
+        app_key=resolved_name,
         app_title=app_cfg["display_name"],
-        raw_url=f"/app/{name}/",
+        raw_url=f"/app/{resolved_name}/",
     )
 
 
@@ -2048,15 +2075,16 @@ def api_restart(name: str) -> Response:
 
 
 def _proxy(name: str, path: str) -> Response:
-    if name not in CONFIG["apps"]:
+    resolved_name = MANAGER.resolve_name(name)
+    if not resolved_name:
         return jsonify({"ok": False, "message": f"Unknown app: {name}"}), 404
 
-    status = MANAGER.status()[name]
+    status = MANAGER.status()[resolved_name]
     if not status["running"]:
-        MANAGER.start(name)
+        MANAGER.start(resolved_name)
         time.sleep(0.6)
 
-    upstream_base = CONFIG["apps"][name]["base_url"].rstrip("/") + "/"
+    upstream_base = CONFIG["apps"][resolved_name]["base_url"].rstrip("/") + "/"
     upstream_origin = urlparse(upstream_base)
 
     def rewrite_location_header(location: str) -> str:
@@ -2065,19 +2093,19 @@ def _proxy(name: str, path: str) -> Response:
         if not location:
             return location
         if location.startswith("/"):
-            if location.startswith(f"/app/{name}/"):
+            if location.startswith(f"/app/{resolved_name}/"):
                 return location
             if location == "/":
-                return f"/app/{name}/"
-            return f"/app/{name}{location}"
+                return f"/app/{resolved_name}/"
+            return f"/app/{resolved_name}{location}"
 
         parsed = urlparse(location)
         if parsed.scheme and parsed.netloc and parsed.netloc == upstream_origin.netloc:
             proxied_path = parsed.path or "/"
             if proxied_path == "/":
-                new_location = f"/app/{name}/"
+                new_location = f"/app/{resolved_name}/"
             else:
-                new_location = f"/app/{name}{proxied_path}"
+                new_location = f"/app/{resolved_name}{proxied_path}"
             if parsed.query:
                 new_location = f"{new_location}?{parsed.query}"
             if parsed.fragment:
@@ -2099,7 +2127,7 @@ def _proxy(name: str, path: str) -> Response:
     forward_headers = {
         k: v for k, v in request.headers.items() if k.lower() not in excluded_req_headers
     }
-    if name == "managerapp":
+    if resolved_name in {"managerapp", "manager"}:
         dexter_user = session.get(SESSION_USER_KEY) or {}
         if dexter_user:
             forward_headers["X-Dexter-Auth"] = "1"
@@ -2128,7 +2156,7 @@ def _proxy(name: str, path: str) -> Response:
 
     content_type = upstream.headers.get("Content-Type", "")
     response_body = upstream.content
-    if name == "managerapp" and "text/html" in content_type.lower():
+    if resolved_name in {"managerapp", "manager"} and "text/html" in content_type.lower():
         try:
             html = upstream.content.decode(upstream.encoding or "utf-8", errors="replace")
 

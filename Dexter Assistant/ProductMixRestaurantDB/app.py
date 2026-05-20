@@ -1781,6 +1781,21 @@ def _get_next_restaurant_id(current_restaurant_id):
     return option_ids[0]
 
 
+def _safe_location_switch_next_url(raw_next, fallback_endpoint="restaurant_setup"):
+    fallback_url = url_for(fallback_endpoint)
+    next_url = (raw_next or "").strip()
+    if not next_url:
+        return fallback_url
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        return fallback_url
+
+    # ProductMix runs behind Dexter's /app/productmix proxy. Redirecting to
+    # portal/app paths from inside the upstream app can break route resolution.
+    if next_url.startswith(("/portal/", "/app/")):
+        return url_for("index")
+    return next_url
+
+
 def _normalize_report_date_filter(raw_value):
     value = (raw_value or "").strip()
     if not value:
@@ -6568,7 +6583,10 @@ def select_restaurant_post():
         return redirect(url_for("restaurant_setup", error="Restaurant+not+found"))
 
     switch_error = _switch_active_restaurant_or_error(int(restaurant_id_raw))
-    next_url = request.form.get("next") or request.referrer or url_for("restaurant_setup")
+    next_url = _safe_location_switch_next_url(
+        request.form.get("next") or request.referrer,
+        fallback_endpoint="restaurant_setup",
+    )
     if switch_error:
         separator = "&" if "?" in next_url else "?"
         return redirect(f"{next_url}{separator}error={switch_error}")
@@ -6581,7 +6599,10 @@ def select_restaurant_post():
 @login_required
 @limiter.limit("30 per minute")
 def select_next_restaurant():
-    next_url = request.form.get("next") or request.referrer or url_for("home")
+    next_url = _safe_location_switch_next_url(
+        request.form.get("next") or request.referrer,
+        fallback_endpoint="home",
+    )
     next_restaurant_id = _get_next_restaurant_id(_current_restaurant_id())
     separator = "&" if "?" in next_url else "?"
 
