@@ -33,6 +33,7 @@ FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
 BRANDING_LOGO_PATH = ROOT / "dexter_logo.png"
 LEGACY_BRANDING_LOGO_PATH = ROOT.parent / "Restaurant Management" / "Manager App" / "static" / "img" / "Dexter.png"
 AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
+RBAC_DB_PATH = ROOT / "dexter_assistant_rbac.db"
 SESSION_USER_KEY = "dexter_user"
 
 
@@ -572,8 +573,11 @@ DASHBOARD_HTML = """
                 },
                 admin: {
                     title: 'Admin',
-                    subtitle: 'Shared restaurant configuration and administrative tools.',
+                    subtitle: 'Company administration, user roles, task controls, and audit records.',
                     items: [
+                        { id: 'admin-users', label: 'User Management', url: '/admin/users' },
+                        { id: 'admin-tasks', label: 'Operational Tasks', url: '/admin/tasks' },
+                        { id: 'admin-audit', label: 'Audit Logs', url: '/admin/audit-logs' },
                         { id: 'admin-restaurant-setup', label: 'Restaurant Setup', url: '/app/productmix/restaurant-setup' },
                         { id: 'admin-productmix-dashboard', label: 'ProductMix Admin Dashboard', url: '/app/productmix/admin' }
                     ]
@@ -968,6 +972,681 @@ PORTAL_HOME_HTML = """
     </script>
 </body>
 </html>
+"""
+
+
+RBAC_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE CHECK (name IN ('Super Admin', 'Manager', 'Employee')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role_id INTEGER NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_login TEXT,
+    FOREIGN KEY (role_id) REFERENCES roles(id)
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in-progress', 'completed')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT,
+    created_by INTEGER NOT NULL,
+    assigned_to INTEGER,
+    FOREIGN KEY (created_by) REFERENCES users(id),
+    FOREIGN KEY (assigned_to) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_user_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    target_table TEXT NOT NULL,
+    target_id INTEGER,
+    details TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (actor_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS migration_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
+CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
+"""
+
+
+def get_rbac_db_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(RBAC_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def seed_default_roles(conn: sqlite3.Connection) -> None:
+    for role_name in ("Super Admin", "Manager", "Employee"):
+        conn.execute("INSERT OR IGNORE INTO roles (name) VALUES (?)", (role_name,))
+
+
+def initialize_rbac_db() -> None:
+    conn = get_rbac_db_connection()
+    try:
+        conn.executescript(RBAC_SCHEMA_SQL)
+        seed_default_roles(conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _get_role_id(conn: sqlite3.Connection, role_name: str) -> int:
+    row = conn.execute("SELECT id FROM roles WHERE name = ? LIMIT 1", (role_name,)).fetchone()
+    if not row:
+        raise ValueError(f"Unknown role: {role_name}")
+    return int(row["id"])
+
+
+def _get_user_by_username(conn: sqlite3.Connection, username: str) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login, r.name AS role_name
+        FROM users u
+        JOIN roles r ON r.id = u.role_id
+        WHERE LOWER(u.username) = LOWER(?)
+        LIMIT 1
+        """,
+        (username,),
+    ).fetchone()
+
+
+def _mark_migration_complete(conn: sqlite3.Connection, key: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO migration_meta (key, value, updated_at)
+        VALUES (?, '1', datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """,
+        (key,),
+    )
+
+
+def _is_migration_complete(conn: sqlite3.Connection, key: str) -> bool:
+    row = conn.execute("SELECT value FROM migration_meta WHERE key = ? LIMIT 1", (key,)).fetchone()
+    return bool(row and str(row["value"]) == "1")
+
+
+def migrate_legacy_json_users_to_sqlite() -> None:
+    migration_key = "json_users_migrated_v1"
+    conn = get_rbac_db_connection()
+    try:
+        if _is_migration_complete(conn, migration_key):
+            return
+
+        users = load_auth_users()
+        for username, payload in users.items():
+            if not isinstance(payload, dict):
+                continue
+
+            normalized_username = str(username or "").strip()
+            password_hash = str(payload.get("password_hash") or "").strip()
+            if not normalized_username or not password_hash:
+                continue
+
+            role_name = "Super Admin" if bool(payload.get("is_admin", False)) else "Employee"
+            role_id = _get_role_id(conn, role_name)
+            created_at = payload.get("created_at") or datetime.now().isoformat(timespec="seconds")
+            last_login = payload.get("last_login")
+
+            existing = _get_user_by_username(conn, normalized_username)
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = ?,
+                        role_id = ?,
+                        is_active = 1,
+                        updated_at = datetime('now'),
+                        last_login = COALESCE(?, last_login)
+                    WHERE id = ?
+                    """,
+                    (password_hash, role_id, last_login, int(existing["id"])),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO users (username, password_hash, role_id, is_active, created_at, updated_at, last_login)
+                    VALUES (?, ?, ?, 1, ?, datetime('now'), ?)
+                    """,
+                    (normalized_username, password_hash, role_id, created_at, last_login),
+                )
+
+        _mark_migration_complete(conn, migration_key)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def ensure_default_super_admin_user() -> None:
+    admin_username = os.environ.get("DEXTER_ADMIN_USER", "").strip()
+    admin_password = os.environ.get("DEXTER_ADMIN_PASS", "").strip()
+    if not admin_username or not admin_password:
+        return
+
+    conn = get_rbac_db_connection()
+    try:
+        role_id = _get_role_id(conn, "Super Admin")
+        existing = _get_user_by_username(conn, admin_username)
+        if existing:
+            conn.execute(
+                """
+                UPDATE users
+                SET password_hash = ?, role_id = ?, is_active = 1, updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (generate_password_hash(admin_password), role_id, int(existing["id"])),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO users (username, password_hash, role_id, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+                """,
+                (admin_username, generate_password_hash(admin_password), role_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
+    normalized = str(identifier or "").strip()
+    if not normalized:
+        return None, None
+
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE LOWER(u.username) = LOWER(?)
+            LIMIT 1
+            """,
+            (normalized,),
+        ).fetchone()
+        if not row:
+            return None, None
+        return str(row["username"]), dict(row)
+    finally:
+        conn.close()
+
+
+def update_user_last_login(user_id: int) -> None:
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            "UPDATE users SET last_login = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+            (int(user_id),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def current_user_id() -> int | None:
+    raw_id = (session.get(SESSION_USER_KEY) or {}).get("user_id")
+    if raw_id is None:
+        return None
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def current_role_name() -> str:
+    user = session.get(SESSION_USER_KEY) or {}
+    role_name = str(user.get("role_name") or "").strip()
+    if role_name:
+        return role_name
+    if bool(user.get("is_admin")):
+        return "Super Admin"
+    return "Employee"
+
+
+def user_has_role(user_id: int, allowed_roles: tuple[str, ...]) -> bool:
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE u.id = ? AND u.is_active = 1
+            LIMIT 1
+            """,
+            (int(user_id),),
+        ).fetchone()
+        if not row:
+            return False
+        return str(row["role_name"]) in allowed_roles
+    finally:
+        conn.close()
+
+
+def can_user_create_task(user_id: int) -> bool:
+    """Allow task creation only for Super Admin or Manager roles."""
+    return user_has_role(int(user_id), ("Super Admin", "Manager"))
+
+
+def add_audit_log(actor_user_id: int, action: str, target_table: str, target_id: int | None = None, details: str | None = None) -> None:
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO audit_logs (actor_user_id, action, target_table, target_id, details)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (int(actor_user_id), str(action), str(target_table), int(target_id) if target_id is not None else None, details),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def role_required(*allowed_roles: str):
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapped(*args, **kwargs):
+            if current_role_name() in allowed_roles:
+                return view_func(*args, **kwargs)
+            if request.path.startswith("/api/"):
+                return jsonify({"ok": False, "message": "Forbidden"}), 403
+            return jsonify({"ok": False, "message": "Forbidden"}), 403
+
+        return wrapped
+
+    return decorator
+
+
+def list_users_with_roles() -> list[dict[str, Any]]:
+    conn = get_rbac_db_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT u.id, u.username, u.is_active, u.created_at, u.updated_at, u.last_login, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            ORDER BY LOWER(u.username) ASC
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def _active_super_admin_count(conn: sqlite3.Connection) -> int:
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM users u
+        JOIN roles r ON r.id = u.role_id
+        WHERE u.is_active = 1 AND r.name = 'Super Admin'
+        """
+    ).fetchone()
+    return int(row["total"] if row else 0)
+
+
+def create_user_account(actor_user_id: int, username: str, password: str, role_name: str = "Employee") -> tuple[bool, str]:
+    normalized_username = str(username or "").strip()
+    if len(normalized_username) < 3:
+        return False, "Username must be at least 3 characters."
+    if len(password or "") < 8:
+        return False, "Password must be at least 8 characters."
+    if role_name not in {"Super Admin", "Manager", "Employee"}:
+        return False, "Invalid role name."
+
+    conn = get_rbac_db_connection()
+    try:
+        exists = conn.execute(
+            "SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+            (normalized_username,),
+        ).fetchone()
+        if exists:
+            return False, "Username already exists."
+
+        role_id = _get_role_id(conn, role_name)
+        cur = conn.execute(
+            """
+            INSERT INTO users (username, password_hash, role_id, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+            """,
+            (normalized_username, generate_password_hash(password), role_id),
+        )
+        conn.commit()
+        add_audit_log(actor_user_id, "create_user", "users", int(cur.lastrowid), json.dumps({"username": normalized_username, "role": role_name}))
+        return True, "User created."
+    finally:
+        conn.close()
+
+
+def set_user_active_state(actor_user_id: int, target_user_id: int, is_active: bool) -> tuple[bool, str]:
+    conn = get_rbac_db_connection()
+    try:
+        target = conn.execute(
+            """
+            SELECT u.id, u.username, u.is_active, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE u.id = ?
+            LIMIT 1
+            """,
+            (int(target_user_id),),
+        ).fetchone()
+        if not target:
+            return False, "User not found."
+
+        if int(actor_user_id) == int(target["id"]) and not is_active:
+            return False, "You cannot deactivate your own account."
+
+        if str(target["role_name"]) == "Super Admin" and not is_active and _active_super_admin_count(conn) <= 1:
+            return False, "Cannot deactivate the last active Super Admin."
+
+        conn.execute(
+            "UPDATE users SET is_active = ?, updated_at = datetime('now') WHERE id = ?",
+            (1 if is_active else 0, int(target_user_id)),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "activate_user" if is_active else "deactivate_user",
+            "users",
+            int(target_user_id),
+            json.dumps({"username": str(target["username"]), "role": str(target["role_name"])}),
+        )
+        return True, "User updated."
+    finally:
+        conn.close()
+
+
+def set_user_role_name(actor_user_id: int, target_user_id: int, role_name: str) -> tuple[bool, str]:
+    if role_name not in {"Super Admin", "Manager", "Employee"}:
+        return False, "Invalid role name."
+
+    conn = get_rbac_db_connection()
+    try:
+        target = conn.execute(
+            """
+            SELECT u.id, u.username, u.is_active, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE u.id = ?
+            LIMIT 1
+            """,
+            (int(target_user_id),),
+        ).fetchone()
+        if not target:
+            return False, "User not found."
+
+        if str(target["role_name"]) == "Super Admin" and role_name != "Super Admin" and _active_super_admin_count(conn) <= 1:
+            return False, "Cannot demote the last active Super Admin."
+
+        role_id = _get_role_id(conn, role_name)
+        conn.execute(
+            "UPDATE users SET role_id = ?, updated_at = datetime('now') WHERE id = ?",
+            (role_id, int(target_user_id)),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "change_role",
+            "users",
+            int(target_user_id),
+            json.dumps({"username": str(target["username"]), "from": str(target["role_name"]), "to": role_name}),
+        )
+        return True, "Role updated."
+    finally:
+        conn.close()
+
+
+def create_task_record(actor_user_id: int, title: str, description: str, assigned_to: int | None) -> tuple[bool, str]:
+    if not can_user_create_task(int(actor_user_id)):
+        return False, "Only Super Admin or Manager can create tasks."
+
+    cleaned_title = str(title or "").strip()
+    if not cleaned_title:
+        return False, "Task title is required."
+
+    conn = get_rbac_db_connection()
+    try:
+        assigned_user_id = int(assigned_to) if assigned_to is not None else None
+        if assigned_user_id is not None:
+            assigned_row = conn.execute(
+                "SELECT id, is_active FROM users WHERE id = ? LIMIT 1",
+                (assigned_user_id,),
+            ).fetchone()
+            if not assigned_row or int(assigned_row["is_active"]) != 1:
+                return False, "Assigned user must be an active user."
+
+        cur = conn.execute(
+            """
+            INSERT INTO tasks (title, description, status, created_by, assigned_to, created_at, updated_at)
+            VALUES (?, ?, 'pending', ?, ?, datetime('now'), datetime('now'))
+            """,
+            (cleaned_title, str(description or "").strip() or None, int(actor_user_id), assigned_user_id),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "create_task",
+            "tasks",
+            int(cur.lastrowid),
+            json.dumps({"title": cleaned_title, "assigned_to": assigned_user_id}),
+        )
+        return True, "Task created."
+    finally:
+        conn.close()
+
+
+def update_task_status(actor_user_id: int, task_id: int, status: str) -> tuple[bool, str]:
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in {"pending", "in-progress", "completed"}:
+        return False, "Invalid status value."
+
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute("SELECT id, title FROM tasks WHERE id = ? LIMIT 1", (int(task_id),)).fetchone()
+        if not row:
+            return False, "Task not found."
+
+        completed_at = "datetime('now')" if normalized_status == "completed" else "NULL"
+        conn.execute(
+            f"""
+            UPDATE tasks
+            SET status = ?,
+                updated_at = datetime('now'),
+                completed_at = {completed_at}
+            WHERE id = ?
+            """,
+            (normalized_status, int(task_id)),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "update_task_status",
+            "tasks",
+            int(task_id),
+            json.dumps({"status": normalized_status, "title": str(row["title"])}),
+        )
+        return True, "Task status updated."
+    finally:
+        conn.close()
+
+
+def list_tasks(limit: int = 200) -> list[dict[str, Any]]:
+    conn = get_rbac_db_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT t.id, t.title, t.description, t.status, t.created_at, t.updated_at, t.completed_at,
+                   creator.username AS created_by_username,
+                   assignee.username AS assigned_to_username
+            FROM tasks t
+            JOIN users creator ON creator.id = t.created_by
+            LEFT JOIN users assignee ON assignee.id = t.assigned_to
+            ORDER BY t.id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def list_audit_logs(limit: int = 300) -> list[dict[str, Any]]:
+    conn = get_rbac_db_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT a.id, a.action, a.target_table, a.target_id, a.details, a.created_at,
+                   u.username AS actor_username
+            FROM audit_logs a
+            JOIN users u ON u.id = a.actor_user_id
+            ORDER BY a.id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+ADMIN_USERS_HTML = """
+<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+  <title>Admin Users</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; margin: 16px; color:#1f2937; }
+    h1 { margin: 0 0 12px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+    input, select, button { padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; }
+    button { cursor:pointer; background:#fff; }
+    table { width:100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border:1px solid #e5e7eb; padding:8px; text-align:left; }
+    th { background:#f8fafc; }
+    .msg { padding:8px 10px; border-radius:8px; margin-bottom:12px; }
+    .ok { background:#dcfce7; color:#166534; }
+    .err { background:#fee2e2; color:#991b1b; }
+    .inline { display:inline-flex; gap:6px; align-items:center; }
+  </style>
+</head>
+<body>
+  <h1>Admin: User Management</h1>
+  {% if message %}<div class=\"msg ok\">{{ message }}</div>{% endif %}
+  {% if error %}<div class=\"msg err\">{{ error }}</div>{% endif %}
+
+  <form method=\"post\" action=\"/admin/users/create\" class=\"row\">
+    <input name=\"username\" placeholder=\"Username\" required />
+    <input name=\"password\" placeholder=\"Password (min 8)\" type=\"password\" required />
+    <select name=\"role_name\">
+      <option>Employee</option>
+      <option>Manager</option>
+      <option>Super Admin</option>
+    </select>
+    <button type=\"submit\">Create User</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Username</th><th>Role</th><th>Active</th><th>Last Login</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.username }}</td>
+        <td>{{ u.role_name }}</td>
+        <td>{{ 'Yes' if u.is_active else 'No' }}</td>
+        <td>{{ u.last_login or '-' }}</td>
+        <td>
+          <form method=\"post\" action=\"/admin/users/{{ u.id }}/role\" class=\"inline\">
+            <select name=\"role_name\">
+              <option {% if u.role_name == 'Employee' %}selected{% endif %}>Employee</option>
+              <option {% if u.role_name == 'Manager' %}selected{% endif %}>Manager</option>
+              <option {% if u.role_name == 'Super Admin' %}selected{% endif %}>Super Admin</option>
+            </select>
+            <button type=\"submit\">Set Role</button>
+          </form>
+          <form method=\"post\" action=\"/admin/users/{{ u.id }}/active\" class=\"inline\">
+            <input type=\"hidden\" name=\"is_active\" value=\"{{ 0 if u.is_active else 1 }}\" />
+            <button type=\"submit\">{{ 'Deactivate' if u.is_active else 'Activate' }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
+"""
+
+
+ADMIN_TASKS_HTML = """
+<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+<title>Admin Tasks</title>
+<style>body{font-family:'Segoe UI',sans-serif;margin:16px;color:#1f2937}input,textarea,select,button{padding:7px 10px;border:1px solid #d1d5db;border-radius:8px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}th{background:#f8fafc}.row{display:flex;gap:8px;flex-wrap:wrap}.msg{padding:8px 10px;border-radius:8px;margin-bottom:12px}.ok{background:#dcfce7;color:#166534}.err{background:#fee2e2;color:#991b1b}</style>
+</head><body>
+<h1>Admin: Operational Tasks</h1>
+{% if message %}<div class=\"msg ok\">{{ message }}</div>{% endif %}
+{% if error %}<div class=\"msg err\">{{ error }}</div>{% endif %}
+<form method=\"post\" action=\"/admin/tasks/create\" class=\"row\">
+  <input name=\"title\" placeholder=\"Task title\" required />
+  <input name=\"description\" placeholder=\"Description\" />
+  <select name=\"assigned_to\"><option value=\"\">Unassigned</option>{% for u in active_users %}<option value=\"{{ u.id }}\">{{ u.username }}</option>{% endfor %}</select>
+  <button type=\"submit\">Create Task</button>
+</form>
+<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Created By</th><th>Assigned To</th><th>Created</th></tr></thead>
+<tbody>{% for t in tasks %}<tr><td>{{ t.id }}</td><td>{{ t.title }}</td><td>{{ t.status }}</td><td>{{ t.created_by_username }}</td><td>{{ t.assigned_to_username or '-' }}</td><td>{{ t.created_at }}</td></tr>{% endfor %}</tbody></table>
+</body></html>
+"""
+
+
+ADMIN_AUDIT_HTML = """
+<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+<title>Admin Audit Logs</title>
+<style>body{font-family:'Segoe UI',sans-serif;margin:16px;color:#1f2937}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}th{background:#f8fafc}</style>
+</head><body>
+<h1>Admin: Audit Logs</h1>
+<table><thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>At</th></tr></thead>
+<tbody>{% for row in logs %}<tr><td>{{ row.id }}</td><td>{{ row.actor_username }}</td><td>{{ row.action }}</td><td>{{ row.target_table }}{% if row.target_id %}#{{ row.target_id }}{% endif %}</td><td>{{ row.details or '-' }}</td><td>{{ row.created_at }}</td></tr>{% endfor %}</tbody></table>
+</body></html>
 """
 
 
@@ -1499,25 +2178,6 @@ def get_next_path(default_path: str = "/admin") -> str:
     return next_path
 
 
-def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
-    users = load_auth_users()
-    normalized = identifier.strip().lower()
-    if not normalized:
-        return None, None
-
-    direct = users.get(identifier)
-    if isinstance(direct, dict):
-        return identifier, direct
-
-    for username, user in users.items():
-        if not isinstance(user, dict):
-            continue
-        if username.lower() == normalized or str(user.get("email", "")).strip().lower() == normalized:
-            return username, user
-
-    return None, None
-
-
 def login_required(view_func):
     @wraps(view_func)
     def wrapped(*args, **kwargs):
@@ -1781,6 +2441,9 @@ if not _secret:
     )
 app.secret_key = _secret
 ensure_default_admin_user()
+initialize_rbac_db()
+migrate_legacy_json_users_to_sqlite()
+ensure_default_super_admin_user()
 
 
 @app.before_request
@@ -1811,15 +2474,15 @@ def auth_login() -> Response:
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
         key, user = find_auth_user(username)
-        if user and check_password_hash(str(user.get("password_hash", "")), password):
-            users = load_auth_users()
-            if key and key in users:
-                users[key]["last_login"] = datetime.now().isoformat(timespec="seconds")
-                save_auth_users(users)
+        if user and int(user.get("is_active", 1)) == 1 and check_password_hash(str(user.get("password_hash", "")), password):
+            update_user_last_login(int(user["id"]))
+            role_name = str(user.get("role_name") or "Employee")
             session[SESSION_USER_KEY] = {
                 "username": key or username,
-                "is_admin": bool(user.get("is_admin", False)),
-                "email": user.get("email") or key or username,
+                "user_id": int(user["id"]),
+                "role_name": role_name,
+                "is_admin": role_name == "Super Admin",
+                "email": key or username,
             }
             session.permanent = True
             MANAGER.start_all()
@@ -1855,25 +2518,35 @@ def auth_register() -> Response:
         elif password != confirm:
             error = "Passwords do not match."
         else:
-            users = load_auth_users()
-            if any(
-                username.lower() == existing.lower() or username.lower() == str(user.get("email", "")).strip().lower()
-                for existing, user in users.items()
-                if isinstance(user, dict)
-            ):
-                error = "Username already exists."
-            else:
-                users[username] = {
-                    "password_hash": generate_password_hash(password),
-                    "created_at": datetime.now().isoformat(timespec="seconds"),
-                    "last_login": None,
-                    "is_admin": False,
-                    "email": username,
-                }
-                save_auth_users(users)
-                session[SESSION_USER_KEY] = {"username": username, "is_admin": False, "email": username}
-                session.permanent = True
-                return redirect(get_next_path("/"))
+            conn = get_rbac_db_connection()
+            try:
+                existing = conn.execute(
+                    "SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+                    (username,),
+                ).fetchone()
+                if existing:
+                    error = "Username already exists."
+                else:
+                    employee_role_id = _get_role_id(conn, "Employee")
+                    cur = conn.execute(
+                        """
+                        INSERT INTO users (username, password_hash, role_id, is_active, created_at, updated_at)
+                        VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+                        """,
+                        (username, generate_password_hash(password), employee_role_id),
+                    )
+                    conn.commit()
+                    session[SESSION_USER_KEY] = {
+                        "username": username,
+                        "user_id": int(cur.lastrowid),
+                        "role_name": "Employee",
+                        "is_admin": False,
+                        "email": username,
+                    }
+                    session.permanent = True
+                    return redirect(get_next_path("/"))
+            finally:
+                conn.close()
 
     return Response(
         render_template_string(
@@ -1928,7 +2601,215 @@ def index() -> str:
 @app.route("/admin")
 @login_required
 def admin() -> str:
-    return redirect("/")
+    return redirect("/admin/users")
+
+
+@app.route("/admin/users")
+@login_required
+@role_required("Super Admin")
+def admin_users_page() -> Response:
+    return Response(
+        render_template_string(
+            ADMIN_USERS_HTML,
+            users=list_users_with_roles(),
+            message=request.args.get("message", ""),
+            error=request.args.get("error", ""),
+        )
+    )
+
+
+@app.route("/admin/users/create", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_users_create() -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/users?error=Session+expired")
+
+    ok, msg = create_user_account(
+        actor_user_id=actor_id,
+        username=(request.form.get("username") or ""),
+        password=(request.form.get("password") or ""),
+        role_name=(request.form.get("role_name") or "Employee"),
+    )
+    key = "message" if ok else "error"
+    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+
+
+@app.route("/admin/users/<int:user_id>/active", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_users_active(user_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/users?error=Session+expired")
+
+    is_active = str(request.form.get("is_active", "1")).strip() == "1"
+    ok, msg = set_user_active_state(actor_id, int(user_id), is_active)
+    key = "message" if ok else "error"
+    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+
+
+@app.route("/admin/users/<int:user_id>/role", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_users_role(user_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/users?error=Session+expired")
+
+    role_name = str(request.form.get("role_name") or "Employee").strip()
+    ok, msg = set_user_role_name(actor_id, int(user_id), role_name)
+    key = "message" if ok else "error"
+    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+
+
+@app.route("/admin/tasks")
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_tasks_page() -> Response:
+    users = [u for u in list_users_with_roles() if int(u.get("is_active", 0)) == 1]
+    return Response(
+        render_template_string(
+            ADMIN_TASKS_HTML,
+            active_users=users,
+            tasks=list_tasks(),
+            message=request.args.get("message", ""),
+            error=request.args.get("error", ""),
+        )
+    )
+
+
+@app.route("/admin/tasks/create", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_tasks_create() -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/tasks?error=Session+expired")
+
+    assigned_to_raw = (request.form.get("assigned_to") or "").strip()
+    assigned_to = int(assigned_to_raw) if assigned_to_raw.isdigit() else None
+    ok, msg = create_task_record(
+        actor_user_id=actor_id,
+        title=(request.form.get("title") or ""),
+        description=(request.form.get("description") or ""),
+        assigned_to=assigned_to,
+    )
+    key = "message" if ok else "error"
+    return redirect(f"/admin/tasks?{key}={requests.utils.quote(msg)}")
+
+
+@app.route("/admin/audit-logs")
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_audit_logs_page() -> Response:
+    return Response(render_template_string(ADMIN_AUDIT_HTML, logs=list_audit_logs()))
+
+
+@app.route("/api/admin/users", methods=["GET"])
+@login_required
+@role_required("Super Admin")
+def api_admin_users_list() -> Response:
+    return jsonify({"ok": True, "users": list_users_with_roles()})
+
+
+@app.route("/api/admin/users", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def api_admin_users_create() -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return jsonify({"ok": False, "message": "Session expired"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    ok, msg = create_user_account(
+        actor_user_id=actor_id,
+        username=str(payload.get("username") or ""),
+        password=str(payload.get("password") or ""),
+        role_name=str(payload.get("role_name") or "Employee"),
+    )
+    code = 200 if ok else 400
+    return jsonify({"ok": ok, "message": msg}), code
+
+
+@app.route("/api/admin/users/<int:user_id>/role", methods=["PATCH"])
+@login_required
+@role_required("Super Admin")
+def api_admin_users_role(user_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return jsonify({"ok": False, "message": "Session expired"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    ok, msg = set_user_role_name(actor_id, int(user_id), str(payload.get("role_name") or ""))
+    code = 200 if ok else 400
+    return jsonify({"ok": ok, "message": msg}), code
+
+
+@app.route("/api/admin/users/<int:user_id>/active", methods=["PATCH"])
+@login_required
+@role_required("Super Admin")
+def api_admin_users_active(user_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return jsonify({"ok": False, "message": "Session expired"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    value = payload.get("is_active", True)
+    is_active = bool(value)
+    ok, msg = set_user_active_state(actor_id, int(user_id), is_active)
+    code = 200 if ok else 400
+    return jsonify({"ok": ok, "message": msg}), code
+
+
+@app.route("/api/admin/tasks", methods=["GET"])
+@login_required
+@role_required("Super Admin", "Manager")
+def api_admin_tasks_list() -> Response:
+    return jsonify({"ok": True, "tasks": list_tasks()})
+
+
+@app.route("/api/admin/tasks", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def api_admin_tasks_create() -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return jsonify({"ok": False, "message": "Session expired"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    assigned_to = payload.get("assigned_to")
+    assigned_to_id = int(assigned_to) if str(assigned_to or "").isdigit() else None
+    ok, msg = create_task_record(
+        actor_user_id=actor_id,
+        title=str(payload.get("title") or ""),
+        description=str(payload.get("description") or ""),
+        assigned_to=assigned_to_id,
+    )
+    code = 200 if ok else 400
+    return jsonify({"ok": ok, "message": msg}), code
+
+
+@app.route("/api/admin/tasks/<int:task_id>/status", methods=["PATCH"])
+@login_required
+@role_required("Super Admin", "Manager")
+def api_admin_tasks_status(task_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return jsonify({"ok": False, "message": "Session expired"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    ok, msg = update_task_status(actor_id, int(task_id), str(payload.get("status") or ""))
+    code = 200 if ok else 400
+    return jsonify({"ok": ok, "message": msg}), code
+
+
+@app.route("/api/admin/audit-logs", methods=["GET"])
+@login_required
+@role_required("Super Admin", "Manager")
+def api_admin_audit_logs() -> Response:
+    return jsonify({"ok": True, "audit_logs": list_audit_logs()})
 
 
 @app.route("/portal")
