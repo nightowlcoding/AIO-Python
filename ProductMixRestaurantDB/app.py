@@ -2650,12 +2650,18 @@ def _get_product_purchase_log(restaurant=None, start_date=None, end_date=None, s
     return product_rows, summary
 
 
-def _get_recent_product_mix_uploads(restaurant=None, limit=12, search_text="", start_date=None, end_date=None):
+def _get_recent_product_mix_uploads(restaurant=None, limit=12, search_text="", start_date=None, end_date=None, restaurant_ids=None):
     conn = get_db_connection()
     where_clauses = []
     params = []
 
-    if restaurant:
+    scoped_restaurant_ids = [int(v) for v in (restaurant_ids or []) if str(v).isdigit()]
+
+    if scoped_restaurant_ids:
+        placeholders = ",".join("?" for _ in scoped_restaurant_ids)
+        where_clauses.append(f"u.restaurant_id IN ({placeholders})")
+        params.extend(scoped_restaurant_ids)
+    elif restaurant:
         where_clauses.append("u.restaurant_id = ?")
         params.append(restaurant["id"])
     else:
@@ -4522,17 +4528,45 @@ def home():
 @login_required
 def index():
     restaurant = get_active_restaurant()
+    location_options = _get_accessible_restaurant_switch_options()
+    accessible_restaurant_ids = [
+        int(opt["id"])
+        for opt in location_options
+        if str(opt.get("id", "")).isdigit()
+    ]
+    if not accessible_restaurant_ids and restaurant and str(restaurant.get("id", "")).isdigit():
+        accessible_restaurant_ids = [int(restaurant["id"])]
+
     load_upload_id_raw = (request.args.get("load_upload_id") or "").strip()
     load_upload_id = int(load_upload_id_raw) if load_upload_id_raw.isdigit() else None
     start_date = _normalize_report_date_filter(request.args.get("start_date")) or ""
     end_date = _normalize_report_date_filter(request.args.get("end_date")) or ""
-    recent_uploads = _get_recent_product_mix_uploads(restaurant=restaurant, limit=None)
+    recent_uploads = _get_recent_product_mix_uploads(
+        restaurant=restaurant,
+        limit=None,
+        restaurant_ids=accessible_restaurant_ids,
+    )
+
+    uploads_by_location = {}
+    for upload in recent_uploads:
+        location_label = str(upload.get("restaurant_name") or "Unknown Location")
+        location_value = str(upload.get("restaurant_location") or "").strip()
+        if location_value:
+            location_label = f"{location_label} - {location_value}"
+        uploads_by_location.setdefault(location_label, []).append(upload)
+
+    recent_upload_groups = [
+        {"location_label": label, "uploads": rows}
+        for label, rows in uploads_by_location.items()
+    ]
+
     return render_template(
         "index.html",
         categories=list(CATEGORIES.keys()),
         restaurant=restaurant,
         load_upload_id=load_upload_id,
         recent_uploads=recent_uploads,
+        recent_upload_groups=recent_upload_groups,
         product_log_filters={
             "start_date": start_date,
             "end_date": end_date,

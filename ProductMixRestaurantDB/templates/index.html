@@ -116,30 +116,33 @@
       </div>
       <div class="card-body p-0">
         <div class="table-responsive">
-          <table class="table table-hover mb-0 align-middle" id="recentUploadsTable">
+          <table class="table table-hover mb-0 align-middle" id="recentUploadsTable" data-grouped-by-location="1">
             <thead>
               <tr>
                 <th>ID</th>
                 <th>File</th>
-                <th>
-                  <button type="button" class="btn btn-link p-0 text-reset text-decoration-none fw-semibold sort-uploads" data-sort-key="report_start" data-sort-type="date" aria-label="Sort by report start date">
-                    Report Start <span class="sort-indicator" aria-hidden="true">↕</span>
-                  </button>
-                </th>
+                <th>Location</th>
+                <th>Report Start</th>
                 <th>Report End</th>
-                <th>
-                  <button type="button" class="btn btn-link p-0 text-reset text-decoration-none fw-semibold sort-uploads" data-sort-key="uploaded_at" data-sort-type="datetime" aria-label="Sort by uploaded at">
-                    Uploaded At <span class="sort-indicator" aria-hidden="true">↕</span>
-                  </button>
-                </th>
+                <th>Uploaded At</th>
                 <th class="text-end">Action</th>
               </tr>
             </thead>
             <tbody>
-              {% for upload in recent_uploads or [] %}
+              {% for group in recent_upload_groups or [] %}
+              <tr class="table-light">
+                <td colspan="7" class="fw-semibold">
+                  <i class="bi bi-geo-alt me-1"></i>{{ group.location_label }}
+                  <span class="badge text-bg-secondary ms-2">{{ group.uploads | length }} uploads</span>
+                </td>
+              </tr>
+              {% for upload in group.uploads %}
               <tr>
                 <td>{{ upload.id }}</td>
                 <td class="text-break">{{ upload.filename }}</td>
+                <td>
+                  {{ upload.restaurant_name }}{% if upload.restaurant_location %} - {{ upload.restaurant_location }}{% endif %}
+                </td>
                 <td data-sort-key="report_start" data-sort-value="{{ upload.report_start_date or '' }}">{{ upload.report_start_date or '—' }}</td>
                 <td>{{ upload.report_end_date or '—' }}</td>
                 <td data-sort-key="uploaded_at" data-sort-value="{{ upload.uploaded_at or '' }}">{{ upload.uploaded_at or '—' }}</td>
@@ -154,9 +157,10 @@
                 </td>
               </tr>
               {% endfor %}
-              {% if not recent_uploads %}
+              {% endfor %}
+              {% if not recent_upload_groups %}
               <tr>
-                <td colspan="6" class="text-center text-muted py-4">No Product Mix uploads found for this location yet.</td>
+                <td colspan="7" class="text-center text-muted py-4">No Product Mix uploads found yet.</td>
               </tr>
               {% endif %}
             </tbody>
