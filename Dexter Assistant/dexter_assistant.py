@@ -506,9 +506,9 @@ DASHBOARD_HTML = """
                                 <button class="menu-btn" onclick="toggleCollapsed()">||</button>
                         </div>
                         <nav id="primaryNav" class="primary-menu">
-                        <button data-short="IC" data-section="inventory" class="active" onclick="setSection('inventory')">Inventory Control</button>
+                        <button data-short="IC" data-section="inventory" onclick="setSection('inventory')">Inventory Control</button>
                         <button data-short="PM" data-section="productmix" onclick="setSection('productmix')">Product Mix</button>
-                        <button data-short="MG" data-section="managerapp" onclick="setSection('managerapp')">Manager App</button>
+                        <button data-short="MG" data-section="managerapp" class="active" onclick="setSection('managerapp')">Daily Log</button>
                         <button data-short="AD" data-section="admin" onclick="setSection('admin')">Admin</button>
                         </nav>
                 </aside>
@@ -521,8 +521,8 @@ DASHBOARD_HTML = """
                 <main class="main">
                         <div class="topbar">
                                 <div>
-                            <h1 id="pageTitle" class="title">Inventory Control</h1>
-                            <p id="pageSubtitle" class="subtitle">Choose a top-level app group, then pick the submenu item to load it full screen on the right.</p>
+                            <h1 id="pageTitle" class="title">Daily Log</h1>
+                            <p id="pageSubtitle" class="subtitle">Restaurant manager dashboard and operations workspace.</p>
                                 </div>
                                 <div class="actions">
                                         <a class="btn" href="/auth/logout">Logout</a>
@@ -530,7 +530,7 @@ DASHBOARD_HTML = """
                         </div>
 
                         <section id="pane-viewer" class="pane viewer-pane active">
-                                <iframe id="appFrame" class="app-frame" src="/app/ic3/"></iframe>
+                                <iframe id="appFrame" class="app-frame" src="/app/managerapp/"></iframe>
                         </section>
                 </main>
         </div>
@@ -564,10 +564,10 @@ DASHBOARD_HTML = """
                     ]
                 },
                 managerapp: {
-                    title: 'Manager App',
+                    title: 'Daily Log',
                     subtitle: 'Restaurant manager dashboard and operations workspace.',
                     items: [
-                        { id: 'mgr-home', label: 'Manager Home', url: '/app/managerapp/' },
+                        { id: 'mgr-home', label: 'Daily Log Home', url: '/app/managerapp/' },
                         { id: 'mgr-dashboard', label: 'Dashboard', url: '/app/managerapp/dashboard' }
                     ]
                 },
@@ -584,8 +584,8 @@ DASHBOARD_HTML = """
                 }
             };
 
-            let activeGroup = 'inventory';
-            let activeApp = 'ic3-home';
+            let activeGroup = 'managerapp';
+            let activeApp = 'mgr-home';
 
             function normalizeLabel(value) {
                 return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -901,7 +901,7 @@ PORTAL_HOME_HTML = """
             <a href="/">Home</a>
             <a href="/portal/productmix">ProductMix</a>
             <a href="/portal/ic3">Inventory Control 3</a>
-            <a href="/portal/managerapp">Manager App</a>
+            <a href="/portal/managerapp">Daily Log</a>
             <button class="primary" id="btnStartAll" onclick="act('/api/start-all', this)">Start All</button>
             <button class="danger" id="btnStopAll" onclick="act('/api/stop-all', this)">Stop All</button>
             <a href="/auth/logout">Logout</a>
@@ -930,10 +930,10 @@ PORTAL_HOME_HTML = """
                 </div>
             </div>
             <div class="card">
-                <h2>Manager App</h2>
+                <h2>Daily Log</h2>
                 <p>Manager workflows for daily logs, employees, and operational reports.</p>
                 <div class="actions">
-                    <a class="primary" href="/portal/managerapp">Open Manager App</a>
+                    <a class="primary" href="/portal/managerapp">Open Daily Log</a>
                     <a class="secondary" href="/app/managerapp/" target="_blank" rel="noopener">Open Raw</a>
                 </div>
             </div>
@@ -1746,7 +1746,7 @@ PORTAL_APP_HTML = """
             <a href="/">Home</a>
             <a href="/portal/productmix">ProductMix</a>
             <a href="/portal/ic3">IC3</a>
-            <a href="/portal/managerapp">Manager App</a>
+            <a href="/portal/managerapp">Daily Log</a>
             <button class="primary" id="btnRestart" onclick="doRestart(this)">Restart App</button>
             <a href="/auth/logout">Logout</a>
         </div>
