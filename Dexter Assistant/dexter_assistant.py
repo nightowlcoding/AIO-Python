@@ -567,8 +567,11 @@ DASHBOARD_HTML = """
                     title: 'Daily Log',
                     subtitle: 'Restaurant manager dashboard and operations workspace.',
                     items: [
-                        { id: 'mgr-home', label: 'Daily Log Home', url: '/app/managerapp/' },
-                        { id: 'mgr-dashboard', label: 'Dashboard', url: '/app/managerapp/dashboard' }
+                        { id: 'mgr-home', label: 'Home', url: '/app/managerapp/dashboard' },
+                        { id: 'mgr-daily-log', label: 'Daily Log', url: '/app/managerapp/daily-log' },
+                        { id: 'mgr-cash-manager', label: 'Cash Manager', url: '/app/managerapp/cash-manager' },
+                        { id: 'mgr-employees', label: 'Employees', url: '/app/managerapp/employees' },
+                        { id: 'mgr-reports', label: 'Reports', url: '/app/managerapp/reports' }
                     ]
                 },
                 admin: {
@@ -578,7 +581,7 @@ DASHBOARD_HTML = """
                         { id: 'admin-users', label: 'User Management', url: '/admin/users' },
                         { id: 'admin-tasks', label: 'Operational Tasks', url: '/admin/tasks' },
                         { id: 'admin-audit', label: 'Audit Logs', url: '/admin/audit-logs' },
-                        { id: 'admin-restaurant-setup', label: 'Restaurant Setup', url: '/app/productmix/restaurant-setup' },
+                        { id: 'admin-location-management', label: 'Location Management', url: '/app/productmix/restaurant-setup' },
                         { id: 'admin-productmix-dashboard', label: 'ProductMix Admin Dashboard', url: '/app/productmix/admin' }
                     ]
                 }
@@ -771,8 +774,8 @@ DASHBOARD_HTML = """
                 } catch (e) { /* network hiccup — skip silently */ }
             }
 
-            renderSubmenu('inventory');
-            setSection('inventory');
+            renderSubmenu('managerapp');
+            setSection('managerapp');
             refreshState();
             startPoll();
         </script>
@@ -2974,6 +2977,9 @@ def _proxy(name: str, path: str) -> Response:
         if not location:
             return location
         if location.startswith("/"):
+            # Preserve cross-app routes already in Dexter namespace.
+            if location.startswith("/app/"):
+                return location
             if location.startswith(f"/app/{resolved_name}/"):
                 return location
             if location == "/":

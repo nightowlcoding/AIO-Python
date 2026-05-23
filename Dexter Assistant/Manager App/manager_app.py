@@ -146,15 +146,8 @@ def _load_shared_restaurants_from_productmix() -> list[dict]:
 
 
 def _effective_location_options(company_id):
-    """Prefer shared ProductMix restaurant list; fallback to local company locations."""
-    shared = _load_shared_restaurants_from_productmix()
-    if shared:
-        return shared
-
-    fallback = db.get_company_locations(company_id)
-    for row in fallback:
-        row['id'] = str(row.get('id', ''))
-    return fallback
+    """Use ProductMix Restaurant Setup as the canonical location source."""
+    return _load_shared_restaurants_from_productmix()
 
 
 def _find_active_user_for_dexter_bridge(username, email):
@@ -710,7 +703,7 @@ def bridge_dexter_session_into_manager_app():
 def index():
     """Landing page"""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('daily_log'))
     return render_template('index.html')
 
 
@@ -719,7 +712,7 @@ def index():
 def login():
     """Login page"""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('daily_log'))
     
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -760,7 +753,7 @@ def login():
                     return redirect(url_for('select_company'))
                 elif len(user.companies) == 1:
                     session['current_company_id'] = user.companies[0]['id']
-                    return redirect(url_for('dashboard'))
+                    return redirect(url_for('daily_log'))
                 else:
                     return redirect(url_for('create_company'))
             else:
@@ -925,7 +918,7 @@ def set_company(company_id):
     
     db.log_action(current_user.id, 'company_selected', company_id)
     
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('daily_log'))
 
 
 @app.route('/create-company', methods=['GET', 'POST'])
@@ -939,20 +932,8 @@ def create_company():
         email = request.form.get('email', '').strip()
         website = request.form.get('website', '').strip()
         
-        # Get locations data from JSON
-        import json
-        locations_data_str = request.form.get('locations_data', '[]')
-        try:
-            locations_data = json.loads(locations_data_str)
-        except:
-            locations_data = []
-        
         if not name:
             flash('Company name is required.', 'warning')
-            return render_template('create_company.html')
-        
-        if not locations_data or len(locations_data) == 0:
-            flash('At least one location is required.', 'warning')
             return render_template('create_company.html')
         
         company_id = db.create_company(
@@ -965,30 +946,14 @@ def create_company():
         )
         
         if company_id:
-            # Create all locations
-            location_names = []
-            for location_data in locations_data:
-                location_id = db.create_location(
-                    company_id=company_id,
-                    name=location_data.get('name'),
-                    address=location_data.get('address', ''),
-                    phone=location_data.get('phone', ''),
-                    manager_user_id=current_user.id
-                )
-                if location_id:
-                    location_names.append(location_data.get('name'))
-                    # Create directory structure for this location
-                    os.makedirs(f"company_data/{company_id}/locations/{location_id}/daily_logs", exist_ok=True)
-                    os.makedirs(f"company_data/{company_id}/locations/{location_id}/employees", exist_ok=True)
-            
             db.log_action(current_user.id, 'company_created', company_id, 
-                         {'company_name': name, 'locations': location_names})
+                         {'company_name': name})
             
             # Reload user companies
             current_user.companies = db.get_user_companies(current_user.id)
             session['current_company_id'] = company_id
             
-            flash(f'Company "{name}" created with {len(location_names)} location(s): {", ".join(location_names)}!', 'success')
+            flash(f'Company "{name}" created. Configure locations in Admin > Location Management.', 'success')
             return redirect(url_for('dashboard'))
         else:
             flash('Company name already exists.', 'danger')
@@ -1209,10 +1174,20 @@ def employees():
     # Store selected location in session
     if selected_location:
         session['selected_location_id'] = selected_location
+
+    company = db.get_company(current_user.current_company_id) or {}
+    settings_raw = company.get('settings') or {}
+    if isinstance(settings_raw, str):
+        try:
+            settings_raw = json.loads(settings_raw)
+        except Exception:
+            settings_raw = {}
+    archive_retention_days = int((settings_raw or {}).get('archive_retention_days') or 30)
     
     return render_template('employees.html', 
                          locations=locations_list,
-                         selected_location_id=selected_location)
+                         selected_location_id=selected_location,
+                         archive_retention_days=archive_retention_days)
 
 
 @app.route('/reports')
@@ -1711,6 +1686,14 @@ def api_employee_performance():
 @role_required('business_admin')
 def settings():
     """Company settings"""
+    company = db.get_company(current_user.current_company_id) or {}
+    settings_data = company.get('settings') or {}
+    if isinstance(settings_data, str):
+        try:
+            settings_data = json.loads(settings_data)
+        except Exception:
+            settings_data = {}
+
     if request.method == 'POST':
         # Update company information
         name = request.form.get('name', '').strip()
@@ -1718,10 +1701,18 @@ def settings():
         email = request.form.get('email', '').strip()
         website = request.form.get('website', '').strip()
         address = request.form.get('address', '').strip()
+        archive_retention_days = request.form.get('archive_retention_days', '').strip()
         
         if not name:
             flash('Company name is required.', 'warning')
         else:
+            try:
+                archive_retention_value = int(archive_retention_days) if archive_retention_days else 30
+            except Exception:
+                archive_retention_value = 30
+
+            settings_data['archive_retention_days'] = max(1, archive_retention_value)
+
             conn = db.get_connection()
             cursor = conn.cursor()
             
@@ -1729,22 +1720,28 @@ def settings():
                 from datetime import datetime
                 cursor.execute('''
                     UPDATE companies 
-                    SET name = ?, phone = ?, email = ?, website = ?, address = ?, updated_at = ?
+                    SET name = ?, phone = ?, email = ?, website = ?, address = ?, settings = ?, updated_at = ?
                     WHERE id = ?
-                ''', (name, phone, email, website, address, datetime.now().isoformat(), current_user.current_company_id))
+                ''', (name, phone, email, website, address, json.dumps(settings_data), datetime.now().isoformat(), current_user.current_company_id))
                 
                 conn.commit()
                 
                 db.log_action(current_user.id, 'company_updated', current_user.current_company_id,
-                             {'company_name': name})
+                             {'company_name': name, 'archive_retention_days': settings_data['archive_retention_days']})
                 flash('Company information updated successfully!', 'success')
             except Exception as e:
                 flash(f'Error updating company information: {str(e)}', 'danger')
             finally:
                 conn.close()
-    
-    company = db.get_company(current_user.current_company_id)
-    return render_template('settings.html', company=company)
+
+    archive_retention_days = int((settings_data or {}).get('archive_retention_days') or 30)
+    return render_template('settings.html', company=company, archive_retention_days=archive_retention_days)
+
+
+def _redirect_to_central_location_admin():
+    """Use ProductMix Restaurant Setup as the single location management source."""
+    flash('Locations are managed in Admin > Restaurant Setup.', 'info')
+    return redirect('/app/productmix/restaurant-setup')
 
 
 @app.route('/locations')
@@ -1752,15 +1749,8 @@ def settings():
 @company_required
 @role_required('business_admin', 'manager')
 def locations():
-    """View and manage company locations"""
-    company = db.get_company(current_user.current_company_id)
-    locations_list = db.get_company_locations(current_user.current_company_id)
-    users = db.get_company_users(current_user.current_company_id)
-    
-    return render_template('locations.html', 
-                         company=company, 
-                         locations=locations_list,
-                         users=users)
+    """Location management is centralized in ProductMix Restaurant Setup."""
+    return _redirect_to_central_location_admin()
 
 
 @app.route('/locations/add', methods=['POST'])
@@ -1768,32 +1758,8 @@ def locations():
 @company_required
 @role_required('business_admin')
 def add_location():
-    """Add a new location"""
-    name = request.form.get('name', '').strip()
-    address = request.form.get('address', '').strip()
-    phone = request.form.get('phone', '').strip()
-    manager_user_id = request.form.get('manager_user_id', '').strip() or None
-    
-    if not name:
-        flash('Location name is required.', 'warning')
-        return redirect(url_for('locations'))
-    
-    location_id = db.create_location(
-        company_id=current_user.current_company_id,
-        name=name,
-        address=address,
-        phone=phone,
-        manager_user_id=manager_user_id
-    )
-    
-    if location_id:
-        db.log_action(current_user.id, 'location_created', current_user.current_company_id, 
-                     {'location_name': name})
-        flash(f'Location "{name}" added successfully!', 'success')
-    else:
-        flash('Failed to add location.', 'danger')
-    
-    return redirect(url_for('locations'))
+    """Location management is centralized in ProductMix Restaurant Setup."""
+    return _redirect_to_central_location_admin()
 
 
 @app.route('/locations/<location_id>/edit', methods=['POST'])
@@ -1801,37 +1767,8 @@ def add_location():
 @company_required
 @role_required('business_admin')
 def edit_location(location_id):
-    """Edit an existing location"""
-    name = request.form.get('name', '').strip()
-    address = request.form.get('address', '').strip()
-    phone = request.form.get('phone', '').strip()
-    manager_user_id = request.form.get('manager_user_id', '').strip() or None
-    
-    if not name:
-        flash('Location name is required.', 'warning')
-        return redirect(url_for('locations'))
-    
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute('''
-            UPDATE locations 
-            SET name = ?, address = ?, phone = ?, manager_user_id = ?
-            WHERE id = ? AND company_id = ?
-        ''', (name, address, phone, manager_user_id, location_id, current_user.current_company_id))
-        
-        conn.commit()
-        
-        db.log_action(current_user.id, 'location_updated', current_user.current_company_id,
-                     {'location_id': location_id, 'location_name': name})
-        flash(f'Location "{name}" updated successfully!', 'success')
-    except Exception as e:
-        flash('Failed to update location.', 'danger')
-    finally:
-        conn.close()
-    
-    return redirect(url_for('locations'))
+    """Location management is centralized in ProductMix Restaurant Setup."""
+    return _redirect_to_central_location_admin()
 
 
 @app.route('/locations/<location_id>/delete', methods=['POST'])
@@ -1839,37 +1776,8 @@ def edit_location(location_id):
 @company_required
 @role_required('business_admin')
 def delete_location(location_id):
-    """Deactivate a location"""
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Get location name before deleting
-        cursor.execute('SELECT name FROM locations WHERE id = ? AND company_id = ?', 
-                      (location_id, current_user.current_company_id))
-        location = cursor.fetchone()
-        
-        if location:
-            # Soft delete - set is_active to 0
-            cursor.execute('''
-                UPDATE locations 
-                SET is_active = 0
-                WHERE id = ? AND company_id = ?
-            ''', (location_id, current_user.current_company_id))
-            
-            conn.commit()
-            
-            db.log_action(current_user.id, 'location_deleted', current_user.current_company_id,
-                         {'location_id': location_id, 'location_name': location['name']})
-            flash(f'Location "{location["name"]}" has been deactivated.', 'success')
-        else:
-            flash('Location not found.', 'warning')
-    except Exception as e:
-        flash('Failed to delete location.', 'danger')
-    finally:
-        conn.close()
-    
-    return redirect(url_for('locations'))
+    """Location management is centralized in ProductMix Restaurant Setup."""
+    return _redirect_to_central_location_admin()
 
 
 @app.route('/users')

@@ -307,6 +307,14 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
         return name || location;
     }
 
+    function buildRadioId(groupIndex, optionIndex, label) {
+        const slug = String(label || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || ('loc-' + optionIndex);
+        return 'ic3-shared-location-' + groupIndex + '-' + optionIndex + '-' + slug;
+    }
+
     function applyToSelect(select, restaurants) {
         if (!select || !restaurants || !restaurants.length) return;
         const existing = String(select.value || '').trim();
@@ -326,6 +334,64 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
             const first = values.find(function (v) { return v && v.trim(); }) || '';
             select.value = first;
         }
+    }
+
+    function applyToLocationRadios(restaurants) {
+        if (!restaurants || !restaurants.length) return;
+
+        const selected = (document.querySelector('input[name="location"][type="radio"]:checked') || {}).value || '';
+        const groups = Array.from(document.querySelectorAll('.location-selector'));
+        if (!groups.length) return;
+
+        groups.forEach(function (group, groupIndex) {
+            const existingRadios = group.querySelectorAll('input[name="location"][type="radio"]');
+            if (!existingRadios.length) return;
+
+            group.innerHTML = '';
+            let hasChecked = false;
+
+            restaurants.forEach(function (row, optionIndex) {
+                const label = buildLabel(row);
+                if (!label) return;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'location-option';
+
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = 'location';
+                input.value = label;
+                input.id = buildRadioId(groupIndex, optionIndex, label);
+                if (selected && selected === label) {
+                    input.checked = true;
+                    hasChecked = true;
+                }
+
+                const text = document.createElement('label');
+                text.setAttribute('for', input.id);
+                text.textContent = '📍 ' + label;
+
+                input.addEventListener('change', function () {
+                    if (!input.checked) return;
+                    if (typeof window.setLocation === 'function') {
+                        try {
+                            window.setLocation(label);
+                        } catch (_err) {
+                            // Keep silent - native state still updates from checked radio.
+                        }
+                    }
+                });
+
+                wrapper.appendChild(input);
+                wrapper.appendChild(text);
+                group.appendChild(wrapper);
+            });
+
+            if (!hasChecked) {
+                const first = group.querySelector('input[name="location"][type="radio"]');
+                if (first) first.checked = true;
+            }
+        });
     }
 
     function computeSignature(restaurants) {
@@ -348,7 +414,8 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                 const el = document.getElementById(id);
                 return el && el.tagName === 'SELECT';
             });
-            if (!hasAnySelect) return;
+            const hasAnyRadioGroup = !!document.querySelector('.location-selector input[name="location"][type="radio"]');
+            if (!hasAnySelect && !hasAnyRadioGroup) return;
 
             // Skip pointless re-renders when options list has not changed.
             if (signature && signature === lastAppliedSignature) return;
@@ -359,6 +426,8 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                     applyToSelect(select, restaurants);
                 }
             }
+
+            applyToLocationRadios(restaurants);
 
             lastAppliedSignature = signature || lastAppliedSignature;
 
@@ -846,7 +915,7 @@ OVERRIDE_SCRIPT = r"""
             '</div>' +
             '<div>' +
             '<label for="renameLocationPrefix" style="display: block; margin-bottom: 5px; font-weight: 600;">Location Prefix</label>' +
-            '<input id="renameLocationPrefix" type="text" value="Alice" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px;" />' +
+            '<input id="renameLocationPrefix" type="text" value="" placeholder="Auto from shared locations" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px;" />' +
             '</div>' +
             '</div>' +
             '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">' +
@@ -930,7 +999,7 @@ OVERRIDE_SCRIPT = r"""
 
     async function runOrderCsvRename(applyChanges) {
         const folderPath = document.getElementById('renameFolderPath')?.value?.trim();
-        const locationPrefix = document.getElementById('renameLocationPrefix')?.value?.trim() || 'Alice';
+        const locationPrefix = document.getElementById('renameLocationPrefix')?.value?.trim() || guessCurrentLocation() || 'Location';
 
         if (!folderPath) {
             renderRenameStatus('Folder path is required.', false);
@@ -1116,7 +1185,7 @@ OVERRIDE_SCRIPT = r"""
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('location', location || 'Kingsville');
+        formData.append('location', location || guessCurrentLocation() || 'Kingsville');
         formData.append('delivery_date', deliveryDate);
 
         fetch('/api/orders/upload-invoice', {
@@ -1154,7 +1223,7 @@ OVERRIDE_SCRIPT = r"""
             return;
         }
 
-        const location = document.getElementById('bulkInvoiceLocation')?.value || 'Kingsville';
+        const location = document.getElementById('bulkInvoiceLocation')?.value || guessCurrentLocation() || 'Kingsville';
         const statusDiv = getBulkStatusDiv();
         if (!statusDiv) {
             return;
@@ -1344,6 +1413,11 @@ PRODUCT_DETAIL_SCRIPT = r"""
     }
 
     function guessCurrentLocation() {
+        const selectedRadio = document.querySelector('input[name="location"][type="radio"]:checked');
+        if (selectedRadio && typeof selectedRadio.value === 'string' && selectedRadio.value.trim()) {
+            return selectedRadio.value.trim();
+        }
+
         const explicitIds = ['reportLocation', 'location', 'inventoryLocation', 'invoiceLocation', 'bulkInvoiceLocation'];
         for (const id of explicitIds) {
             const el = document.getElementById(id);
@@ -1358,6 +1432,11 @@ PRODUCT_DETAIL_SCRIPT = r"""
             if (marker.includes('location') && String(select.value || '').trim()) {
                 return String(select.value || '').trim();
             }
+        }
+
+        const anyRadio = document.querySelector('input[name="location"][type="radio"]');
+        if (anyRadio && typeof anyRadio.value === 'string' && anyRadio.value.trim()) {
+            return anyRadio.value.trim();
         }
 
         return 'Kingsville';
@@ -2387,6 +2466,26 @@ def _window_filter_dates(items, window_key):
     return sorted(filtered, key=lambda row: str(row.get("date") or ""))
 
 
+def _runtime_location_names() -> list[str]:
+    names: set[str] = set()
+
+    for source in (globals().get("inventory_data") or {}, globals().get("order_data") or {}):
+        if isinstance(source, dict):
+            for raw in source.keys():
+                value = str(raw or "").strip()
+                if value:
+                    names.add(value)
+
+    return sorted(names)
+
+
+def _runtime_default_location(fallback: str = "Kingsville") -> str:
+    names = _runtime_location_names()
+    if names:
+        return names[0]
+    return fallback
+
+
 def _find_product_record_by_number(products_list_obj, product_number: str):
     target = _canonical_product_number(product_number)
     for product in (products_list_obj or []):
@@ -2411,7 +2510,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
 
     @flask_app.route("/api/products/<product_number>/detail", methods=["GET"])
     def get_product_detail_runtime(product_number):
-        requested_location = str(request.args.get("location") or "Kingsville").strip() or "Kingsville"
+        requested_location = str(request.args.get("location") or _runtime_default_location()).strip() or _runtime_default_location()
         window_key = str(request.args.get("window") or "week").strip().lower()
 
         products_list_obj = globals().get("products_list") or []
@@ -2432,7 +2531,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
 
         all_mode = requested_location in {"__all__", "all", "*"}
         if all_mode:
-            locations_to_scan = available_locations if available_locations else ["Kingsville"]
+            locations_to_scan = available_locations if available_locations else [_runtime_default_location()]
             location_label = "All Locations"
         else:
             locations_to_scan = [requested_location]
@@ -2588,7 +2687,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
     @flask_app.route("/api/products/update-order-quantity", methods=["POST"])
     def update_order_quantity_runtime():
         payload = request.get_json(silent=True) or {}
-        location = str(payload.get("location") or "Kingsville").strip() or "Kingsville"
+        location = str(payload.get("location") or _runtime_default_location()).strip() or _runtime_default_location()
         date_str = str(payload.get("date") or "").strip()
         product_number = _canonical_product_number(payload.get("product_number"))
 
@@ -2649,7 +2748,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
     @flask_app.route("/api/products/update-inventory-quantity", methods=["POST"])
     def update_inventory_quantity_runtime():
         payload = request.get_json(silent=True) or {}
-        location = str(payload.get("location") or "Kingsville").strip() or "Kingsville"
+        location = str(payload.get("location") or _runtime_default_location()).strip() or _runtime_default_location()
         date_str = str(payload.get("date") or "").strip()
         product_number = _canonical_product_number(payload.get("product_number"))
 
@@ -2726,7 +2825,7 @@ def _register_order_csv_rename_endpoint(flask_app) -> None:
     def rename_order_csvs():
         payload = request.get_json(silent=True) or {}
         folder_path = str(payload.get("folder_path") or "").strip()
-        location = str(payload.get("location") or "Alice").strip() or "Alice"
+        location = str(payload.get("location") or _runtime_default_location("Location")).strip() or _runtime_default_location("Location")
         apply_changes = bool(payload.get("apply"))
 
         if not folder_path:
@@ -3024,6 +3123,64 @@ def _exec_bytecode() -> None:
     exec(code, globals(), globals())
 
 
+def _load_json_if_present(path: Path):
+    try:
+        if not path.exists():
+            return None
+        with path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except Exception:
+        return None
+
+
+def _find_latest_products_backup() -> Path | None:
+    backup_dir = ROOT / "backups" / "product_lists"
+    if not backup_dir.exists():
+        return None
+    candidates = sorted(backup_dir.glob("products_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _restore_runtime_data_fallbacks() -> None:
+    # If compiled runtime started with empty globals, hydrate from persisted data.
+    products_obj = globals().get("products_list")
+    if not isinstance(products_obj, list) or len(products_obj) == 0:
+        products_from_data = _load_json_if_present(ROOT / "data" / "products_list.json")
+        if isinstance(products_from_data, list) and products_from_data:
+            globals()["products_list"] = products_from_data
+            print(f"[ic3] Restored products_list from data file ({len(products_from_data)} items)")
+        else:
+            latest_products_backup = _find_latest_products_backup()
+            products_from_backup = _load_json_if_present(latest_products_backup) if latest_products_backup else None
+            if isinstance(products_from_backup, list) and products_from_backup:
+                globals()["products_list"] = products_from_backup
+                print(
+                    "[ic3] Restored products_list from backup "
+                    f"{latest_products_backup.name} ({len(products_from_backup)} items)"
+                )
+
+    invoice_obj = globals().get("invoice_import_log")
+    if not isinstance(invoice_obj, list) or len(invoice_obj) == 0:
+        invoice_from_disk = _load_json_if_present(INVOICE_IMPORT_LOG_PATH)
+        if isinstance(invoice_from_disk, list) and invoice_from_disk:
+            globals()["invoice_import_log"] = invoice_from_disk
+            print(f"[ic3] Restored invoice_import_log from disk ({len(invoice_from_disk)} entries)")
+
+    inventory_obj = globals().get("inventory_data")
+    if not isinstance(inventory_obj, dict) or len(inventory_obj) == 0:
+        inventory_from_disk = _load_json_if_present(ROOT / "data" / "inventory_database.json")
+        if isinstance(inventory_from_disk, dict) and inventory_from_disk:
+            globals()["inventory_data"] = inventory_from_disk
+            print(f"[ic3] Restored inventory_data from disk ({len(inventory_from_disk)} locations)")
+
+    orders_from_disk = _load_json_if_present(ROOT / "data" / "orders_database.json")
+    if isinstance(orders_from_disk, dict) and orders_from_disk:
+        if not isinstance(globals().get("orders_data"), dict) or not globals().get("orders_data"):
+            globals()["orders_data"] = orders_from_disk
+        if not isinstance(globals().get("orders_database"), dict) or not globals().get("orders_database"):
+            globals()["orders_database"] = orders_from_disk
+
+
 def _force_production_flask_run() -> None:
     try:
         from flask import Flask
@@ -3199,6 +3356,7 @@ try:
     _exec_bytecode()
 finally:
     globals()["__name__"] = _original_module_name
+_restore_runtime_data_fallbacks()
 _register_compat_inventory_endpoints(globals().get("app"))
 _register_invoice_import_log_endpoint(globals().get("app"))
 _register_productmix_sync_endpoints(globals().get("app"))
