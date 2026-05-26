@@ -3345,12 +3345,28 @@ def _exec_bytecode() -> None:
 
     code = marshal.loads(data[16:])
     _root_before_exec = globals().get("ROOT")
+    # The plain (un-redirected) root that the bytecode will compute internally.
+    _plain_root = Path(__file__).resolve().parent
     exec(code, globals(), globals())
-    # The bytecode may redefine ROOT (Path(__file__).parent) which would strip
-    # the _DataRedirectPath wrapper. Restore our patched ROOT so save functions
-    # in the bytecode still write to the persistent disk.
+    # The bytecode redefines ROOT = Path(__file__).resolve().parent, which strips
+    # the _DataRedirectPath wrapper. Restore our patched ROOT so any call-time
+    # lookup of ROOT still goes to the persistent disk.
     if _root_before_exec is not None:
         globals()["ROOT"] = _root_before_exec
+    # The bytecode also sets module-level path variables (e.g. DATA_DIR, *_PATH)
+    # to the ephemeral directory at exec time before ROOT is restored. Scan all
+    # globals and redirect any Path that points into the ephemeral data dir to
+    # the persistent disk path instead.
+    if _IC3_DATA_DIR:
+        _old_data = _plain_root / "data"
+        _old_data_str = str(_old_data)
+        for _k, _v in list(globals().items()):
+            if isinstance(_v, Path) and not isinstance(_v, _DataRedirectPath):
+                _vs = str(_v)
+                if _vs == _old_data_str or _vs.startswith(_old_data_str + os.sep):
+                    _suffix = _vs[len(_old_data_str):]
+                    globals()[_k] = _ic3_data_path / _suffix.lstrip(os.sep) if _suffix.strip(os.sep) else _ic3_data_path
+                    print(f"[ic3] Redirected global '{_k}': {_vs!r} -> {globals()[_k]}")
 
 
 def _load_json_if_present(path: Path):
