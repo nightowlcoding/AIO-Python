@@ -11,26 +11,29 @@ from datetime import date, datetime, timedelta
 ROOT = Path(__file__).resolve().parent
 _IC3_DATA_DIR = os.environ.get("IC3_DATA_DIR")
 if _IC3_DATA_DIR:
+    import shutil as _shutil
     _ic3_data_path = Path(_IC3_DATA_DIR)
     _ic3_data_path.mkdir(parents=True, exist_ok=True)
-
-    # Seed persistent disk from git-committed data on first deployment.
     _committed_data = ROOT / "data"
-    if _committed_data.exists() and not any(_ic3_data_path.iterdir()):
-        import shutil as _shutil
-        for _src in _committed_data.iterdir():
-            if _src.is_file():
-                _shutil.copy2(_src, _ic3_data_path / _src.name)
-        print(f"[ic3] Seeded persistent disk from committed data ({list(_ic3_data_path.iterdir())})")
 
-    class _DataRedirectPath(type(Path())):
-        """Redirects ROOT / 'data' to the persistent disk path (IC3_DATA_DIR)."""
-        def __truediv__(self, key):
-            if str(key) == "data":
-                return _ic3_data_path
-            return super().__truediv__(key)
-
-    ROOT = _DataRedirectPath(ROOT)
+    if _committed_data.is_dir() and not _committed_data.is_symlink():
+        # Fresh git deploy: committed data/ dir is present.
+        # Seed the persistent disk if it is empty, then replace the directory
+        # with a symlink so every code path (bytecode, module-level vars,
+        # inline calls) transparently reads/writes the persistent disk.
+        if not any(_ic3_data_path.iterdir()):
+            for _src in _committed_data.iterdir():
+                if _src.is_file():
+                    _shutil.copy2(_src, _ic3_data_path / _src.name)
+            print(f"[ic3] Seeded persistent disk from committed data")
+        _shutil.rmtree(str(_committed_data))
+        _committed_data.symlink_to(_ic3_data_path)
+        print(f"[ic3] data/ -> {_ic3_data_path}")
+    elif not _committed_data.exists():
+        # data/ was removed but symlink missing — recreate symlink.
+        _committed_data.symlink_to(_ic3_data_path)
+        print(f"[ic3] Recreated symlink: data/ -> {_ic3_data_path}")
+    # If data/ is already a symlink from a previous restart, nothing to do.
 
 INVOICE_IMPORT_LOG_PATH = ROOT / "data" / "invoice_import_log.json"
 PRODUCTMIX_SYNC_CACHE_PATH = ROOT / "data" / "productmix_sync_cache.json"
@@ -3344,29 +3347,10 @@ def _exec_bytecode() -> None:
         raise ValueError(f"Invalid bytecode file header: {BYTECODE_FILE}")
 
     code = marshal.loads(data[16:])
-    _root_before_exec = globals().get("ROOT")
-    # The plain (un-redirected) root that the bytecode will compute internally.
-    _plain_root = Path(__file__).resolve().parent
     exec(code, globals(), globals())
-    # The bytecode redefines ROOT = Path(__file__).resolve().parent, which strips
-    # the _DataRedirectPath wrapper. Restore our patched ROOT so any call-time
-    # lookup of ROOT still goes to the persistent disk.
-    if _root_before_exec is not None:
-        globals()["ROOT"] = _root_before_exec
-    # The bytecode also sets module-level path variables (e.g. DATA_DIR, *_PATH)
-    # to the ephemeral directory at exec time before ROOT is restored. Scan all
-    # globals and redirect any Path that points into the ephemeral data dir to
-    # the persistent disk path instead.
-    if _IC3_DATA_DIR:
-        _old_data = _plain_root / "data"
-        _old_data_str = str(_old_data)
-        for _k, _v in list(globals().items()):
-            if isinstance(_v, Path) and not isinstance(_v, _DataRedirectPath):
-                _vs = str(_v)
-                if _vs == _old_data_str or _vs.startswith(_old_data_str + os.sep):
-                    _suffix = _vs[len(_old_data_str):]
-                    globals()[_k] = _ic3_data_path / _suffix.lstrip(os.sep) if _suffix.strip(os.sep) else _ic3_data_path
-                    print(f"[ic3] Redirected global '{_k}': {_vs!r} -> {globals()[_k]}")
+    # The data/ directory is now a symlink to the persistent disk, so all path
+    # lookups in the bytecode (ROOT/"data", DATA_DIR, inline paths, etc.) resolve
+    # correctly without any post-exec patching.
 
 
 def _load_json_if_present(path: Path):
