@@ -6,6 +6,7 @@ from flask_login import LoginManager, UserMixin, current_user, login_user, logou
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import pandas as pd
+import gc
 import math
 import io
 import csv
@@ -4113,34 +4114,37 @@ def read_product_mix_excel(file_storage):
 
     file_storage.stream.seek(0)
     workbook = _open_product_mix_workbook(file_storage)
+    try:
+        picked_sheet = None
+        for name in preferred_names:
+            if name in workbook.sheet_names:
+                picked_sheet = name
+                break
 
-    picked_sheet = None
-    for name in preferred_names:
-        if name in workbook.sheet_names:
-            picked_sheet = name
-            break
+        if not picked_sheet and not workbook.sheet_names:
+            raise ValueError("Workbook has no sheets")
 
-    if not picked_sheet and not workbook.sheet_names:
-        raise ValueError("Workbook has no sheets")
+        if picked_sheet:
+            parsed = workbook.parse(sheet_name=picked_sheet)
+            try:
+                resolve_item_qty_columns(parsed)
+                return parsed
+            except ValueError:
+                del parsed
 
-    if picked_sheet:
-        parsed = workbook.parse(sheet_name=picked_sheet)
-        try:
-            resolve_item_qty_columns(parsed)
-            return parsed
-        except ValueError:
-            pass
+        # Fallback: choose the first sheet that actually contains item + qty columns.
+        for candidate in workbook.sheet_names:
+            candidate_df = workbook.parse(sheet_name=candidate)
+            try:
+                resolve_item_qty_columns(candidate_df)
+                return candidate_df
+            except ValueError:
+                del candidate_df
+                continue
 
-    # Fallback: choose the first sheet that actually contains item + qty columns.
-    for candidate in workbook.sheet_names:
-        candidate_df = workbook.parse(sheet_name=candidate)
-        try:
-            resolve_item_qty_columns(candidate_df)
-            return candidate_df
-        except ValueError:
-            continue
-
-    raise ValueError("No compatible product mix sheet was found in this workbook")
+        raise ValueError("No compatible product mix sheet was found in this workbook")
+    finally:
+        workbook.close()
 
 
 # ---------------------------------------------------------------------------
@@ -4171,22 +4175,24 @@ def _read_all_levels_sheet(file_storage):
       - headers_dict : dict mapping column letter -> detected header string from row 0
     """
     wb = _open_product_mix_workbook(file_storage)
+    try:
+        sheet_name = next((s for s in _ALL_LEVELS_TAB_NAMES if s in wb.sheet_names), None)
+        if sheet_name is None:
+            lower_map = {s.lower(): s for s in wb.sheet_names}
+            sheet_name = lower_map.get("all levels")
 
-    sheet_name = next((s for s in _ALL_LEVELS_TAB_NAMES if s in wb.sheet_names), None)
-    if sheet_name is None:
-        lower_map = {s.lower(): s for s in wb.sheet_names}
-        sheet_name = lower_map.get("all levels")
+        if sheet_name is None:
+            available = ", ".join(wb.sheet_names)
+            raise ValueError(f"No 'All Levels' tab found. Available sheets: {available}")
 
-    if sheet_name is None:
-        available = ", ".join(wb.sheet_names)
-        raise ValueError(f"No 'All Levels' tab found. Available sheets: {available}")
-
-    df = wb.parse(sheet_name=sheet_name, header=None)
+        df = wb.parse(sheet_name=sheet_name, header=None)
+    finally:
+        wb.close()
 
     min_cols = max(_ALL_LEVELS_COL_INDICES.values()) + 1  # 16
     if df.shape[1] < min_cols:
         raise ValueError(
-            f"'All Levels' tab has {df.shape[1]} columns; need at least {min_cols} (A–P)."
+            f"'All Levels' tab has {df.shape[1]} columns; need at least {min_cols} (A\u2013P)."
         )
 
     headers_dict = {}
@@ -4196,6 +4202,7 @@ def _read_all_levels_sheet(file_storage):
 
     # Drop header row; return data rows with reset index
     data_df = df.iloc[1:].reset_index(drop=True)
+    del df
     return data_df, headers_dict
 
 
@@ -7250,6 +7257,7 @@ def upload():
             manual_start_date=manual_start_date,
             manual_end_date=manual_end_date,
         )
+        gc.collect()
         if error_payload:
             failed.append(
                 {
