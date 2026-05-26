@@ -3344,7 +3344,13 @@ def _exec_bytecode() -> None:
         raise ValueError(f"Invalid bytecode file header: {BYTECODE_FILE}")
 
     code = marshal.loads(data[16:])
+    _root_before_exec = globals().get("ROOT")
     exec(code, globals(), globals())
+    # The bytecode may redefine ROOT (Path(__file__).parent) which would strip
+    # the _DataRedirectPath wrapper. Restore our patched ROOT so save functions
+    # in the bytecode still write to the persistent disk.
+    if _root_before_exec is not None:
+        globals()["ROOT"] = _root_before_exec
 
 
 def _load_json_if_present(path: Path):
