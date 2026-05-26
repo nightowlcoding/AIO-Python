@@ -3825,7 +3825,11 @@ def api_dashboard() -> Response:
     try:
         productmix_cfg = CONFIG.get("apps", {}).get("productmix", {})
         productmix_cwd = str(productmix_cfg.get("cwd") or "ProductMixRestaurantDB").strip() or "ProductMixRestaurantDB"
-        pm_db_path = ROOT / productmix_cwd / "product_mix.db"
+        _pm_db_dir_env = os.environ.get("PM_DB_DIR")
+        if _pm_db_dir_env:
+            pm_db_path = Path(_pm_db_dir_env) / "product_mix.db"
+        else:
+            pm_db_path = ROOT / productmix_cwd / "product_mix.db"
         if pm_db_path.exists():
             pm_conn = sqlite3.connect(pm_db_path)
             pm_conn.row_factory = sqlite3.Row
