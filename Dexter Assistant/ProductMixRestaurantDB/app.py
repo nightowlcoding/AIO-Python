@@ -95,6 +95,14 @@ limiter = Limiter(
 _pm_db_dir = os.environ.get("PM_DB_DIR")
 if _pm_db_dir:
     Path(_pm_db_dir).mkdir(parents=True, exist_ok=True)
+    # Seed persistent disk from git-committed DB on first deployment.
+    _pm_persistent_db = Path(_pm_db_dir) / "product_mix.db"
+    if not _pm_persistent_db.exists():
+        _pm_committed_db = Path(__file__).parent / "product_mix.db"
+        if _pm_committed_db.exists():
+            import shutil as _shutil
+            _shutil.copy2(_pm_committed_db, _pm_persistent_db)
+            print(f"[pm] Seeded persistent disk DB from committed product_mix.db")
 DB_PATH = Path(_pm_db_dir) / "product_mix.db" if _pm_db_dir else Path(__file__).parent / "product_mix.db"
 ALLOWED_UPLOAD_EXTS = {".xlsx", ".xls"}
 ALLOWED_UPLOAD_MIME_TYPES = {

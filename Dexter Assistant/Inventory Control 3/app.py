@@ -14,6 +14,15 @@ if _IC3_DATA_DIR:
     _ic3_data_path = Path(_IC3_DATA_DIR)
     _ic3_data_path.mkdir(parents=True, exist_ok=True)
 
+    # Seed persistent disk from git-committed data on first deployment.
+    _committed_data = ROOT / "data"
+    if _committed_data.exists() and not any(_ic3_data_path.iterdir()):
+        import shutil as _shutil
+        for _src in _committed_data.iterdir():
+            if _src.is_file():
+                _shutil.copy2(_src, _ic3_data_path / _src.name)
+        print(f"[ic3] Seeded persistent disk from committed data ({list(_ic3_data_path.iterdir())})")
+
     class _DataRedirectPath(type(Path())):
         """Redirects ROOT / 'data' to the persistent disk path (IC3_DATA_DIR)."""
         def __truediv__(self, key):
