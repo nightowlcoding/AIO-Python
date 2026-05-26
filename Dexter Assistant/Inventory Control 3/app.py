@@ -2898,8 +2898,10 @@ def _register_order_csv_rename_endpoint(flask_app) -> None:
                 return jsonify({"success": True, "folder_path": "", "message": "Folder selection cancelled."})
 
             return jsonify({"success": True, "folder_path": selected})
+        except ImportError:
+            return jsonify({"success": False, "message": "Folder picker is only available when running locally. Please type the folder path manually."}), 200
         except Exception as exc:
-            return jsonify({"success": False, "message": f"Folder picker unavailable: {exc}"}), 500
+            return jsonify({"success": False, "message": f"Folder picker unavailable: {exc}"}), 200
 
 
 def _register_invoice_import_log_endpoint(flask_app) -> None:
