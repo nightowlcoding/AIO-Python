@@ -2138,7 +2138,8 @@ MOBILE_UI_SCRIPT = r"""
     style.type = 'text/css';
     style.textContent = [
         '.tabs { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }',
-        '.tab { flex-shrink: 0 !important; }',
+        '.tab { flex-shrink: 0 !important; font-size: 0.82rem !important; padding: 12px 10px !important; }',
+        '.tab img, .tab .tab-icon { width: 16px !important; height: 16px !important; }',
         '@media (max-width: 768px) {',
         '  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }',
         '  body { font-size: 16px !important; line-height: 1.45; }',
