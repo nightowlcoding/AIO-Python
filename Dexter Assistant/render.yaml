@@ -8,6 +8,10 @@ services:
       - dexterassist.com
       - www.dexterassist.com
     healthCheckPath: /api/health
+    disk:
+      name: dexter-data
+      mountPath: /dexter-data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.13
@@ -17,3 +21,7 @@ services:
         value: "0"
       - key: PM_DEBUG
         value: "0"
+      - key: IC3_DATA_DIR
+        value: /dexter-data/ic3
+      - key: PM_DB_DIR
+        value: /dexter-data/pm

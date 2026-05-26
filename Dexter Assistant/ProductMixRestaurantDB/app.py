@@ -92,7 +92,10 @@ limiter = Limiter(
     storage_uri=os.environ.get("PM_RATE_LIMIT_STORAGE", "memory://"),
 )
 
-DB_PATH = Path(__file__).parent / "product_mix.db"
+_pm_db_dir = os.environ.get("PM_DB_DIR")
+if _pm_db_dir:
+    Path(_pm_db_dir).mkdir(parents=True, exist_ok=True)
+DB_PATH = Path(_pm_db_dir) / "product_mix.db" if _pm_db_dir else Path(__file__).parent / "product_mix.db"
 ALLOWED_UPLOAD_EXTS = {".xlsx", ".xls"}
 ALLOWED_UPLOAD_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

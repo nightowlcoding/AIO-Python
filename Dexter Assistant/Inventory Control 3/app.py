@@ -9,6 +9,20 @@ from urllib import request as urllib_request
 from datetime import date, datetime, timedelta
 
 ROOT = Path(__file__).resolve().parent
+_IC3_DATA_DIR = os.environ.get("IC3_DATA_DIR")
+if _IC3_DATA_DIR:
+    _ic3_data_path = Path(_IC3_DATA_DIR)
+    _ic3_data_path.mkdir(parents=True, exist_ok=True)
+
+    class _DataRedirectPath(type(Path())):
+        """Redirects ROOT / 'data' to the persistent disk path (IC3_DATA_DIR)."""
+        def __truediv__(self, key):
+            if str(key) == "data":
+                return _ic3_data_path
+            return super().__truediv__(key)
+
+    ROOT = _DataRedirectPath(ROOT)
+
 INVOICE_IMPORT_LOG_PATH = ROOT / "data" / "invoice_import_log.json"
 PRODUCTMIX_SYNC_CACHE_PATH = ROOT / "data" / "productmix_sync_cache.json"
 BYTECODE_FILE = ROOT / "app.pyc"
