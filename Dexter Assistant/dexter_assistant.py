@@ -2549,11 +2549,13 @@ LOGIN_HTML = """
             <div class="marketing">
                 <img class="logo" src="/branding/logo" alt="Dexter Ops logo" />
                 <div class="hero-title">Dexter <span class="hero-accent">Assistant</span></div>
-                <div class="hero-tagline">All your restaurant management apps,<br>one secure ops dashboard.</div>
+                <div class="hero-tagline">The all-in-one operations platform<br>built for restaurant teams.</div>
                 <ul class="features">
-                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Start, stop, and monitor apps instantly</li>
-                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Secure, password-protected access</li>
-                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Works on any device, anywhere</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Inventory Control — track invoices, orders &amp; stock levels in real time</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Product Mix &amp; Production Reports — upload sales data and plan production by location</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Daily Log — log cash, labor and shift notes from any device</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Live dashboard — top sellers, open tasks and app health at a glance</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Role-based access for owners, managers &amp; employees — works on any device</li>
                 </ul>
                 <a class="contact-link" href="mailto:info@dexterassist.com">Contact us / Learn more</a>
             </div>
