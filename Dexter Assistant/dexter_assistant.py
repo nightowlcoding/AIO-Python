@@ -3923,7 +3923,12 @@ def _proxy(name: str, path: str) -> Response:
     status = MANAGER.status()[resolved_name]
     if not status["running"]:
         MANAGER.start(resolved_name)
-        time.sleep(0.6)
+        # Poll until the sub-app port is accepting connections (up to 10 s).
+        _app_host, _app_port = MANAGER._parse_host_port(CONFIG["apps"][resolved_name]["base_url"])
+        for _ in range(20):
+            time.sleep(0.5)
+            if is_port_open(_app_host, _app_port):
+                break
 
     upstream_base = CONFIG["apps"][resolved_name]["base_url"].rstrip("/") + "/"
     upstream_origin = urlparse(upstream_base)
@@ -3996,7 +4001,12 @@ def _proxy(name: str, path: str) -> Response:
         # A brief restart/retry protects the shell UI from transient local app drops.
         try:
             MANAGER.restart(resolved_name)
-            time.sleep(0.8)
+            # Wait for restart to bind its port (up to 8 s).
+            _app_host2, _app_port2 = MANAGER._parse_host_port(CONFIG["apps"][resolved_name]["base_url"])
+            for _ in range(16):
+                time.sleep(0.5)
+                if is_port_open(_app_host2, _app_port2):
+                    break
             upstream = _request_upstream()
         except requests.RequestException:
             return jsonify({"ok": False, "message": f"Upstream request failed: {exc}"}), 502
