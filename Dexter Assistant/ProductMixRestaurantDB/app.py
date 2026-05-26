@@ -97,7 +97,23 @@ if _pm_db_dir:
     Path(_pm_db_dir).mkdir(parents=True, exist_ok=True)
     # Seed persistent disk from git-committed DB on first deployment.
     _pm_persistent_db = Path(_pm_db_dir) / "product_mix.db"
-    if not _pm_persistent_db.exists():
+    _needs_seed = not _pm_persistent_db.exists()
+    if not _needs_seed and _pm_persistent_db.exists():
+        try:
+            import sqlite3 as _sqlite3
+            _chk = _sqlite3.connect(str(_pm_persistent_db))
+            _chk_cur = _chk.cursor()
+            _chk_cur.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='restaurants'")
+            _tbl_exists = _chk_cur.fetchone()[0]
+            if _tbl_exists:
+                _chk_cur.execute("SELECT COUNT(*) FROM restaurants")
+                _needs_seed = _chk_cur.fetchone()[0] == 0
+            else:
+                _needs_seed = True
+            _chk.close()
+        except Exception:
+            _needs_seed = True
+    if _needs_seed:
         _pm_committed_db = Path(__file__).parent / "product_mix.db"
         if _pm_committed_db.exists():
             import shutil as _shutil
