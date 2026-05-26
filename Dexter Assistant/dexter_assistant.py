@@ -662,7 +662,8 @@ DASHBOARD_HTML = """
                         { id: 'ic3-manage', label: 'Manage Products', url: '/app/ic3/', ic3TabText: 'Manage Products' },
                         { id: 'ic3-forecast', label: 'Forecast', url: '/app/ic3/', ic3TabText: 'Forecast' },
                         { id: 'ic3-reports', label: 'Reports', url: '/app/ic3/', ic3TabText: 'Reports' },
-                        { id: 'ic3-analytics', label: 'Analytics', url: '/app/ic3/', ic3TabText: 'Analytics' }
+                        { id: 'ic3-analytics', label: 'Analytics', url: '/app/ic3/', ic3TabText: 'Analytics' },
+                        { id: 'ic3-usage', label: 'Usage History', url: '/app/ic3/', ic3TabText: 'Usage History' }
                     ]
                 },
                 productmix: {

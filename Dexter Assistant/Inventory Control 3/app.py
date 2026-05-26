@@ -2025,6 +2025,8 @@ MOBILE_UI_SCRIPT = r"""
     style.id = styleId;
     style.type = 'text/css';
     style.textContent = [
+        '.tabs { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }',
+        '.tab { flex-shrink: 0 !important; }',
         '@media (max-width: 768px) {',
         '  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }',
         '  body { font-size: 16px !important; line-height: 1.45; }',
