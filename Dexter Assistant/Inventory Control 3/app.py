@@ -280,9 +280,7 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
     const observer = new MutationObserver(function () {
         if (!document.getElementById('ic3ProductMixSyncPanel')) {
             install();
-            return;
         }
-        syncSharedLocations();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 })();
@@ -315,20 +313,25 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
         return 'ic3-shared-location-' + groupIndex + '-' + optionIndex + '-' + slug;
     }
 
-    function applyToSelect(select, restaurants) {
+    function applyToSelect(select, restaurants, preferredValue) {
         if (!select || !restaurants || !restaurants.length) return;
         const existing = String(select.value || '').trim();
 
         const opts = ['<option value="">Select Location</option>'];
         for (const row of restaurants) {
             const label = buildLabel(row);
-            if (!label) continue;
-            opts.push('<option value="' + label.replace(/"/g, '&quot;') + '">' + label + '</option>');
+            const locValue = String(row && row.location || '').trim() || label;
+            if (!locValue) continue;
+            opts.push('<option value="' + locValue.replace(/"/g, '&quot;') + '">' + label + '</option>');
         }
         select.innerHTML = opts.join('');
 
         const values = Array.from(select.options).map(function (o) { return String(o.value || ''); });
-        if (existing && values.includes(existing)) {
+        // Use preferred value if given and valid, then existing, then first.
+        const preferred = String(preferredValue || '').trim();
+        if (preferred && values.includes(preferred)) {
+            select.value = preferred;
+        } else if (existing && values.includes(existing)) {
             select.value = existing;
         } else {
             const first = values.find(function (v) { return v && v.trim(); }) || '';
@@ -352,7 +355,10 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
 
             restaurants.forEach(function (row, optionIndex) {
                 const label = buildLabel(row);
-                if (!label) return;
+                // Use just the location field as the value so IC3 internal
+                // location lookups (Alice / Kingsville) continue to work.
+                const locValue = String(row && row.location || '').trim() || label;
+                if (!locValue) return;
 
                 const wrapper = document.createElement('div');
                 wrapper.className = 'location-option';
@@ -360,9 +366,9 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                 const input = document.createElement('input');
                 input.type = 'radio';
                 input.name = 'location';
-                input.value = label;
-                input.id = buildRadioId(groupIndex, optionIndex, label);
-                if (selected && selected === label) {
+                input.value = locValue;
+                input.id = buildRadioId(groupIndex, optionIndex, locValue);
+                if (selected && selected === locValue) {
                     input.checked = true;
                     hasChecked = true;
                 }
@@ -375,7 +381,7 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                     if (!input.checked) return;
                     if (typeof window.setLocation === 'function') {
                         try {
-                            window.setLocation(label);
+                            window.setLocation(locValue);
                         } catch (_err) {
                             // Keep silent - native state still updates from checked radio.
                         }
@@ -396,7 +402,7 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
 
     function computeSignature(restaurants) {
         return (restaurants || []).map(function (row) {
-            return buildLabel(row);
+            return String(row && row.location || '').trim() || buildLabel(row);
         }).filter(Boolean).join('|');
     }
 
@@ -414,8 +420,12 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                 const el = document.getElementById(id);
                 return el && el.tagName === 'SELECT';
             });
+            const hasAnyDynSelect = Array.from(document.querySelectorAll('select')).some(function (sel) {
+                const marker = ((sel.id || '') + ' ' + (sel.name || '') + ' ' + (sel.className || '')).toLowerCase();
+                return marker.includes('location');
+            });
             const hasAnyRadioGroup = !!document.querySelector('.location-selector input[name="location"][type="radio"]');
-            if (!hasAnySelect && !hasAnyRadioGroup) return;
+            if (!hasAnySelect && !hasAnyDynSelect && !hasAnyRadioGroup) return;
 
             // Skip pointless re-renders when options list has not changed.
             if (signature && signature === lastAppliedSignature) return;
@@ -426,6 +436,26 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                     applyToSelect(select, restaurants);
                 }
             }
+
+            // Also sync any other <select> whose id/name/class contains 'location'
+            // (catches Analytics, Forecast, and any future dropdowns not in SELECT_IDS).
+            // Use the value from the first synced known select as the preferred location.
+            const knownIds = new Set(SELECT_IDS);
+            let activeLocation = '';
+            for (const id of SELECT_IDS) {
+                const el = document.getElementById(id);
+                if (el && el.tagName === 'SELECT' && String(el.value || '').trim()) {
+                    activeLocation = String(el.value || '').trim();
+                    break;
+                }
+            }
+            Array.from(document.querySelectorAll('select')).forEach(function (sel) {
+                if (!sel.id && !sel.name && !sel.className) return;
+                const marker = ((sel.id || '') + ' ' + (sel.name || '') + ' ' + (sel.className || '')).toLowerCase();
+                if (marker.includes('location') && !knownIds.has(sel.id)) {
+                    applyToSelect(sel, restaurants, activeLocation);
+                }
+            });
 
             applyToLocationRadios(restaurants);
 
@@ -1353,7 +1383,7 @@ PRODUCT_DETAIL_SCRIPT = r"""
 
     const state = {
         productNumber: '',
-        windowKey: 'week',
+        windowKey: 'month',
         location: '',
         locationScope: 'current',
         detailPayload: null,
@@ -1813,7 +1843,7 @@ PRODUCT_DETAIL_SCRIPT = r"""
     async function loadProductDetail(productNumber, windowKey) {
         if (!productNumber) return;
         state.productNumber = String(productNumber || '').trim();
-        state.windowKey = windowKey || state.windowKey || 'week';
+        state.windowKey = windowKey || state.windowKey || 'month';
         state.location = guessCurrentLocation();
 
         ensureProductDetailTab();
@@ -2448,7 +2478,7 @@ def _window_start_date(window_key: str, today_value=None):
         return date(today_day.year, 1, 1)
     if key == "month":
         return today_day - timedelta(days=29)
-    return today_day - timedelta(days=6)
+    return today_day - timedelta(days=13)  # "week" = 2 weeks to avoid data boundary gaps
 
 
 def _window_filter_dates(items, window_key):
@@ -3179,6 +3209,9 @@ def _restore_runtime_data_fallbacks() -> None:
             globals()["orders_data"] = orders_from_disk
         if not isinstance(globals().get("orders_database"), dict) or not globals().get("orders_database"):
             globals()["orders_database"] = orders_from_disk
+        if not isinstance(globals().get("order_data"), dict) or not globals().get("order_data"):
+            globals()["order_data"] = orders_from_disk
+            print(f"[ic3] Restored order_data from disk ({len(orders_from_disk)} locations)")
 
 
 def _force_production_flask_run() -> None:
@@ -3394,6 +3427,204 @@ def _install_shared_locations_failsafe_patch() -> None:
 
 
 _install_shared_locations_failsafe_patch()
+
+
+def _install_dexter_ui_patch() -> None:
+    """Inject Dexter Assistant brand assets + theme JS into IC3 HTML responses.
+
+    IC3 is loaded from compiled bytecode and has no on-disk templates, so we
+    use the same after_request hook pattern the rest of this shim uses to
+    splice tokens.css / components.css into <head> and theme.js before </body>.
+    """
+    target_app = globals().get("app")
+    if target_app is None:
+        return
+
+    from flask import send_from_directory
+
+    dexter_ui_dir = ROOT / "dexter-ui"
+    if not dexter_ui_dir.exists():
+        # Fall back to the canonical workspace source if local sync hasn't run.
+        candidate = ROOT.parent.parent / "Tools" / "dexter_ui"
+        if candidate.exists():
+            dexter_ui_dir = candidate
+
+    # Serve /dexter-ui/<filename> and /dexter-ui/brand/<filename>
+    def _dexter_ui_static(filename):
+        return send_from_directory(str(dexter_ui_dir), filename, max_age=3600)
+
+    def _dexter_ui_brand(filename):
+        return send_from_directory(str(dexter_ui_dir / "brand"), filename, max_age=3600)
+
+    # Avoid re-registering on hot reload.
+    existing = {r.rule for r in target_app.url_map.iter_rules()}
+    if "/dexter-ui/<path:filename>" not in existing:
+        target_app.add_url_rule(
+            "/dexter-ui/<path:filename>",
+            endpoint="_dexter_ui_static",
+            view_func=_dexter_ui_static,
+        )
+    if "/dexter-ui/brand/<path:filename>" not in existing:
+        target_app.add_url_rule(
+            "/dexter-ui/brand/<path:filename>",
+            endpoint="_dexter_ui_brand",
+            view_func=_dexter_ui_brand,
+        )
+
+    head_block = (
+        '<meta name="theme-color" content="#22427A">'
+        # Mark the document as embedded BEFORE body paints so the redundant
+        # in-app hero header is hidden by components.css without a flash.
+        '<script>try{if(window.top!==window.self){document.documentElement.classList.add("dx-embedded");}}catch(e){document.documentElement.classList.add("dx-embedded");}</script>'
+        '<link rel="icon" type="image/x-icon" href="/dexter-ui/brand/favicon.ico">'
+        '<link rel="icon" type="image/png" sizes="32x32" href="/dexter-ui/brand/favicon-32.png">'
+        '<link rel="apple-touch-icon" sizes="180x180" href="/dexter-ui/brand/apple-touch-icon.png">'
+        '<link rel="preconnect" href="https://fonts.googleapis.com">'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+        '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
+        '<link rel="stylesheet" href="/dexter-ui/tokens.css">'
+        '<link rel="stylesheet" href="/dexter-ui/components.css">'
+        "<style>"
+        # Tiny IC3-only bridge: keep the existing IC3 background gradient/cards alive but recolor key elements.
+        "body{font-family:var(--dx-font-sans)!important;background:var(--dx-bg)!important;color:var(--dx-text)!important;}"
+        ".navbar,.app-navbar,header.navbar,nav.navbar{background:var(--dx-primary)!important;}"
+        ".navbar-brand,.navbar a,.navbar .nav-link{color:var(--dx-primary-contrast)!important;}"
+        ".btn-primary{background:var(--dx-primary)!important;border-color:var(--dx-primary)!important;color:var(--dx-primary-contrast)!important;}"
+        ".btn-primary:hover{background:var(--dx-navy-2)!important;border-color:var(--dx-navy-2)!important;}"
+        ".card,.panel,.box,.modal-content{background:var(--dx-surface)!important;color:var(--dx-text)!important;border-color:var(--dx-border-soft)!important;}"
+        ".table{color:var(--dx-text)!important;}"
+        ".table thead{background:var(--dx-surface-2)!important;color:var(--dx-text-muted)!important;}"
+        ".form-control,.form-select{background:var(--dx-surface)!important;color:var(--dx-text)!important;border-color:var(--dx-border-soft)!important;}"
+        ".form-control:focus,.form-select:focus{box-shadow:var(--dx-ring)!important;border-color:var(--dx-primary)!important;}"
+        "table{width:100%!important;table-layout:fixed!important;font-size:11.5px!important;}"
+        "table th,table td{padding:4px 6px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;vertical-align:middle!important;}"
+        "table th:nth-child(1),table td:nth-child(1){width:8%!important;}"
+        "table th:nth-child(2),table td:nth-child(2){width:22%!important;}"
+        "table th:nth-child(3),table td:nth-child(3){width:15%!important;}"
+        "table th:nth-child(4),table td:nth-child(4){width:10%!important;}"
+        # Product Activity report: reduce wide sticky columns and fix sticky left offsets.
+        # Widths: Product#=120px, Description=180px, Brand=120px, PackageSize=90px.
+        # min-width:0!important overrides the compiled inline min-width (300/220/160px).
+        # left:Xpx!important fixes sticky offsets that were calculated from the old widths.
+        "#reportContent table th:nth-child(2){width:180px!important;min-width:0!important;max-width:180px!important;}"
+        "#reportContent table th:nth-child(3){width:120px!important;min-width:0!important;max-width:120px!important;left:300px!important;}"
+        "#reportContent table td:nth-child(3){left:300px!important;}"
+        "#reportContent table th:nth-child(4){width:90px!important;min-width:0!important;max-width:90px!important;left:420px!important;}"
+        "#reportContent table td:nth-child(4){left:420px!important;}"
+        "#reportContent table th:nth-child(2),#reportContent table th:nth-child(3),#reportContent table th:nth-child(4),"
+        "#reportContent table td:nth-child(2),#reportContent table td:nth-child(3),#reportContent table td:nth-child(4)"
+        "{white-space:normal!important;word-break:break-word!important;text-overflow:clip!important;overflow:hidden!important;vertical-align:top!important;}"
+        "</style>"
+    )
+
+    body_block = (
+        # Deduplicate /api/shared/restaurants fetch calls + minimal scroll
+        # diagnostics. Function-level throttle and MutationObserver wrapping
+        # are disabled because Object.defineProperty setter traps interfere
+        # with IC3's function-declaration globals (causes "Enter Inventory"
+        # product list to vanish).
+        '<script>'
+        '(function(){'
+        # ---- fetch dedup (15s TTL) ----
+        'var _F=window.fetch,_c={};'
+        'window.fetch=function(input,init){'
+        'var url=typeof input==="string"?input:(input&&input.url)||String(input);'
+        'if(url.indexOf("/api/shared/restaurants")!==-1){'
+        'var now=Date.now(),e=_c[url];'
+        'if(e&&e.p&&(now-e.ts<15000))return e.p;'
+        'var p=_F.apply(this,arguments).then(function(r){'
+        'return r.text().then(function(t){'
+        '_c[url]={p:Promise.resolve(new Response(t,{status:200,headers:{"Content-Type":"application/json"}})),ts:Date.now()};'
+        'return new Response(t,{status:200,headers:{"Content-Type":"application/json"}});'
+        '});'
+        '})["catch"](function(e){delete _c[url];throw e;});'
+        '_c[url]={p:p,ts:now};return p;'
+        '}'
+        'return _F.apply(this,arguments);'
+        '};'
+        '})();'
+        '</script>'
+        # ---- on-screen debug overlay (mobile-friendly) ----
+        '<style>'
+        '#dx-dbg{position:fixed;right:6px;bottom:48px;width:55vw;max-width:340px;height:38vh;max-height:300px;'
+        'background:rgba(0,0,0,0.82);color:#9fe;font:10px/1.25 ui-monospace,Menlo,monospace;'
+        'padding:6px 8px;border-radius:8px;overflow-y:auto;z-index:99999;border:1px solid #2a6;'
+        'pointer-events:auto;white-space:pre-wrap;word-break:break-all;}'
+        '#dx-dbg.hidden{display:none;}'
+        '#dx-dbg-toggle{position:fixed;right:6px;bottom:6px;width:36px;height:36px;border-radius:50%;'
+        'background:#22427A;color:#fff;border:0;z-index:100000;font:bold 12px sans-serif;display:none;}'
+        '</style>'
+        '<button id="dx-dbg-toggle" onclick="(function(){var d=document.getElementById(\'dx-dbg\');if(d){d.classList.toggle(\'hidden\');if(d.classList.contains(\'hidden\'))document.getElementById(\'dx-dbg-toggle\').style.display=\'none\';}})()">DBG</button>'
+        '<div id="dx-dbg" class="hidden" onclick="this.innerHTML=\'\'"></div>'
+        '<script>'
+        '(function(){'
+        'var dbg=null,buf=[],last=0;function flush(){'
+        'if(!dbg)dbg=document.getElementById("dx-dbg");if(!dbg||!buf.length)return;'
+        'dbg.innerHTML+=buf.join("");buf=[];dbg.scrollTop=dbg.scrollHeight;}'
+        'setInterval(flush,400);'
+        'function log(m){'
+        'var t=new Date();var hh=String(t.getHours()).padStart(2,"0");'
+        'var mm=String(t.getMinutes()).padStart(2,"0");var ss=String(t.getSeconds()).padStart(2,"0");'
+        'var ms=String(t.getMilliseconds()).padStart(3,"0");'
+        'buf.push("["+hh+":"+mm+":"+ss+"."+ms+"] "+m+"\\n");'
+        '}window.dxLog=log;'
+        # log all fetches (debounced via buffered flush)
+        'var _F3=window.fetch;window.fetch=function(i,n){'
+        'var u=typeof i==="string"?i:(i&&i.url)||String(i);'
+        'if(u.indexOf("/dexter-ui/")===-1)log("fetch "+u.replace(/^https?:\\/\\/[^\\/]+/,""));'
+        'return _F3.apply(this,arguments);};'
+        # log scroll resets only (no MO wrap)
+        'var lastY=0,lastT=0;window.addEventListener("scroll",function(){'
+        'var y=window.scrollY||document.documentElement.scrollTop;'
+        'if(lastY>40&&y<5&&(Date.now()-lastT<1500)){log("SCROLL RESET y="+lastY+"->"+y);}'
+        'lastY=y;lastT=Date.now();},{passive:true});'
+        'log("dx-debug ready");'
+        '})();'
+        '</script>'
+        '<script src="/dexter-ui/theme.js" defer></script>'
+        '<div class="dx-version-badge" aria-hidden="true">Dexter · IC3 · v0.9-demo</div>'
+    )
+
+    marker = "__dexter_ui_installed"
+
+    @target_app.after_request
+    def _inject_dexter_ui(response):
+        content_type = (response.content_type or "").lower()
+        if "text/html" not in content_type:
+            return response
+        if response.direct_passthrough:
+            response.direct_passthrough = False
+        try:
+            body = response.get_data(as_text=True)
+        except UnicodeDecodeError:
+            return response
+
+        if marker in body:
+            return response
+        if "</head>" not in body and "</body>" not in body:
+            return response
+
+        updated = body
+        if "</head>" in updated:
+            updated = updated.replace(
+                "</head>",
+                head_block + f'<meta name="dexter-ui" content="1" data-{marker}="1"></head>',
+                1,
+            )
+        else:
+            updated = head_block + updated
+        if "</body>" in updated:
+            updated = updated.replace("</body>", body_block + "</body>", 1)
+        else:
+            updated = updated + body_block
+
+        response.set_data(updated)
+        if "Content-Length" in response.headers:
+            response.headers["Content-Length"] = str(len(response.get_data()))
+        return response
+
+
+_install_dexter_ui_patch()
 
 
 if __name__ == "__main__":

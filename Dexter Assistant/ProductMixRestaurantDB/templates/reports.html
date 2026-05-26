@@ -40,13 +40,12 @@
 
   <div class="col-12">
     <div class="row g-3">
+      {% set kpi_icons = {'locations': 'bi-geo-alt', 'uploads': 'bi-cloud-arrow-up', 'tracked_items': 'bi-list-ul'} %}
       {% for k, v in (summary or {}).items() %}
       <div class="col-6 col-lg-4">
-        <div class="card stat-card">
-          <div class="card-body">
-            <div class="section-eyebrow">{{ k.replace('_', ' ').title() }}</div>
-            <div class="stat-value">{{ v }}</div>
-          </div>
+        <div class="dx-kpi{% if loop.first %} dx-kpi--accent{% endif %}">
+          <div class="dx-kpi__label"><i class="bi {{ kpi_icons.get(k, 'bi-bar-chart') }} me-1"></i>{{ k.replace('_', ' ').title() }}</div>
+          <div class="dx-kpi__value">{{ v }}</div>
         </div>
       </div>
       {% endfor %}

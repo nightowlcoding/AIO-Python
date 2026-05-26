@@ -224,13 +224,12 @@
 
   <div class="col-12">
     <div class="row g-3">
+      {% set prod_kpi_icons = {'production_items': 'bi-diagram-3', 'mapped_menu_items': 'bi-list-check', 'total_units': 'bi-boxes', 'cases_required': 'bi-archive'} %}
       {% for k, v in (summary or {}).items() %}
       <div class="col-6 col-lg-3">
-        <div class="card stat-card">
-          <div class="card-body">
-            <div class="section-eyebrow">{{ k.replace('_', ' ').title() }}</div>
-            <div class="stat-value">{{ v }}</div>
-          </div>
+        <div class="dx-kpi{% if loop.first %} dx-kpi--accent{% endif %}">
+          <div class="dx-kpi__label"><i class="bi {{ prod_kpi_icons.get(k, 'bi-bar-chart') }} me-1"></i>{{ k.replace('_', ' ').title() }}</div>
+          <div class="dx-kpi__value">{{ v }}</div>
         </div>
       </div>
       {% endfor %}

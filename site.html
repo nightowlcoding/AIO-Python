@@ -1,0 +1,230 @@
+﻿
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0" />
+    <title>Dexter Assistant Login</title>
+    <style>
+        :root {
+            --bg: #eef3ea;
+            --panel: #fff;
+            --ink: #1f2a1f;
+            --muted: #5f6a60;
+            --edge: #d7dfd3;
+            --brand: #0f766e;
+            --brand2: #2563eb;
+            --danger: #991b1b;
+            --accent: #fbbf24;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; color: var(--ink); background: var(--bg); }
+        .wrap {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 8px;
+            background: linear-gradient(120deg, #e0f2fe 0%, #f1f5f9 100%);
+        }
+        .container {
+            display: flex;
+            flex-direction: row;
+            gap: 36px;
+            width: 100%;
+            max-width: 900px;
+            align-items: center;
+            justify-content: center;
+        }
+        .marketing {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 32px 0 32px 0;
+        }
+        .logo {
+            width: 96px;
+            height: 96px;
+            margin-bottom: 18px;
+            object-fit: contain;
+            border-radius: 14px;
+            border: 1px solid #d7dfd3;
+            background: #fff;
+            padding: 6px;
+        }
+        .hero-title {
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            color: var(--brand2);
+            letter-spacing: 0.5px;
+        }
+        .hero-tagline {
+            font-size: 1.15rem;
+            color: var(--muted);
+            margin-bottom: 18px;
+        }
+        .features {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 18px 0;
+        }
+        .features li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: var(--ink);
+        }
+        .features svg {
+            width: 22px;
+            height: 22px;
+            color: var(--brand2);
+            flex-shrink: 0;
+        }
+        .contact-link {
+            margin-top: 10px;
+            font-size: 1rem;
+            color: var(--brand2);
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .card {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: 410px;
+            background: var(--panel);
+            border: 1.5px solid var(--edge);
+            border-radius: 16px;
+            padding: 28px 22px 22px 22px;
+            box-shadow: 0 10px 32px rgba(33, 48, 33, 0.10);
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .card h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.7rem;
+            font-weight: 700;
+            color: var(--brand2);
+        }
+        .card p { margin: 0 0 18px; color: var(--muted); }
+        label { display: block; margin: 10px 0 6px; font-size: 14px; }
+        input {
+            width: 100%;
+            padding: 11px 13px;
+            border: 1px solid #c7d2c4;
+            border-radius: 10px;
+            font-size: 15px;
+            margin-bottom: 2px;
+        }
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+        .check input { width: auto; margin: 0; }
+        button {
+            margin-top: 16px;
+            width: 100%;
+            border: 1px solid var(--brand2);
+            background: linear-gradient(90deg, var(--brand2) 60%, var(--accent) 100%);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+            transition: background 0.2s;
+        }
+        button:hover { background: linear-gradient(90deg, var(--brand2) 80%, var(--accent) 100%); }
+        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; }
+        .links { margin-top: 14px; font-size: 13px; color: var(--muted); text-align: center; }
+        .links a { color: var(--brand2); text-decoration: underline; }
+        @media (max-width: 900px) {
+            .container { flex-direction: column; gap: 18px; align-items: stretch; }
+            .marketing, .card { max-width: 100%; }
+        }
+        @media (max-width: 600px) {
+            .wrap { padding: 10px 2px; }
+            .container { gap: 0; }
+            .marketing { padding: 18px 0 10px 0; }
+            .hero-title { font-size: 1.3rem; }
+            .card { padding: 18px 6px 14px 6px; border-radius: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="container">
+            <div class="marketing">
+                <img class="logo" src="/branding/logo" alt="Dexter Assistant Logo" />
+                <div class="hero-title">Dexter Assistant</div>
+                <div class="hero-tagline">All your restaurant management apps, one secure dashboard.</div>
+                <ul class="features">
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Start, stop, and monitor apps instantly</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Secure, password-protected access</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Works on any device, anywhere</li>
+                </ul>
+                <a class="contact-link" href="mailto:info@dexterassist.com">Contact us / Learn more</a>
+            </div>
+            <form class="card" method="post" action="/auth/login">
+                <h2>Sign In</h2>
+                <p>Access your dashboard and manage your apps.</p>
+                <label>Username</label>
+                <input id="login-username" type="text" name="username" required autofocus autocomplete="username" />
+                <label>Password</label>
+                <input id="login-password" type="password" name="password" required autocomplete="current-password" />
+                <div class="row">
+                    <label class="check"><input id="show-password" type="checkbox" /> Show password</label>
+                    <label class="check"><input id="save-password" type="checkbox" /> Remember username</label>
+                </div>
+                <button type="submit">Sign In</button>
+                
+                <div class="links">No account yet? <a href="/auth/register?next=/">Create one</a></div>
+            </form>
+        </div>
+    </div>
+    <script>
+        (function () {
+            const usernameInput = document.getElementById('login-username');
+            const passwordInput = document.getElementById('login-password');
+            const showPassword = document.getElementById('show-password');
+            const savePassword = document.getElementById('save-password');
+            const storageKey = 'dexterAssistantLogin';
+            try {
+                const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+                if (saved && typeof saved === 'object') {
+                    if (typeof saved.username === 'string') usernameInput.value = saved.username;
+                    showPassword.checked = !!saved.showPassword;
+                    savePassword.checked = !!saved.savePassword;
+                    if (showPassword.checked) passwordInput.type = 'text';
+                }
+            } catch (e) {}
+            showPassword.addEventListener('change', () => {
+                passwordInput.type = showPassword.checked ? 'text' : 'password';
+            });
+            document.querySelector('form.card').addEventListener('submit', () => {
+                if (savePassword.checked) {
+                    localStorage.setItem(storageKey, JSON.stringify({
+                        username: usernameInput.value,
+                        showPassword: showPassword.checked,
+                        savePassword: true
+                    }));
+                } else {
+                    localStorage.removeItem(storageKey);
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

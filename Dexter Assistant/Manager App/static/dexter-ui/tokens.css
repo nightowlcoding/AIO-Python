@@ -1,0 +1,152 @@
+/* ============================================================
+   dexter-ui :: tokens.css
+   The Dexter Assistant design system — color, type, spacing,
+   shadow, radius, and motion tokens. Loaded BEFORE Bootstrap
+   so component overrides have something to bind to.
+   ============================================================ */
+
+:root {
+  /* ---------- brand palette (locked from logo) ---------- */
+  --dx-navy:   #22427A;
+  --dx-navy-2: #1A335F;
+  --dx-navy-3: #122443;
+  --dx-gold:   #E8A340;
+  --dx-gold-2: #C98724;
+  --dx-cream:  #FAF6EF;
+  --dx-cream-2:#F1EADB;
+  --dx-ink:    #1B1F27;
+  --dx-ink-2:  #2A3140;
+  --dx-muted:  #6B7280;
+  --dx-border: #E2DACA;
+
+  /* status */
+  --dx-success: #2E8B57;
+  --dx-warn:    #E8A340;
+  --dx-danger:  #C0392B;
+  --dx-info:    #2D6CDF;
+
+  /* ---------- surfaces (light mode, the default until JS swaps) ---------- */
+  --dx-bg:        var(--dx-cream);
+  --dx-surface:   #FFFFFF;
+  --dx-surface-2: #F6F1E5;
+  --dx-text:      var(--dx-ink);
+  --dx-text-muted:#5A6172;
+  --dx-link:      var(--dx-navy);
+  --dx-link-hover:var(--dx-navy-2);
+  --dx-primary:   var(--dx-navy);
+  --dx-primary-contrast: #FFFFFF;
+  --dx-accent:    var(--dx-gold);
+  --dx-accent-contrast: var(--dx-ink);
+  --dx-border-soft: var(--dx-border);
+
+  /* ---------- type ---------- */
+  --dx-font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --dx-font-display: "Inter", "Segoe UI", system-ui, sans-serif;
+  --dx-font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, monospace;
+  --dx-fs-xs: 0.75rem;
+  --dx-fs-sm: 0.875rem;
+  --dx-fs-md: 1rem;
+  --dx-fs-lg: 1.125rem;
+  --dx-fs-xl: 1.375rem;
+  --dx-fs-2xl: 1.75rem;
+  --dx-fs-3xl: 2.25rem;
+  --dx-lh-tight: 1.2;
+  --dx-lh-normal: 1.5;
+
+  /* ---------- spacing scale (multiples of 4) ---------- */
+  --dx-sp-1: 4px;
+  --dx-sp-2: 8px;
+  --dx-sp-3: 12px;
+  --dx-sp-4: 16px;
+  --dx-sp-5: 20px;
+  --dx-sp-6: 24px;
+  --dx-sp-8: 32px;
+  --dx-sp-10: 40px;
+  --dx-sp-12: 48px;
+  --dx-sp-16: 64px;
+
+  /* ---------- radius ---------- */
+  --dx-radius-sm: 6px;
+  --dx-radius-md: 10px;
+  --dx-radius-lg: 14px;
+  --dx-radius-xl: 20px;
+  --dx-radius-pill: 999px;
+
+  /* ---------- shadow ---------- */
+  --dx-shadow-1: 0 1px 2px rgba(15, 20, 32, 0.06), 0 1px 1px rgba(15, 20, 32, 0.04);
+  --dx-shadow-2: 0 4px 14px rgba(15, 20, 32, 0.08), 0 1px 3px rgba(15, 20, 32, 0.05);
+  --dx-shadow-3: 0 12px 32px rgba(15, 20, 32, 0.14);
+  --dx-ring:     0 0 0 3px rgba(34, 66, 122, 0.28);
+
+  /* ---------- motion ---------- */
+  --dx-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dx-dur-1: 120ms;
+  --dx-dur-2: 200ms;
+  --dx-dur-3: 320ms;
+
+  /* ---------- layout ---------- */
+  --dx-sidebar-w: 248px;
+  --dx-sidebar-w-collapsed: 72px;
+  --dx-topbar-h: 60px;
+  --dx-container-max: 1440px;
+
+  /* ---------- bootstrap bridge ---------- */
+  --bs-primary: var(--dx-primary);
+  --bs-link-color: var(--dx-link);
+  --bs-link-hover-color: var(--dx-link-hover);
+  --bs-body-bg: var(--dx-bg);
+  --bs-body-color: var(--dx-text);
+  --bs-border-color: var(--dx-border-soft);
+  --bs-secondary-color: var(--dx-text-muted);
+}
+
+/* ---------- dark mode ---------- */
+:root[data-theme="dark"] {
+  --dx-bg:        #0F1420;
+  --dx-surface:   #161C2C;
+  --dx-surface-2: #1F273B;
+  --dx-text:      #ECECF1;
+  --dx-text-muted:#9DA4B8;
+  --dx-link:      #5B82C4;
+  --dx-link-hover:#7DA0DB;
+  --dx-primary:   #5B82C4;
+  --dx-primary-contrast: #0F1420;
+  --dx-accent:    var(--dx-gold);   /* gold stays the same in dark */
+  --dx-accent-contrast: #0F1420;
+  --dx-border-soft: #2A3247;
+
+  --dx-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --dx-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --dx-shadow-3: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --dx-ring:     0 0 0 3px rgba(91, 130, 196, 0.4);
+
+  color-scheme: dark;
+}
+
+/* Follow-OS mode: only apply dark if media matches and the user hasn't pinned. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --dx-bg:        #0F1420;
+    --dx-surface:   #161C2C;
+    --dx-surface-2: #1F273B;
+    --dx-text:      #ECECF1;
+    --dx-text-muted:#9DA4B8;
+    --dx-link:      #5B82C4;
+    --dx-link-hover:#7DA0DB;
+    --dx-primary:   #5B82C4;
+    --dx-primary-contrast: #0F1420;
+    --dx-accent:    var(--dx-gold);
+    --dx-accent-contrast: #0F1420;
+    --dx-border-soft: #2A3247;
+    color-scheme: dark;
+  }
+}
+
+/* Reduced-motion respect */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dx-dur-1: 1ms;
+    --dx-dur-2: 1ms;
+    --dx-dur-3: 1ms;
+  }
+}

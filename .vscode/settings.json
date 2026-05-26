@@ -1,3 +1,55 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe"
+  "python.defaultInterpreterPath": "C:/Users/arnol/.venvs/aio-python-ic3/Scripts/python.exe",
+
+  // Hide regenerable / archived folders from the Explorer.
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/node_modules": true,
+    "**/*_backup_*": true,
+    "**/*Backup*": true,
+    "**/AIO_Snapshots": true,
+    "**/AIO_Consolidated_*": true,
+    "**/AIO_Enclosed_Apps": true,
+    "**/AIO_Tidy": true,
+    "**/_dexter_assistant_build": true,
+    "**/RestaurantStack-Combined": true,
+    "**/archived_files": true,
+    "**/build": true,
+    "**/dist": true
+  },
+
+  // Keep these out of Ctrl+Shift+F search results and Copilot context.
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/node_modules": true,
+    "**/venv": true,
+    "**/.venv": true,
+    "**/*_backup_*": true,
+    "**/*Backup*": true,
+    "**/AIO_Snapshots": true,
+    "**/AIO_Consolidated_*": true,
+    "**/AIO_Enclosed_Apps": true,
+    "**/AIO_Tidy": true,
+    "**/_dexter_assistant_build": true,
+    "**/RestaurantStack-Combined": true,
+    "**/archived_files": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/runtime_logs": true,
+    "**/*.log": true,
+    "**/*.log.old": true
+  },
+
+  "files.watcherExclude": {
+    "**/__pycache__/**": true,
+    "**/node_modules/**": true,
+    "**/venv/**": true,
+    "**/.venv/**": true,
+    "**/runtime_logs/**": true
+  }
 }

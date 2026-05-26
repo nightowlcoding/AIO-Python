@@ -9,12 +9,13 @@ import os
 import re
 import sqlite3
 import socket
+import secrets
 import subprocess
 import sys
 import threading
 import time
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,9 @@ from urllib.request import urlopen
 
 import requests
 from flask import Flask, Response, jsonify, redirect, render_template_string, request, send_file, session, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parent
@@ -42,8 +46,8 @@ DASHBOARD_HTML = """
 <html lang=\"en\">
 <head>
         <meta charset=\"utf-8\" />
-        <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
-        <title>Dexter Assistant Control Center</title>
+        <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\" />
+        <title>Dexter Ops</title>
         <style>
                 :root {
                     --bg:#f3f4f6;
@@ -52,13 +56,14 @@ DASHBOARD_HTML = """
                         --muted:#6b7280;
                         --ok:#166534;
                         --bad:#991b1b;
-                    --accent:#ea580c;
-                    --accent2:#0f766e;
+                    --accent:#22427A;
+                    --accent2:#1A335F;
                         --edge:#d1d5db;
                         --left:#f8fafc;
                         --left2:#f3f4f6;
                 }
                 * { box-sizing: border-box; }
+                html, body { -webkit-text-size-adjust: 100%; }
                 body {
                         margin: 0;
                         font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
@@ -68,11 +73,14 @@ DASHBOARD_HTML = """
                             min-height: 0;
                     background: linear-gradient(145deg, #f8fafc 0%, #f9fafb 45%, #eef2ff 100%);
                         min-height: 100vh;
+                        min-height: 100dvh;
+                        -webkit-overflow-scrolling: touch;
+                        overflow-x: hidden;
                 }
                 .shell {
                         display: grid;
                         grid-template-columns: 220px 220px minmax(0, 1fr);
-                        min-height: 100vh;
+                        height: 100dvh;
                 }
                 .left-primary,
                 .left-sub {
@@ -152,9 +160,9 @@ DASHBOARD_HTML = """
                 }
                 .primary-menu button.active,
                 .sub-menu button.active {
-                    background: #ffedd5;
-                    border-color: #fed7aa;
-                    color: #c2410c;
+                    background: var(--accent);
+                    border-color: var(--accent2);
+                    color: #fff;
                 }
                 .sub-head {
                     font-size: 11px;
@@ -162,12 +170,53 @@ DASHBOARD_HTML = """
                     letter-spacing: 0.08em;
                     color: #64748b;
                     margin: 4px 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
                 }
+                .sub-toggle-btn {
+                    border: 1px solid var(--edge)!important;
+                    background: #fff!important;
+                    color: #64748b!important;
+                    border-radius: 6px!important;
+                    width: 22px!important; height: 22px!important;
+                    min-width: 0!important;
+                    padding: 0!important;
+                    font-size: 11px!important;
+                    cursor: pointer!important;
+                    flex-shrink: 0;
+                }
+                .sub-show-btn {
+                    display: none;
+                    border: 1px solid var(--edge);
+                    background: #fff;
+                    color: #64748b;
+                    border-radius: 6px;
+                    width: 26px; height: 26px;
+                    min-width: 0;
+                    padding: 0;
+                    font-size: 12px;
+                    cursor: pointer;
+                    margin-top: 6px;
+                    align-self: center;
+                    width: 100%;
+                }
+                body.sub-hidden .sub-show-btn { display: flex; align-items:center; justify-content:center; }
                 .shell.group-open {
                     grid-template-columns: 220px 220px minmax(0, 1fr);
                 }
                 body.collapsed .shell.group-open {
                     grid-template-columns: 72px 220px minmax(0, 1fr);
+                }
+                body.sub-hidden .shell.group-open {
+                    grid-template-columns: 220px 0 minmax(0, 1fr);
+                }
+                body.collapsed.sub-hidden .shell.group-open {
+                    grid-template-columns: 72px 0 minmax(0, 1fr);
+                }
+                body.sub-hidden .left-sub {
+                    width: 0!important; padding:0!important; border:0!important;
+                    overflow:hidden!important; opacity:0!important; pointer-events:none!important;
                 }
                 .shell.group-open .left-sub {
                     width: auto;
@@ -195,9 +244,9 @@ DASHBOARD_HTML = """
                 }
                 .primary-menu button.active,
                 .sub-menu button.active {
-                    background: #ffedd5;
-                    border-color: #fed7aa;
-                    color: #c2410c;
+                    background: var(--accent);
+                    border-color: var(--accent2);
+                    color: #fff;
                 }
                 .sub-head {
                         font-size: 11px;
@@ -205,6 +254,9 @@ DASHBOARD_HTML = """
                         letter-spacing: 0.08em;
                         color: #64748b;
                         margin: 4px 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
                 }
                 body.collapsed .shell {
                     grid-template-columns: 72px 0 minmax(0, 1fr);
@@ -246,6 +298,7 @@ DASHBOARD_HTML = """
                     display: flex;
                     flex-direction: column;
                     min-height: 0;
+                    overflow-y: auto;
                 }
                 .viewer-pane {
                     display: flex;
@@ -303,9 +356,9 @@ DASHBOARD_HTML = """
                         min-width: 88px;
                         font-weight: 600;
                 }
-                .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
-                .warning { background: #9a3412; color: #fff; border-color: #7c2d12; }
-                .secondary { background: var(--accent2); color: #fff; border-color: #115e59; }
+                .primary { background: var(--accent); color: #fff; border-color: var(--accent2); }
+                .warning { background: #7c3aed; color: #fff; border-color: #6d28d9; }
+                .secondary { background: var(--accent2); color: #fff; border-color: #122443; }
                 button:disabled { opacity: 0.55; cursor: not-allowed; }
                 .pane {
                         display: none;
@@ -334,9 +387,9 @@ DASHBOARD_HTML = """
                         border-radius: 16px;
                     }
                 .banner {
-                    border: 1px solid #fed7aa;
-                    background: #fff7ed;
-                    color: #9a3412;
+                    border: 1px solid #bfdbfe;
+                    background: #eff6ff;
+                    color: #1d4ed8;
                         border-radius: 12px;
                         padding: 10px 12px;
                         margin-bottom: 14px;
@@ -423,9 +476,9 @@ DASHBOARD_HTML = """
                 }
                 .list-row:last-child { border-bottom: 0; }
                 .list-head {
-                    background: #fff7ed;
+                    background: #e8eef5;
                         font-weight: 700;
-                    color: #7c2d12;
+                    color: #22427A;
                 }
                 .footer {
                         margin-top: 14px;
@@ -455,9 +508,16 @@ DASHBOARD_HTML = """
                 .toast.show { opacity:1; transform:translateY(0); }
                 .toast.error { background:#991b1b; }
                 .toast.ok { background:#166534; }
+                .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--edge); margin-left:5px; vertical-align:middle; transition:background .3s; }
+                .status-dot.dot-ok { background:#86efac; }
+                .status-dot.dot-warn { background:#fcd34d; }
+                .status-dot.dot-bad { background:#fca5a5; }
                 @media (max-width: 980px) {
+                        html, body { overflow-x: hidden; }
+                        body { min-height: 100vh; min-height: 100dvh; }
                         .shell {
                                 grid-template-columns: minmax(0, 1fr);
+                                min-height: auto;
                         }
                         .left-primary,
                         .left-sub {
@@ -467,6 +527,7 @@ DASHBOARD_HTML = """
                                 z-index: 20;
                                 transform: translateX(-100%);
                                 transition: transform 0.2s ease;
+                                -webkit-overflow-scrolling: touch;
                         }
                         .left-primary {
                                 width: 230px;
@@ -483,11 +544,38 @@ DASHBOARD_HTML = """
                         .shell.menu-open.group-open .left-sub {
                                 transform: translateX(0);
                         }
-                        .mobile-top { display: flex; }
-                        .main { padding: 12px; }
+                        .mobile-top { display: flex; position: sticky; top: 0; z-index: 10; background: rgba(248,250,252,0.92); backdrop-filter: blur(6px); }
+                        .main { padding: 12px; min-height: auto; }
                         .title { font-size: 28px; }
                         .list-row { grid-template-columns: 1fr; gap: 2px; }
+                        /* iOS-safe scroll wrapper: pane-viewer is the scroll surface, iframe grows to content. */
+                        .viewer-pane,
+                        #pane-viewer.active {
+                                display: block !important;
+                                overflow-y: auto !important;
+                                overflow-x: hidden !important;
+                                -webkit-overflow-scrolling: touch !important;
+                                height: calc(100vh - 56px) !important;
+                                height: calc(100dvh - 56px) !important;
+                                max-height: calc(100dvh - 56px) !important;
+                                min-height: 0 !important;
+                                padding: 0 !important;
+                                position: relative !important;
+                                overscroll-behavior: contain;
+                                touch-action: pan-y;
+                        }
+                        .app-frame {
+                                width: 100% !important;
+                                height: auto !important;
+                                min-height: 100% !important;
+                                display: block !important;
+                                border: 0 !important;
+                        }
                 }
+                #pane-home { display: none; }
+                #pane-home.active { display: block; }
+                #pane-viewer { display: none; }
+                #pane-viewer.active { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
         </style>
 </head>
 <body>
@@ -503,34 +591,59 @@ DASHBOARD_HTML = """
                             <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
                             <div class="brand">Dexter Ops</div>
                         </div>
-                                <button class="menu-btn" onclick="toggleCollapsed()">||</button>
+                                <button class="menu-btn" onclick="toggleCollapsed()" title="Collapse sidebar">||</button>
                         </div>
                         <nav id="primaryNav" class="primary-menu">
-                        <button data-short="IC" data-section="inventory" onclick="setSection('inventory')">Inventory Control</button>
-                        <button data-short="PM" data-section="productmix" onclick="setSection('productmix')">Product Mix</button>
-                        <button data-short="MG" data-section="managerapp" class="active" onclick="setSection('managerapp')">Daily Log</button>
+                        <button data-short="HM" data-section="home" class="active" onclick="openHome()">Home</button>
+                        <button data-short="IC" data-section="inventory" onclick="setSection('inventory')">Inventory Control <span class="status-dot" id="dot-ic3"></span></button>
+                        <button data-short="PM" data-section="productmix" onclick="setSection('productmix')">Product Mix <span class="status-dot" id="dot-productmix"></span></button>
+                        <button data-short="MG" data-section="managerapp" onclick="setSection('managerapp')">Daily Log <span class="status-dot" id="dot-managerapp"></span></button>
                         <button data-short="AD" data-section="admin" onclick="setSection('admin')">Admin</button>
                         </nav>
                 </aside>
 
                 <aside class="left-sub">
-                    <div class="sub-head" id="subHead">Sub Menu</div>
+                    <div class="sub-head" id="subHead"><span id="subHeadLabel">Sub Menu</span><button class="sub-toggle-btn" onclick="toggleSubSidebar()" title="Hide panel">&#8249;</button></div>
                         <nav id="subNav" class="sub-menu"></nav>
                 </aside>
 
                 <main class="main">
                         <div class="topbar">
                                 <div>
-                            <h1 id="pageTitle" class="title">Daily Log</h1>
-                            <p id="pageSubtitle" class="subtitle">Restaurant manager dashboard and operations workspace.</p>
+                            <h1 id="pageTitle" class="title">Home</h1>
+                            <p id="pageSubtitle" class="subtitle">Overview of all operations.</p>
                                 </div>
                                 <div class="actions">
                                         <a class="btn" href="/auth/logout">Logout</a>
                                 </div>
                         </div>
 
-                        <section id="pane-viewer" class="pane viewer-pane active">
-                                <iframe id="appFrame" class="app-frame" src="/app/managerapp/"></iframe>
+                        <section id="pane-home" class="pane active">
+                            <div class="stats">
+                                <div class="stat" id="statOpenTasks"><div class="label">Open Tasks</div><div class="value" style="font-size:28px">—</div></div>
+                                <div class="stat" id="statAppsRunning"><div class="label">Apps Running</div><div class="value" style="font-size:28px">—</div></div>
+                                <div class="stat" id="statTopSeller"><div class="label">Top Seller</div><div class="value" style="font-size:18px;line-height:1.2">—</div></div>
+                            </div>
+                            <div class="grid" id="homeAppCards" style="margin-bottom:14px;"></div>
+                            <div style="margin-bottom:14px;">
+                                <div class="sub-head" style="margin-bottom:8px;">Quick Actions</div>
+                                <div class="btns">
+                                    <button class="primary" onclick="openAppById('ic3-home')">Inventory Control</button>
+                                    <button class="secondary" onclick="openAppById('mgr-daily-log')">Daily Log</button>
+                                    <button onclick="openAppById('pm-production')">Production Report</button>
+                                    <button onclick="openAppById('mgr-employees')">Employees</button>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="sub-head" style="margin-bottom:8px;">Top Sellers (latest period)</div>
+                                <div class="list" id="homeTopSellers">
+                                    <div class="list-row list-head"><span>Item</span><span>Qty Sold</span></div>
+                                    <div class="list-row" style="color:var(--muted)"><span>Loading...</span><span></span></div>
+                                </div>
+                            </div>
+                        </section>
+                        <section id="pane-viewer" class="pane viewer-pane">
+                                <iframe id="appFrame" class="app-frame" src="about:blank"></iframe>
                         </section>
                 </main>
         </div>
@@ -684,7 +797,27 @@ DASHBOARD_HTML = """
 
             function toggleCollapsed() {
                 document.body.classList.toggle('collapsed');
+                try { localStorage.setItem('dexterSidebarCollapsed', document.body.classList.contains('collapsed') ? '1' : '0'); } catch(e) {}
             }
+
+            function toggleSubSidebar() {
+                document.body.classList.toggle('sub-hidden');
+                var hidden = document.body.classList.contains('sub-hidden');
+                try { localStorage.setItem('dexterSubHidden', hidden ? '1' : '0'); } catch(e) {}
+                var btn = document.querySelector('.sub-toggle-btn');
+                if (btn) btn.textContent = hidden ? '\u203a' : '\u2039';
+            }
+
+            (function() {
+                try {
+                    if (localStorage.getItem('dexterSidebarCollapsed') === '1') document.body.classList.add('collapsed');
+                    if (localStorage.getItem('dexterSubHidden') === '1') {
+                        document.body.classList.add('sub-hidden');
+                        var btn = document.querySelector('.sub-toggle-btn');
+                        if (btn) btn.textContent = '\u203a';
+                    }
+                } catch(e) {}
+            })();
 
             function toggleMobileMenu() {
                 document.getElementById('shell').classList.toggle('menu-open');
@@ -709,6 +842,8 @@ DASHBOARD_HTML = """
             function openApp(item) {
                 if (!item) return;
                 activeApp = item.id;
+                try { localStorage.setItem('dexterNav', JSON.stringify({group: activeGroup, app: activeApp})); } catch(e) {}
+                switchToViewerPane();
                 var frame = document.getElementById('appFrame');
                 var nextUrl = item.url || '/app/ic3/';
                 var currentUrl = frame.getAttribute('src') || '';
@@ -771,13 +906,178 @@ DASHBOARD_HTML = """
                 try {
                     var res = await fetch('/api/status');
                     if (!res.ok) return;
+                    var data = await res.json();
+                    updateStatusDots(data.apps || {});
                 } catch (e) { /* network hiccup — skip silently */ }
             }
 
-            renderSubmenu('managerapp');
-            setSection('managerapp');
-            refreshState();
-            startPoll();
+            function updateStatusDots(apps) {
+                var dotMap = {ic3: 'ic3', productmix: 'productmix', managerapp: 'managerapp'};
+                Object.keys(dotMap).forEach(function(key) {
+                    var dot = document.getElementById('dot-' + dotMap[key]);
+                    if (!dot) return;
+                    var s = apps[key] || {};
+                    dot.className = 'status-dot';
+                    if (s.running && s.healthy) dot.className += ' dot-ok';
+                    else if (s.running) dot.className += ' dot-warn';
+                    else dot.className += ' dot-bad';
+                });
+            }
+
+            var _dashPollTimer = null;
+            function openHome() {
+                try { localStorage.setItem('dexterNav', JSON.stringify({home: true})); } catch(e) {}
+                if (_dashPollTimer) { clearInterval(_dashPollTimer); _dashPollTimer = null; }
+                document.getElementById('pane-viewer').classList.remove('active');
+                document.getElementById('pane-home').classList.add('active');
+                document.querySelectorAll('#primaryNav button').forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.section === 'home');
+                });
+                document.getElementById('shell').classList.remove('group-open');
+                document.getElementById('pageTitle').textContent = 'Home';
+                document.getElementById('pageSubtitle').textContent = 'Overview of all operations.';
+                loadHomeDashboard();
+                _dashPollTimer = setInterval(loadHomeDashboard, 30000);
+            }
+
+            function switchToViewerPane() {
+                if (_dashPollTimer) { clearInterval(_dashPollTimer); _dashPollTimer = null; }
+                document.getElementById('pane-home').classList.remove('active');
+                document.getElementById('pane-viewer').classList.add('active');
+            }
+
+            function openAppById(appId) {
+                for (var g in menuGroups) {
+                    var items = menuGroups[g].items || [];
+                    for (var i = 0; i < items.length; i++) {
+                        if (items[i].id === appId) { setSection(g); openApp(items[i]); return; }
+                    }
+                }
+            }
+
+            async function loadHomeDashboard() {
+                try {
+                    var res = await fetch('/api/dashboard');
+                    if (!res.ok) return;
+                    var data = await res.json();
+                    renderHomeDashboard(data);
+                } catch(e) {}
+            }
+
+            function renderHomeDashboard(data) {
+                var statOT = document.getElementById('statOpenTasks');
+                var statAR = document.getElementById('statAppsRunning');
+                var statTS = document.getElementById('statTopSeller');
+                if (statOT) {
+                    statOT.querySelector('.value').textContent = data.open_tasks != null ? data.open_tasks : '—';
+                    statOT.className = 'stat' + (data.open_tasks > 0 ? ' warn-stat' : ' ok-stat');
+                }
+                if (statAR) {
+                    var running = data.apps_running != null ? data.apps_running : '?';
+                    var total = data.total_apps != null ? data.total_apps : '?';
+                    statAR.querySelector('.value').textContent = running + ' / ' + total;
+                    statAR.className = 'stat' + (data.apps_running === data.total_apps ? ' ok-stat' : ' warn-stat');
+                }
+                var sellers = data.top_sellers || [];
+                if (statTS) {
+                    statTS.querySelector('.value').textContent = sellers.length > 0 ? sellers[0].name : '—';
+                    statTS.className = 'stat';
+                }
+                var cardsEl = document.getElementById('homeAppCards');
+                if (cardsEl && data.app_status) {
+                    var appLabels = {ic3: 'Inventory Control', productmix: 'ProductMix', managerapp: 'Daily Log'};
+                    cardsEl.innerHTML = Object.keys(appLabels).map(function(key) {
+                        var s = (data.app_status || {})[key] || {};
+                        var cls = s.running && s.healthy ? 'pill running' : s.running ? 'pill error' : 'pill stopped';
+                        var txt = s.running && s.healthy ? 'Running' : s.running ? 'Unhealthy' : 'Stopped';
+                        var url = s.url || '';
+                        return '<div class="card"><div class="row"><span class="name" style="font-size:15px;">' + htmlEscape(appLabels[key]) + '</span><span class="' + cls + '">' + txt + '</span></div>' + (url ? '<div class="meta">' + htmlEscape(url) + '</div>' : '') + '</div>';
+                    }).join('');
+                }
+                var listEl = document.getElementById('homeTopSellers');
+                if (listEl) {
+                    listEl.innerHTML = '<div class="list-row list-head"><span>Item</span><span>Qty Sold</span></div>' +
+                        (sellers.length === 0
+                            ? '<div class="list-row" style="color:var(--muted)"><span>No data available</span><span></span></div>'
+                            : sellers.map(function(s, i) {
+                                return '<div class="list-row"><span>' + (i+1) + '. ' + htmlEscape(s.name) + '</span><span>' + (Math.round(s.qty * 10) / 10) + '</span></div>';
+                            }).join(''));
+                }
+            }
+
+            (function() {
+                var saved = null;
+                try { saved = JSON.parse(localStorage.getItem('dexterNav') || 'null'); } catch(e) {}
+                if (saved && saved.home) {
+                    openHome();
+                } else if (saved && menuGroups[saved.group]) {
+                    setSection(saved.group);
+                    if (saved.app) {
+                        var items = menuGroups[saved.group].items || [];
+                        for (var i = 0; i < items.length; i++) {
+                            if (items[i].id === saved.app) { openApp(items[i]); break; }
+                        }
+                    }
+                } else {
+                    openHome();
+                }
+                refreshState();
+                startPoll();
+            })();
+
+            // ---- Mobile iframe height sizing so pane-viewer scrolls (fixes iOS bounce) ----
+            // KEY RULE: NEVER set frame height on a recurring interval — that causes mid-scroll
+            // layout reflow which snaps iOS Safari back to the top.
+            (function() {
+                var frame = document.getElementById('appFrame');
+                if (!frame) return;
+                var _resizeTimer = null;
+                function resizeFrameToContent() {
+                    if (window.innerWidth > 980) {
+                        // Desktop: fixed-pane layout — let CSS control height
+                        frame.style.height = '';
+                        frame.style.minHeight = '';
+                        return;
+                    }
+                    // Mobile: measure content and set height ONCE so pane-viewer can scroll.
+                    // scrolling=no is set as HTML attribute so iOS never creates inner scroll surface.
+                    try {
+                        var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                        if (!doc || !doc.body) return;
+                        var h = Math.max(
+                            doc.body.scrollHeight,
+                            doc.documentElement ? doc.documentElement.scrollHeight : 0
+                        );
+                        if (h && h > 80) {
+                            frame.style.height = h + 'px';
+                        }
+                    } catch (e) { /* cross-origin */ }
+                }
+                function scheduleResize(delay) {
+                    clearTimeout(_resizeTimer);
+                    _resizeTimer = setTimeout(resizeFrameToContent, delay || 0);
+                }
+                frame.addEventListener('load', function() {
+                    scheduleResize(100);
+                    scheduleResize(600);
+                    scheduleResize(1500);
+                    try {
+                        var doc = frame.contentDocument;
+                        // ResizeObserver: debounced so rapid changes don't keep reflowing during scroll
+                        if (doc && window.ResizeObserver) {
+                            var ro = new ResizeObserver(function() { scheduleResize(400); });
+                            ro.observe(doc.documentElement);
+                            if (doc.body) ro.observe(doc.body);
+                        }
+                        // Re-measure after user taps a tab inside the app (content changes)
+                        if (doc) {
+                            doc.addEventListener('click', function() { scheduleResize(400); }, true);
+                        }
+                    } catch (e) { /* cross-origin */ }
+                });
+                // Re-measure on orientation change / window resize but NOT on a recurring interval
+                window.addEventListener('resize', function() { scheduleResize(300); });
+            })();
         </script>
 </body>
 </html>
@@ -787,8 +1087,8 @@ PORTAL_HOME_HTML = """
 <html lang=\"en\">
 <head>
     <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
-    <title>Dexter Assistant Portal</title>
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\" />
+    <title>Dexter Ops Portal</title>
     <style>
         :root {
             --accent:#ea580c;
@@ -802,12 +1102,15 @@ PORTAL_HOME_HTML = """
             --bad:#991b1b;
         }
         * { box-sizing: border-box; }
+        html, body { -webkit-text-size-adjust: 100%; overflow-x: hidden; }
         body {
             margin: 0;
             font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
             color: var(--ink);
             background: var(--bg);
             min-height: 100vh;
+            min-height: 100dvh;
+            -webkit-overflow-scrolling: touch;
         }
         .topbar {
             display: flex;
@@ -1147,6 +1450,46 @@ def migrate_legacy_json_users_to_sqlite() -> None:
         conn.close()
 
 
+def migrate_add_task_fields_v1() -> None:
+    migration_key = "tasks_due_date_priority_v1"
+    conn = get_rbac_db_connection()
+    try:
+        if _is_migration_complete(conn, migration_key):
+            return
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+        except Exception:
+            pass  # column already exists
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'")
+        except Exception:
+            pass  # column already exists
+        _mark_migration_complete(conn, migration_key)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def migrate_add_password_reset_fields_v1() -> None:
+    migration_key = "users_password_reset_v1"
+    conn = get_rbac_db_connection()
+    try:
+        if _is_migration_complete(conn, migration_key):
+            return
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN password_reset_token TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN password_reset_expires TEXT")
+        except Exception:
+            pass
+        _mark_migration_complete(conn, migration_key)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def ensure_default_super_admin_user() -> None:
     admin_username = os.environ.get("DEXTER_ADMIN_USER", "").strip()
     admin_password = os.environ.get("DEXTER_ADMIN_PASS", "").strip()
@@ -1430,13 +1773,27 @@ def set_user_role_name(actor_user_id: int, target_user_id: int, role_name: str) 
         conn.close()
 
 
-def create_task_record(actor_user_id: int, title: str, description: str, assigned_to: int | None) -> tuple[bool, str]:
+def create_task_record(
+    actor_user_id: int,
+    title: str,
+    description: str,
+    assigned_to: int | None,
+    due_date: str | None = None,
+    priority: str = "normal",
+) -> tuple[bool, str]:
     if not can_user_create_task(int(actor_user_id)):
         return False, "Only Super Admin or Manager can create tasks."
 
     cleaned_title = str(title or "").strip()
     if not cleaned_title:
         return False, "Task title is required."
+
+    valid_priorities = {"urgent", "high", "normal", "low"}
+    cleaned_priority = str(priority or "normal").strip().lower()
+    if cleaned_priority not in valid_priorities:
+        cleaned_priority = "normal"
+
+    cleaned_due_date: str | None = str(due_date or "").strip() or None
 
     conn = get_rbac_db_connection()
     try:
@@ -1451,10 +1808,17 @@ def create_task_record(actor_user_id: int, title: str, description: str, assigne
 
         cur = conn.execute(
             """
-            INSERT INTO tasks (title, description, status, created_by, assigned_to, created_at, updated_at)
-            VALUES (?, ?, 'pending', ?, ?, datetime('now'), datetime('now'))
+            INSERT INTO tasks (title, description, status, created_by, assigned_to, due_date, priority, created_at, updated_at)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, datetime('now'), datetime('now'))
             """,
-            (cleaned_title, str(description or "").strip() or None, int(actor_user_id), assigned_user_id),
+            (
+                cleaned_title,
+                str(description or "").strip() or None,
+                int(actor_user_id),
+                assigned_user_id,
+                cleaned_due_date,
+                cleaned_priority,
+            ),
         )
         conn.commit()
         add_audit_log(
@@ -1462,7 +1826,7 @@ def create_task_record(actor_user_id: int, title: str, description: str, assigne
             "create_task",
             "tasks",
             int(cur.lastrowid),
-            json.dumps({"title": cleaned_title, "assigned_to": assigned_user_id}),
+            json.dumps({"title": cleaned_title, "assigned_to": assigned_user_id, "priority": cleaned_priority}),
         )
         return True, "Task created."
     finally:
@@ -1504,22 +1868,47 @@ def update_task_status(actor_user_id: int, task_id: int, status: str) -> tuple[b
         conn.close()
 
 
-def list_tasks(limit: int = 200) -> list[dict[str, Any]]:
+def list_tasks(limit: int = 200, status_filter: str | None = None) -> list[dict[str, Any]]:
     conn = get_rbac_db_connection()
     try:
-        rows = conn.execute(
-            """
-            SELECT t.id, t.title, t.description, t.status, t.created_at, t.updated_at, t.completed_at,
-                   creator.username AS created_by_username,
-                   assignee.username AS assigned_to_username
-            FROM tasks t
-            JOIN users creator ON creator.id = t.created_by
-            LEFT JOIN users assignee ON assignee.id = t.assigned_to
-            ORDER BY t.id DESC
-            LIMIT ?
-            """,
-            (int(limit),),
-        ).fetchall()
+        if status_filter and status_filter in {"pending", "in-progress", "completed"}:
+            rows = conn.execute(
+                """
+                SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
+                       t.created_at, t.updated_at, t.completed_at,
+                       creator.username AS created_by_username,
+                       assignee.username AS assigned_to_username
+                FROM tasks t
+                JOIN users creator ON creator.id = t.created_by
+                LEFT JOIN users assignee ON assignee.id = t.assigned_to
+                WHERE t.status = ?
+                ORDER BY
+                    CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+                    t.due_date ASC NULLS LAST,
+                    t.id DESC
+                LIMIT ?
+                """,
+                (status_filter, int(limit)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
+                       t.created_at, t.updated_at, t.completed_at,
+                       creator.username AS created_by_username,
+                       assignee.username AS assigned_to_username
+                FROM tasks t
+                JOIN users creator ON creator.id = t.created_by
+                LEFT JOIN users assignee ON assignee.id = t.assigned_to
+                ORDER BY
+                    CASE t.status WHEN 'pending' THEN 1 WHEN 'in-progress' THEN 2 ELSE 3 END,
+                    CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+                    t.due_date ASC NULLS LAST,
+                    t.id DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -1550,28 +1939,43 @@ ADMIN_USERS_HTML = """
 <head>
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
-  <title>Admin Users</title>
+  <title>User Management — Dexter Ops</title>
   <style>
-    body { font-family: 'Segoe UI', sans-serif; margin: 16px; color:#1f2937; }
-    h1 { margin: 0 0 12px; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
-    input, select, button { padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; }
-    button { cursor:pointer; background:#fff; }
-    table { width:100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border:1px solid #e5e7eb; padding:8px; text-align:left; }
-    th { background:#f8fafc; }
-    .msg { padding:8px 10px; border-radius:8px; margin-bottom:12px; }
-    .ok { background:#dcfce7; color:#166534; }
-    .err { background:#fee2e2; color:#991b1b; }
-    .inline { display:inline-flex; gap:6px; align-items:center; }
+    :root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}
+    h1{font-size:1.3rem;font-weight:700;margin:0 0 18px}
+    form.row{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+    input,select{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem;background:#fff;color:var(--ink)}
+    input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(234,88,12,.15)}
+    button[type=submit]{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff;transition:opacity .15s}
+    button[type=submit]:hover{opacity:.88}
+    .inline{display:inline-flex;gap:6px;align-items:center}
+    .inline button[type=submit]{padding:5px 11px;font-size:.82rem;border-radius:6px;border:1px solid var(--edge);background:#fff;color:var(--ink)}
+    .inline button[type=submit]:hover{background:var(--bg);opacity:1}
+    .table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}
+    table{width:100%;border-collapse:collapse;font-size:.9rem}
+    th{text-align:left;padding:9px 12px;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}
+    td{padding:10px 12px;border-bottom:1px solid var(--edge);vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:600}
+    .pill-sa{background:#dbeafe;color:#1e40af}
+    .pill-mgr{background:#d1fae5;color:#065f46}
+    .pill-emp{background:#f3f4f6;color:#374151}
+    .pill-on{background:#dcfce7;color:#166534}
+    .pill-off{background:#fee2e2;color:#991b1b}
+    .msg{padding:9px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid}
+    .ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+    .err{background:#fee2e2;color:#991b1b;border-color:#fecaca}
   </style>
 </head>
 <body>
-  <h1>Admin: User Management</h1>
+  <h1>User Management</h1>
   {% if message %}<div class=\"msg ok\">{{ message }}</div>{% endif %}
   {% if error %}<div class=\"msg err\">{{ error }}</div>{% endif %}
 
   <form method=\"post\" action=\"/admin/users/create\" class=\"row\">
+    <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
     <input name=\"username\" placeholder=\"Username\" required />
     <input name=\"password\" placeholder=\"Password (min 8)\" type=\"password\" required />
     <select name=\"role_name\">
@@ -1582,6 +1986,7 @@ ADMIN_USERS_HTML = """
     <button type=\"submit\">Create User</button>
   </form>
 
+  <div class="table-card">
   <table>
     <thead>
       <tr>
@@ -1593,11 +1998,12 @@ ADMIN_USERS_HTML = """
       <tr>
         <td>{{ u.id }}</td>
         <td>{{ u.username }}</td>
-        <td>{{ u.role_name }}</td>
-        <td>{{ 'Yes' if u.is_active else 'No' }}</td>
+        <td>{% if u.role_name == 'Super Admin' %}<span class="pill pill-sa">Super Admin</span>{% elif u.role_name == 'Manager' %}<span class="pill pill-mgr">Manager</span>{% else %}<span class="pill pill-emp">Employee</span>{% endif %}</td>
+        <td>{% if u.is_active %}<span class="pill pill-on">Active</span>{% else %}<span class="pill pill-off">Inactive</span>{% endif %}</td>
         <td>{{ u.last_login or '-' }}</td>
         <td>
           <form method=\"post\" action=\"/admin/users/{{ u.id }}/role\" class=\"inline\">
+            <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
             <select name=\"role_name\">
               <option {% if u.role_name == 'Employee' %}selected{% endif %}>Employee</option>
               <option {% if u.role_name == 'Manager' %}selected{% endif %}>Manager</option>
@@ -1606,6 +2012,7 @@ ADMIN_USERS_HTML = """
             <button type=\"submit\">Set Role</button>
           </form>
           <form method=\"post\" action=\"/admin/users/{{ u.id }}/active\" class=\"inline\">
+            <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
             <input type=\"hidden\" name=\"is_active\" value=\"{{ 0 if u.is_active else 1 }}\" />
             <button type=\"submit\">{{ 'Deactivate' if u.is_active else 'Activate' }}</button>
           </form>
@@ -1614,6 +2021,7 @@ ADMIN_USERS_HTML = """
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </body>
 </html>
 """
@@ -1622,20 +2030,37 @@ ADMIN_USERS_HTML = """
 ADMIN_TASKS_HTML = """
 <!doctype html>
 <html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
-<title>Admin Tasks</title>
-<style>body{font-family:'Segoe UI',sans-serif;margin:16px;color:#1f2937}input,textarea,select,button{padding:7px 10px;border:1px solid #d1d5db;border-radius:8px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}th{background:#f8fafc}.row{display:flex;gap:8px;flex-wrap:wrap}.msg{padding:8px 10px;border-radius:8px;margin-bottom:12px}.ok{background:#dcfce7;color:#166534}.err{background:#fee2e2;color:#991b1b}</style>
+<title>Operational Tasks — Dexter Ops</title>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6;--ok:#166534;--warn:#854d0e}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 12px}form.row{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}input,select{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem;background:#fff;color:var(--ink)}input[type=date]{color-scheme:light}input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(234,88,12,.15)}button[type=submit]{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff;transition:opacity .15s}button[type=submit]:hover{opacity:.88}.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}.tab{padding:6px 14px;border-radius:8px;border:1px solid var(--edge);background:#fff;color:var(--ink);font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none}.tab:hover{background:#f1f5f9}.tab.active{background:var(--accent);color:#fff;border-color:#c2410c}.table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}table{width:100%;border-collapse:collapse;font-size:.9rem}th{text-align:left;padding:9px 12px;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}td{padding:10px 12px;border-bottom:1px solid var(--edge);vertical-align:middle}tr:last-child td{border-bottom:none}.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:600}.pill-pend{background:#fef9c3;color:#854d0e}.pill-prog{background:#dbeafe;color:#1e40af}.pill-done{background:#dcfce7;color:#166534}.pill-canc{background:#f3f4f6;color:var(--muted)}.pri-urgent{background:#fee2e2;color:#991b1b}.pri-high{background:#ffedd5;color:#9a3412}.pri-normal{background:#f3f4f6;color:var(--muted)}.pri-low{background:#f0fdf4;color:#166534}.msg{padding:9px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid}.ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}.err{background:#fee2e2;color:#991b1b;border-color:#fecaca}</style>
 </head><body>
-<h1>Admin: Operational Tasks</h1>
+<h1>Operational Tasks</h1>
 {% if message %}<div class=\"msg ok\">{{ message }}</div>{% endif %}
 {% if error %}<div class=\"msg err\">{{ error }}</div>{% endif %}
 <form method=\"post\" action=\"/admin/tasks/create\" class=\"row\">
-  <input name=\"title\" placeholder=\"Task title\" required />
-  <input name=\"description\" placeholder=\"Description\" />
+  <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
+  <input name=\"title\" placeholder=\"Task title\" required style=\"min-width:180px\" />
+  <input name=\"description\" placeholder=\"Description\" style=\"min-width:160px\" />
   <select name=\"assigned_to\"><option value=\"\">Unassigned</option>{% for u in active_users %}<option value=\"{{ u.id }}\">{{ u.username }}</option>{% endfor %}</select>
+  <select name=\"priority\"><option value=\"normal\" selected>Normal</option><option value=\"urgent\">Urgent</option><option value=\"high\">High</option><option value=\"low\">Low</option></select>
+  <input type=\"date\" name=\"due_date\" title=\"Due date\" />
   <button type=\"submit\">Create Task</button>
 </form>
-<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Created By</th><th>Assigned To</th><th>Created</th></tr></thead>
-<tbody>{% for t in tasks %}<tr><td>{{ t.id }}</td><td>{{ t.title }}</td><td>{{ t.status }}</td><td>{{ t.created_by_username }}</td><td>{{ t.assigned_to_username or '-' }}</td><td>{{ t.created_at }}</td></tr>{% endfor %}</tbody></table>
+<div class=\"tabs\">
+  <a class=\"tab{% if not status_filter %} active{% endif %}\" href=\"/admin/tasks\">All</a>
+  <a class=\"tab{% if status_filter == 'pending' %} active{% endif %}\" href=\"/admin/tasks?status=pending\">Pending</a>
+  <a class=\"tab{% if status_filter == 'in-progress' %} active{% endif %}\" href=\"/admin/tasks?status=in-progress\">In Progress</a>
+  <a class=\"tab{% if status_filter == 'completed' %} active{% endif %}\" href=\"/admin/tasks?status=completed\">Completed</a>
+</div>
+<div class=\"table-card\"><table><thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assigned To</th><th>Due</th><th>Created</th></tr></thead>
+<tbody>{% for t in tasks %}<tr>
+  <td style=\"color:var(--muted);font-size:.82rem\">{{ t.id }}</td>
+  <td><strong>{{ t.title }}</strong>{% if t.description %}<br><small style=\"color:var(--muted)\">{{ t.description }}</small>{% endif %}</td>
+  <td>{% if t.priority == 'urgent' %}<span class=\"pill pri-urgent\">Urgent</span>{% elif t.priority == 'high' %}<span class=\"pill pri-high\">High</span>{% elif t.priority == 'low' %}<span class=\"pill pri-low\">Low</span>{% else %}<span class=\"pill pri-normal\">Normal</span>{% endif %}</td>
+  <td>{% if t.status == 'completed' %}<span class=\"pill pill-done\">Completed</span>{% elif t.status == 'in-progress' %}<span class=\"pill pill-prog\">In Progress</span>{% elif t.status == 'cancelled' %}<span class=\"pill pill-canc\">Cancelled</span>{% else %}<span class=\"pill pill-pend\">Pending</span>{% endif %}</td>
+  <td>{{ t.assigned_to_username or '—' }}</td>
+  <td style=\"color:var(--muted);font-size:.82rem;white-space:nowrap\">{{ t.due_date or '—' }}</td>
+  <td style=\"color:var(--muted);font-size:.82rem\">{{ t.created_at[:10] if t.created_at else '—' }}</td>
+</tr>{% endfor %}</tbody></table></div>
 </body></html>
 """
 
@@ -1643,12 +2068,12 @@ ADMIN_TASKS_HTML = """
 ADMIN_AUDIT_HTML = """
 <!doctype html>
 <html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
-<title>Admin Audit Logs</title>
-<style>body{font-family:'Segoe UI',sans-serif;margin:16px;color:#1f2937}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #e5e7eb;padding:8px;text-align:left}th{background:#f8fafc}</style>
+<title>Audit Logs — Dexter Ops</title>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 18px}.table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}table{width:100%;border-collapse:collapse;font-size:.88rem}th{text-align:left;padding:9px 12px;font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}td{padding:9px 12px;border-bottom:1px solid var(--edge);vertical-align:top}tr:last-child td{border-bottom:none}.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.76rem;font-weight:600}.pill-act{background:#ede9fe;color:#5b21b6}.mono{font-family:'Consolas','Courier New',monospace;font-size:.8rem;color:var(--muted)}</style>
 </head><body>
-<h1>Admin: Audit Logs</h1>
-<table><thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>At</th></tr></thead>
-<tbody>{% for row in logs %}<tr><td>{{ row.id }}</td><td>{{ row.actor_username }}</td><td>{{ row.action }}</td><td>{{ row.target_table }}{% if row.target_id %}#{{ row.target_id }}{% endif %}</td><td>{{ row.details or '-' }}</td><td>{{ row.created_at }}</td></tr>{% endfor %}</tbody></table>
+<h1>Audit Logs</h1>
+<div class="table-card"><table><thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>At</th></tr></thead>
+<tbody>{% for row in logs %}<tr><td style="color:var(--muted);font-size:.8rem">{{ row.id }}</td><td><strong>{{ row.actor_username }}</strong></td><td><span class="pill pill-act">{{ row.action }}</span></td><td class="mono">{{ row.target_table }}{% if row.target_id %}#{{ row.target_id }}{% endif %}</td><td style="max-width:260px;word-break:break-word;color:var(--muted);font-size:.82rem">{{ row.details or '—' }}</td><td style="color:var(--muted);font-size:.82rem;white-space:nowrap">{{ row.created_at }}</td></tr>{% endfor %}</tbody></table></div>
 </body></html>
 """
 
@@ -1658,7 +2083,7 @@ PORTAL_APP_HTML = """
 <html lang=\"en\">
 <head>
     <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\" />
     <title>{{ app_title }} - Dexter Ops</title>
     <style>
         :root {
@@ -1671,16 +2096,21 @@ PORTAL_APP_HTML = """
             --bad:#991b1b;
         }
         * { box-sizing: border-box; }
+        html, body { -webkit-text-size-adjust: 100%; }
         body {
             margin: 0;
             font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
             color: var(--ink);
             background: linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#eef2ff 100%);
             min-height: 100vh;
-            display: grid;
-            grid-template-rows: auto auto 1fr;
+            min-height: 100dvh;
+            -webkit-overflow-scrolling: touch;
+            overflow-x: hidden;
         }
         .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -1774,13 +2204,82 @@ PORTAL_APP_HTML = """
             }, 3200);
         }
         function setFrameHeight() {
+            var frame = document.getElementById('appFrame');
+            if (!frame) return;
             var tb = document.getElementById('topbar');
             var sb = document.getElementById('subbar');
             var used = (tb ? tb.offsetHeight : 0) + (sb ? sb.offsetHeight : 0);
-            document.getElementById('appFrame').style.height = (window.innerHeight - used) + 'px';
+            var vh = window.innerHeight - used;
+            var isMobile = window.innerWidth <= 820;
+            if (isMobile) {
+                // Disable iframe internal scroll so iOS can't trap touches inside it.
+                frame.setAttribute('scrolling', 'no');
+            } else {
+                frame.removeAttribute('scrolling');
+            }
+            // Try to size the iframe to its content (same-origin), so the OUTER
+            // page scrolls naturally on mobile instead of trapping touches
+            // inside the iframe (which iOS rubber-bands back).
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (doc && doc.body) {
+                    var contentH = Math.max(
+                        doc.body.scrollHeight,
+                        doc.documentElement ? doc.documentElement.scrollHeight : 0
+                    );
+                    if (contentH && contentH > 50) {
+                        frame.style.height = Math.max(contentH, isMobile ? 0 : vh) + 'px';
+                        return;
+                    }
+                }
+            } catch (e) { /* cross-origin or not ready */ }
+            frame.style.height = vh + 'px';
         }
         setFrameHeight();
         window.addEventListener('resize', setFrameHeight);
+        // Re-measure after the iframe loads and on a short interval to catch
+        // dynamic content height changes inside the embedded app.
+        (function() {
+            var frame = document.getElementById('appFrame');
+            var isMobile = window.matchMedia('(max-width: 820px)').matches;
+            function injectMobileCss(doc) {
+                if (!doc || doc.getElementById('__dexter_mobile_css')) return;
+                var style = doc.createElement('style');
+                style.id = '__dexter_mobile_css';
+                style.textContent = [
+                    '@media (max-width: 820px){',
+                    '  html,body{height:auto!important;min-height:0!important;overflow:visible!important;-webkit-overflow-scrolling:auto!important;}',
+                    '  .container,.wrap,.shell,.main,.tab-content,.tab-content.active,.viewer-pane,.page,.app-shell{overflow:visible!important;height:auto!important;max-height:none!important;min-height:0!important;}',
+                    '  table{display:block;overflow-x:auto;max-width:100%;}',
+                    '}'
+                ].join('\\n');
+                (doc.head || doc.documentElement).appendChild(style);
+            }
+            if (frame) {
+                frame.addEventListener('load', function() {
+                    try { injectMobileCss(frame.contentDocument); } catch (e) {}
+                    setFrameHeight();
+                    setTimeout(setFrameHeight, 300);
+                    setTimeout(setFrameHeight, 1000);
+                    try {
+                        var doc = frame.contentDocument;
+                        if (doc && window.ResizeObserver) {
+                            var ro = new ResizeObserver(function() { setFrameHeight(); });
+                            ro.observe(doc.documentElement);
+                            if (doc.body) ro.observe(doc.body);
+                        }
+                        // Click-based SPA tab switches inside IC3 etc. — re-measure
+                        if (doc) {
+                            doc.addEventListener('click', function() {
+                                setTimeout(setFrameHeight, 150);
+                                setTimeout(setFrameHeight, 600);
+                            }, true);
+                        }
+                    } catch (e) { /* cross-origin */ }
+                });
+            }
+            setInterval(setFrameHeight, 1500);
+        })();
         async function doRestart(btn) {
             btn.disabled = true;
             var orig = btn.textContent;
@@ -1807,13 +2306,110 @@ PORTAL_APP_HTML = """
 """
 
 
+FORGOT_PASSWORD_HTML = """
+<!doctype html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
+    <title>Reset Password — Dexter Ops</title>
+    <style>
+        :root{--accent:#ea580c;--accent-dark:#c2410c;--ink:#1f2937;--muted:#6b7280;--edge:#d1d5db;--panel:#fff;--danger:#991b1b;--ok:#166534}
+        *{box-sizing:border-box}body{margin:0;font-family:'Segoe UI','Trebuchet MS',sans-serif;color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#fff7ed 100%);padding:24px 8px}
+        .card{background:var(--panel);border:1.5px solid var(--edge);border-radius:18px;padding:30px 26px 24px;box-shadow:0 12px 40px rgba(15,23,42,.10);width:100%;max-width:400px}
+        h2{margin:0 0 6px;font-size:1.5rem;font-weight:800;color:#0f172a}p{margin:0 0 16px;color:var(--muted);font-size:14px}
+        label{display:block;margin:10px 0 5px;font-size:13px;font-weight:600;color:#374151}
+        input{width:100%;padding:11px 13px;border:1px solid var(--edge);border-radius:10px;font-size:15px;outline:none;transition:border-color .15s}
+        input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(234,88,12,.12)}
+        button[type=submit]{margin-top:16px;width:100%;border:none;background:var(--accent);color:#fff;border-radius:10px;padding:12px 0;font-size:1rem;font-weight:700;cursor:pointer;transition:background .15s}
+        button[type=submit]:hover{background:var(--accent-dark)}
+        .msg{margin:12px 0 0;padding:9px 14px;border-radius:8px;font-size:.9rem;border:1px solid}
+        .ok-msg{background:#dcfce7;color:var(--ok);border-color:#bbf7d0}
+        .err-msg{background:#fee2e2;color:var(--danger);border-color:#fecaca}
+        .reset-url{word-break:break-all;font-family:monospace;font-size:.85rem;background:#f1f5f9;padding:10px 12px;border-radius:8px;margin-top:10px;border:1px solid var(--edge)}
+        .links{margin-top:14px;font-size:13px;color:var(--muted);text-align:center}
+        .links a{color:var(--accent);text-decoration:underline;font-weight:600}
+    </style>
+</head>
+<body>
+    <div class=\"card\">
+        <h2>Forgot Password</h2>
+        <p>Enter your username to generate a password reset link.</p>
+        {% if reset_url %}
+        <div class=\"msg ok-msg\">Reset link generated. Share this link with the user (it expires in 1 hour):</div>
+        <div class=\"reset-url\">{{ reset_url }}</div>
+        {% else %}
+        <form method=\"post\" action=\"/auth/forgot-password\">
+            <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
+            <label>Username</label>
+            <input type=\"text\" name=\"username\" required autofocus autocomplete=\"username\" />
+            <button type=\"submit\">Generate Reset Link</button>
+            {% if error %}<div class=\"msg err-msg\">{{ error }}</div>{% endif %}
+        </form>
+        {% endif %}
+        <div class=\"links\"><a href=\"/auth/login\">Back to Sign In</a></div>
+    </div>
+</body>
+</html>
+"""
+
+
+RESET_PASSWORD_HTML = """
+<!doctype html>
+<html lang=\"en\">
+<head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
+    <title>Set New Password — Dexter Ops</title>
+    <style>
+        :root{--accent:#ea580c;--accent-dark:#c2410c;--ink:#1f2937;--muted:#6b7280;--edge:#d1d5db;--panel:#fff;--danger:#991b1b;--ok:#166534}
+        *{box-sizing:border-box}body{margin:0;font-family:'Segoe UI','Trebuchet MS',sans-serif;color:var(--ink);min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#fff7ed 100%);padding:24px 8px}
+        .card{background:var(--panel);border:1.5px solid var(--edge);border-radius:18px;padding:30px 26px 24px;box-shadow:0 12px 40px rgba(15,23,42,.10);width:100%;max-width:400px}
+        h2{margin:0 0 6px;font-size:1.5rem;font-weight:800;color:#0f172a}p{margin:0 0 16px;color:var(--muted);font-size:14px}
+        label{display:block;margin:10px 0 5px;font-size:13px;font-weight:600;color:#374151}
+        input{width:100%;padding:11px 13px;border:1px solid var(--edge);border-radius:10px;font-size:15px;outline:none;transition:border-color .15s}
+        input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(234,88,12,.12)}
+        button[type=submit]{margin-top:16px;width:100%;border:none;background:var(--accent);color:#fff;border-radius:10px;padding:12px 0;font-size:1rem;font-weight:700;cursor:pointer;transition:background .15s}
+        button[type=submit]:hover{background:var(--accent-dark)}
+        .msg{margin:10px 0 0;padding:9px 14px;border-radius:8px;font-size:.9rem;border:1px solid}
+        .ok-msg{background:#dcfce7;color:var(--ok);border-color:#bbf7d0}
+        .err-msg{background:#fee2e2;color:var(--danger);border-color:#fecaca}
+        .links{margin-top:14px;font-size:13px;color:var(--muted);text-align:center}
+        .links a{color:var(--accent);text-decoration:underline;font-weight:600}
+    </style>
+</head>
+<body>
+    <div class=\"card\">
+        <h2>Set New Password</h2>
+        <p>Enter a new password for your account.</p>
+        {% if done %}
+        <div class=\"msg ok-msg\">Password updated. You can now sign in.</div>
+        <div class=\"links\"><a href=\"/auth/login\">Sign In</a></div>
+        {% else %}
+        <form method=\"post\">
+            <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
+            <label>New Password</label>
+            <input type=\"password\" name=\"password\" required autocomplete=\"new-password\" />
+            <label>Confirm Password</label>
+            <input type=\"password\" name=\"confirm\" required autocomplete=\"new-password\" />
+            <button type=\"submit\">Update Password</button>
+            {% if error %}<div class=\"msg err-msg\">{{ error }}</div>{% endif %}
+        </form>
+        <div class=\"links\"><a href=\"/auth/login\">Back to Sign In</a></div>
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
+
+
 LOGIN_HTML = """
 <!doctype html>
 <html lang=\"en\">
 <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\" />
-    <title>Dexter Assistant &mdash; Sign In</title>
+    <title>Dexter Ops &mdash; Sign In</title>
     <style>
         :root {
             --accent:#ea580c;
@@ -1950,7 +2546,7 @@ LOGIN_HTML = """
     <div class="wrap">
         <div class="container">
             <div class="marketing">
-                <img class="logo" src="/branding/logo" alt="Dexter Assistant Logo" />
+                <img class="logo" src="/branding/logo" alt="Dexter Ops logo" />
                 <div class="hero-title">Dexter <span class="hero-accent">Assistant</span></div>
                 <div class="hero-tagline">All your restaurant management apps,<br>one secure ops dashboard.</div>
                 <ul class="features">
@@ -1961,6 +2557,7 @@ LOGIN_HTML = """
                 <a class="contact-link" href="mailto:info@dexterassist.com">Contact us / Learn more</a>
             </div>
             <form class="card" method="post" action="{{ action_url }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                 <h2>Sign In</h2>
                 <p>Access your dashboard and manage your apps.</p>
                 <label>Username</label>
@@ -1973,7 +2570,7 @@ LOGIN_HTML = """
                 </div>
                 <button type="submit">Sign In</button>
                 {% if error %}<div class="error">{{ error }}</div>{% endif %}
-                <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a></div>
+                <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a> &bull; <a href="/auth/forgot-password">Forgot password?</a></div>
             </form>
         </div>
     </div>
@@ -2020,7 +2617,7 @@ REGISTER_HTML = """
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dexter Assistant &mdash; Register</title>
+    <title>Dexter Ops &mdash; Create Account</title>
     <style>
         :root {
             --accent:#ea580c;
@@ -2094,11 +2691,12 @@ REGISTER_HTML = """
 <body>
     <div class="wrap">
         <form class="card" method="post" action="{{ action_url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <div class="brand-head">
                 <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
                 <h1>Create Account</h1>
             </div>
-            <p>Create your Dexter Assistant login.</p>
+            <p>Create your Dexter Ops account.</p>
             <label>Username</label>
             <input type="text" name="username" required minlength="3" autofocus autocomplete="username" />
             <label>Password</label>
@@ -2430,6 +3028,31 @@ class AppManager:
         results = {name: self.stop(name) for name in self.config["apps"].keys()}
         return {"ok": True, "results": results}
 
+    def start_watchdog(self, interval: int = 30) -> None:
+        """Start a daemon thread that restarts crashed apps every `interval` seconds."""
+
+        def _watch() -> None:
+            while True:
+                time.sleep(interval)
+                for name in list(self.config["apps"].keys()):
+                    proc = self._procs.get(name)
+                    if proc is not None and proc.poll() is not None:
+                        print(
+                            f"[dexter watchdog] '{name}' has exited (rc={proc.returncode}). Restarting…",
+                            file=sys.stderr,
+                        )
+                        try:
+                            self.start(name)
+                        except Exception as exc:  # noqa: BLE001
+                            print(
+                                f"[dexter watchdog] Failed to restart '{name}': {exc}",
+                                file=sys.stderr,
+                            )
+
+        t = threading.Thread(target=_watch, name="dexter-watchdog", daemon=True)
+        t.start()
+        print("[dexter watchdog] Started — checking every %ds." % interval, file=sys.stderr)
+
 
 CONFIG = load_config()
 MANAGER = AppManager(CONFIG)
@@ -2443,9 +3066,128 @@ if not _secret:
         file=sys.stderr,
     )
 app.secret_key = _secret
-ensure_default_admin_user()
+app.config["WTF_CSRF_SECRET_KEY"] = _secret
+_session_hours = int(CONFIG.get("front_door", {}).get("session_hours", 8))
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=_session_hours)
+csrf = CSRFProtect(app)
+
+
+# ----- Dexter UI brand injection -------------------------------------------
+# Serve canonical Dexter UI assets (tokens.css/components.css/theme.js/brand)
+# and splice the brand <head>/<body> tags into every HTML response so the
+# launcher matches the rest of the Dexter Assistant suite (PM-DB / Manager
+# App / IC3). See Tools\dexter_ui\sync_dexter_ui.ps1 for the canonical source.
+_DEXTER_UI_DIR = ROOT / "dexter-ui"
+
+
+def _dexter_ui_static(filename: str):
+    return send_file(_DEXTER_UI_DIR / filename, max_age=3600)
+
+
+def _dexter_ui_brand(filename: str):
+    return send_file(_DEXTER_UI_DIR / "brand" / filename, max_age=3600)
+
+
+if _DEXTER_UI_DIR.exists():
+    app.add_url_rule(
+        "/dexter-ui/<path:filename>",
+        endpoint="_dexter_ui_static",
+        view_func=_dexter_ui_static,
+    )
+    app.add_url_rule(
+        "/dexter-ui/brand/<path:filename>",
+        endpoint="_dexter_ui_brand",
+        view_func=_dexter_ui_brand,
+    )
+
+_DEXTER_UI_HEAD = (
+    '<meta name="theme-color" content="#22427A">'
+    '<link rel="icon" type="image/x-icon" href="/dexter-ui/brand/favicon.ico">'
+    '<link rel="icon" type="image/png" sizes="32x32" href="/dexter-ui/brand/favicon-32.png">'
+    '<link rel="apple-touch-icon" sizes="180x180" href="/dexter-ui/brand/apple-touch-icon.png">'
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">'
+    '<link rel="stylesheet" href="/dexter-ui/tokens.css">'
+    '<link rel="stylesheet" href="/dexter-ui/components.css">'
+    "<style>"
+    "body{font-family:var(--dx-font-sans)!important;background:var(--dx-bg)!important;color:var(--dx-text)!important;}"
+    ".navbar,header.navbar,nav.navbar{background:var(--dx-primary)!important;}"
+    ".navbar-brand,.navbar a,.navbar .nav-link{color:var(--dx-primary-contrast)!important;}"
+    ".btn-primary{background:var(--dx-primary)!important;border-color:var(--dx-primary)!important;color:var(--dx-primary-contrast)!important;}"
+    ".btn-primary:hover{background:var(--dx-navy-2)!important;border-color:var(--dx-navy-2)!important;}"
+    ".card,.panel,.box,.modal-content{background:var(--dx-surface)!important;color:var(--dx-text)!important;border-color:var(--dx-border-soft)!important;}"
+    ".form-control,.form-select,input,select,textarea{background:var(--dx-surface)!important;color:var(--dx-text)!important;border-color:var(--dx-border-soft)!important;}"
+    "</style>"
+)
+_DEXTER_UI_BODY = (
+    '<script src="/dexter-ui/theme.js" defer></script>'
+    '<div class="dx-version-badge" aria-hidden="true">Dexter · Launcher · v0.9-demo</div>'
+)
+_DEXTER_UI_MARKER = "__dexter_ui_installed"
+
+
+@app.after_request
+def _inject_dexter_ui(response: Response) -> Response:
+    content_type = (response.content_type or "").lower()
+    if "text/html" not in content_type:
+        return response
+    if response.direct_passthrough:
+        response.direct_passthrough = False
+    try:
+        body = response.get_data(as_text=True)
+    except UnicodeDecodeError:
+        return response
+    if _DEXTER_UI_MARKER in body:
+        return response
+    if "</head>" not in body and "</body>" not in body:
+        return response
+
+    updated = body
+    if "</head>" in updated:
+        updated = updated.replace(
+            "</head>",
+            _DEXTER_UI_HEAD + f'<meta name="dexter-ui" content="1" data-{_DEXTER_UI_MARKER}="1"></head>',
+            1,
+        )
+    else:
+        updated = _DEXTER_UI_HEAD + updated
+    if "</body>" in updated:
+        updated = updated.replace("</body>", _DEXTER_UI_BODY + "</body>", 1)
+    else:
+        updated = updated + _DEXTER_UI_BODY
+
+    response.set_data(updated)
+    if "Content-Length" in response.headers:
+        response.headers["Content-Length"] = str(len(response.get_data()))
+    return response
+# ----- /Dexter UI brand injection -------------------------------------------
+
+
+def _rate_limit_key() -> str:
+    """Rate-limit key aware of proxy headers.
+
+    Prefer the forwarded user identity when present; fall back to IP.
+    """
+    dexter_user = (request.headers.get("X-Dexter-User") or "").strip().lower()
+    if dexter_user:
+        return f"dexter-user:{dexter_user}"
+    forwarded_for = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    if forwarded_for:
+        return f"ip:{forwarded_for}"
+    return f"ip:{get_remote_address()}"
+
+
+limiter = Limiter(
+    key_func=_rate_limit_key,
+    app=app,
+    default_limits=[],
+)
+
 initialize_rbac_db()
 migrate_legacy_json_users_to_sqlite()
+migrate_add_task_fields_v1()
+migrate_add_password_reset_fields_v1()
 ensure_default_super_admin_user()
 
 
@@ -2454,7 +3196,10 @@ def require_auth_for_protected_routes() -> Response | None:
     public_prefixes = (
         "/auth/login",
         "/auth/register",
+        "/auth/forgot-password",
+        "/auth/reset-password/",
         "/branding/logo",
+        "/dexter-ui/",
         "/favicon.ico",
         "/api/health",
     )
@@ -2468,6 +3213,7 @@ def require_auth_for_protected_routes() -> Response | None:
 
 
 @app.route("/auth/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
 def auth_login() -> Response:
     if session.get(SESSION_USER_KEY):
         return redirect(get_next_path("/"))
@@ -2488,7 +3234,8 @@ def auth_login() -> Response:
                 "email": key or username,
             }
             session.permanent = True
-            MANAGER.start_all()
+            if role_name in ("Super Admin", "Manager"):
+                MANAGER.start_all()
             return redirect(get_next_path("/"))
         error = "Invalid username or password."
 
@@ -2504,9 +3251,21 @@ def auth_login() -> Response:
 
 
 @app.route("/auth/register", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
 def auth_register() -> Response:
     if session.get(SESSION_USER_KEY):
         return redirect(get_next_path("/"))
+
+    if not CONFIG.get("front_door", {}).get("registration_open", False):
+        return Response(
+            render_template_string(
+                REGISTER_HTML,
+                error="Self-registration is currently disabled. Contact your administrator.",
+                next_path="",
+                action_url=url_for("auth_register"),
+                login_url=url_for("auth_login"),
+            )
+        )
 
     error = ""
     if request.method == "POST":
@@ -2560,6 +3319,120 @@ def auth_register() -> Response:
             login_url=url_for("auth_login"),
         )
     )
+
+
+@app.route("/auth/forgot-password", methods=["GET", "POST"])
+@limiter.limit("5 per minute")
+def auth_forgot_password() -> Response:
+    if session.get(SESSION_USER_KEY):
+        return redirect("/")
+
+    error = ""
+    reset_url = None
+
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        if not username:
+            error = "Please enter your username."
+        else:
+            conn = get_rbac_db_connection()
+            try:
+                row = conn.execute(
+                    "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND is_active = 1 LIMIT 1",
+                    (username,),
+                ).fetchone()
+                if row:
+                    token = secrets.token_urlsafe(32)
+                    expires = (datetime.now() + timedelta(hours=1)).isoformat(timespec="seconds")
+                    conn.execute(
+                        "UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?",
+                        (token, expires, int(row["id"])),
+                    )
+                    conn.commit()
+                    base_url = request.host_url.rstrip("/")
+                    reset_url = f"{base_url}/auth/reset-password/{token}"
+                else:
+                    # Don't reveal if username exists — show a generic success look
+                    error = "If that username exists, a reset link has been generated. Ask an admin."
+            finally:
+                conn.close()
+
+    return Response(
+        render_template_string(
+            FORGOT_PASSWORD_HTML,
+            error=error,
+            reset_url=reset_url,
+        )
+    )
+
+
+@app.route("/auth/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
+def auth_reset_password(token: str) -> Response:
+    if session.get(SESSION_USER_KEY):
+        return redirect("/")
+
+    token = str(token or "").strip()
+    error = ""
+    done = False
+
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT id, password_reset_expires FROM users
+            WHERE password_reset_token = ? AND is_active = 1
+            LIMIT 1
+            """,
+            (token,),
+        ).fetchone()
+
+        if not row:
+            return Response(
+                render_template_string(RESET_PASSWORD_HTML, error="Invalid or expired reset link.", done=False)
+            )
+
+        expires_str = str(row["password_reset_expires"] or "")
+        try:
+            expires_dt = datetime.fromisoformat(expires_str)
+        except ValueError:
+            expires_dt = datetime.min
+
+        if datetime.now() > expires_dt:
+            conn.execute(
+                "UPDATE users SET password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?",
+                (int(row["id"]),),
+            )
+            conn.commit()
+            return Response(
+                render_template_string(RESET_PASSWORD_HTML, error="Reset link has expired. Please request a new one.", done=False)
+            )
+
+        if request.method == "POST":
+            password = request.form.get("password") or ""
+            confirm = request.form.get("confirm") or ""
+            if len(password) < 8:
+                error = "Password must be at least 8 characters."
+            elif password != confirm:
+                error = "Passwords do not match."
+            else:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = ?,
+                        password_reset_token = NULL,
+                        password_reset_expires = NULL,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (generate_password_hash(password), int(row["id"])),
+                )
+                conn.commit()
+                done = True
+    finally:
+        conn.close()
+
+    return Response(render_template_string(RESET_PASSWORD_HTML, error=error, done=done))
 
 
 @app.route("/auth/logout", methods=["POST", "GET"])
@@ -2671,12 +3544,16 @@ def admin_users_role(user_id: int) -> Response:
 @login_required
 @role_required("Super Admin", "Manager")
 def admin_tasks_page() -> Response:
+    status_filter = (request.args.get("status") or "").strip().lower() or None
+    if status_filter not in {None, "pending", "in-progress", "completed"}:
+        status_filter = None
     users = [u for u in list_users_with_roles() if int(u.get("is_active", 0)) == 1]
     return Response(
         render_template_string(
             ADMIN_TASKS_HTML,
             active_users=users,
-            tasks=list_tasks(),
+            tasks=list_tasks(status_filter=status_filter),
+            status_filter=status_filter,
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
         )
@@ -2698,6 +3575,8 @@ def admin_tasks_create() -> Response:
         title=(request.form.get("title") or ""),
         description=(request.form.get("description") or ""),
         assigned_to=assigned_to,
+        due_date=(request.form.get("due_date") or "").strip() or None,
+        priority=(request.form.get("priority") or "normal"),
     )
     key = "message" if ok else "error"
     return redirect(f"/admin/tasks?{key}={requests.utils.quote(msg)}")
@@ -2718,6 +3597,7 @@ def api_admin_users_list() -> Response:
 
 
 @app.route("/api/admin/users", methods=["POST"])
+@csrf.exempt
 @login_required
 @role_required("Super Admin")
 def api_admin_users_create() -> Response:
@@ -2737,6 +3617,7 @@ def api_admin_users_create() -> Response:
 
 
 @app.route("/api/admin/users/<int:user_id>/role", methods=["PATCH"])
+@csrf.exempt
 @login_required
 @role_required("Super Admin")
 def api_admin_users_role(user_id: int) -> Response:
@@ -2751,6 +3632,7 @@ def api_admin_users_role(user_id: int) -> Response:
 
 
 @app.route("/api/admin/users/<int:user_id>/active", methods=["PATCH"])
+@csrf.exempt
 @login_required
 @role_required("Super Admin")
 def api_admin_users_active(user_id: int) -> Response:
@@ -2774,6 +3656,7 @@ def api_admin_tasks_list() -> Response:
 
 
 @app.route("/api/admin/tasks", methods=["POST"])
+@csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
 def api_admin_tasks_create() -> Response:
@@ -2789,12 +3672,15 @@ def api_admin_tasks_create() -> Response:
         title=str(payload.get("title") or ""),
         description=str(payload.get("description") or ""),
         assigned_to=assigned_to_id,
+        due_date=str(payload.get("due_date") or "").strip() or None,
+        priority=str(payload.get("priority") or "normal"),
     )
     code = 200 if ok else 400
     return jsonify({"ok": ok, "message": msg}), code
 
 
 @app.route("/api/admin/tasks/<int:task_id>/status", methods=["PATCH"])
+@csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
 def api_admin_tasks_status(task_id: int) -> Response:
@@ -2920,7 +3806,69 @@ def api_shared_restaurants() -> Response:
     return jsonify({"ok": True, "restaurants": restaurants, "count": len(restaurants)})
 
 
+@app.route("/api/dashboard")
+@login_required
+def api_dashboard() -> Response:
+    open_tasks = 0
+    try:
+        conn = get_rbac_db_connection()
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM tasks WHERE status IN ('pending', 'in-progress')"
+        ).fetchone()
+        conn.close()
+        open_tasks = int(row["cnt"]) if row else 0
+    except Exception:
+        pass
+
+    top_sellers: list[dict[str, Any]] = []
+    try:
+        productmix_cfg = CONFIG.get("apps", {}).get("productmix", {})
+        productmix_cwd = str(productmix_cfg.get("cwd") or "ProductMixRestaurantDB").strip() or "ProductMixRestaurantDB"
+        pm_db_path = ROOT / productmix_cwd / "product_mix.db"
+        if pm_db_path.exists():
+            pm_conn = sqlite3.connect(pm_db_path)
+            pm_conn.row_factory = sqlite3.Row
+            try:
+                date_row = pm_conn.execute(
+                    "SELECT MAX(report_start_date) AS latest FROM product_mix_items"
+                ).fetchone()
+                latest_date = date_row["latest"] if date_row else None
+                if latest_date:
+                    rows = pm_conn.execute(
+                        """
+                        SELECT item_name, SUM(qty_sold) AS total_sold
+                        FROM product_mix_items
+                        WHERE report_start_date = ?
+                        GROUP BY item_name
+                        ORDER BY total_sold DESC
+                        LIMIT 5
+                        """,
+                        (latest_date,),
+                    ).fetchall()
+                    top_sellers = [
+                        {"name": str(r["item_name"]), "qty": float(r["total_sold"] or 0)}
+                        for r in rows
+                    ]
+            finally:
+                pm_conn.close()
+    except Exception:
+        pass
+
+    app_status = MANAGER.status()
+    apps_running = sum(1 for s in app_status.values() if s.get("running") and s.get("healthy"))
+    total_apps = len(app_status)
+    return jsonify({
+        "ok": True,
+        "open_tasks": open_tasks,
+        "top_sellers": top_sellers,
+        "app_status": app_status,
+        "apps_running": apps_running,
+        "total_apps": total_apps,
+    })
+
+
 @app.route("/api/start-all", methods=["POST"])
+@csrf.exempt
 @login_required
 def api_start_all() -> Response:
     result = MANAGER.start_all()
@@ -2929,12 +3877,14 @@ def api_start_all() -> Response:
 
 
 @app.route("/api/stop-all", methods=["POST"])
+@csrf.exempt
 @login_required
 def api_stop_all() -> Response:
     return jsonify(MANAGER.stop_all())
 
 
 @app.route("/api/apps/<name>/start", methods=["POST"])
+@csrf.exempt
 @login_required
 def api_start(name: str) -> Response:
     result = MANAGER.start(name)
@@ -2943,6 +3893,7 @@ def api_start(name: str) -> Response:
 
 
 @app.route("/api/apps/<name>/stop", methods=["POST"])
+@csrf.exempt
 @login_required
 def api_stop(name: str) -> Response:
     result = MANAGER.stop(name)
@@ -2951,6 +3902,7 @@ def api_stop(name: str) -> Response:
 
 
 @app.route("/api/apps/<name>/restart", methods=["POST"])
+@csrf.exempt
 @login_required
 def api_restart(name: str) -> Response:
     result = MANAGER.restart(name)
@@ -3022,8 +3974,8 @@ def _proxy(name: str, path: str) -> Response:
             forward_headers["X-Dexter-Email"] = str(dexter_user.get("email", ""))
             forward_headers["X-Dexter-Is-Admin"] = "1" if dexter_user.get("is_admin") else "0"
 
-    try:
-        upstream = requests.request(
+    def _request_upstream() -> requests.Response:
+        return requests.request(
             method=request.method,
             url=target,
             headers=forward_headers,
@@ -3032,8 +3984,17 @@ def _proxy(name: str, path: str) -> Response:
             allow_redirects=False,
             timeout=30,
         )
+
+    try:
+        upstream = _request_upstream()
     except requests.RequestException as exc:
-        return jsonify({"ok": False, "message": f"Upstream request failed: {exc}"}), 502
+        # A brief restart/retry protects the shell UI from transient local app drops.
+        try:
+            MANAGER.restart(resolved_name)
+            time.sleep(0.8)
+            upstream = _request_upstream()
+        except requests.RequestException:
+            return jsonify({"ok": False, "message": f"Upstream request failed: {exc}"}), 502
 
     excluded_resp_headers = {
         "content-encoding",
@@ -3043,9 +4004,51 @@ def _proxy(name: str, path: str) -> Response:
 
     content_type = upstream.headers.get("Content-Type", "")
     response_body = upstream.content
+    # Inject mobile-friendly CSS into ANY proxied embedded app HTML so that on
+    # small viewports the page flows naturally (no internal scroll containers
+    # that trap touch on iOS Safari, no fixed 100vh sections).
+    if "text/html" in content_type.lower():
+        try:
+            _html_text = upstream.content.decode(upstream.encoding or "utf-8", errors="replace")
+            _mobile_patch = (
+                "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
+                "<style id=\"__dexter_mobile_patch\">"
+                "@media (max-width: 820px){"
+                "html,body{height:auto!important;min-height:0!important;"
+                "overflow:visible!important;overflow-x:hidden!important;"
+                "-webkit-overflow-scrolling:auto!important;"
+                "position:static!important;}"
+                ".container,.wrap,.shell,.main,.tab-content,.tab-content.active,"
+                ".viewer-pane,.page,.app-shell,.content,.dashboard{"
+                "overflow:visible!important;height:auto!important;"
+                "max-height:none!important;min-height:0!important;position:static!important;}"
+                "table{display:block;overflow-x:auto;max-width:100%;}"
+                "}"
+                "</style>"
+            )
+            if "</head>" in _html_text.lower():
+                # Case-insensitive insert before </head>
+                _html_text = re.sub(
+                    r"</head>",
+                    _mobile_patch + "</head>",
+                    _html_text,
+                    count=1,
+                    flags=re.IGNORECASE,
+                )
+            elif "<body" in _html_text.lower():
+                _html_text = re.sub(
+                    r"<body",
+                    _mobile_patch + "<body",
+                    _html_text,
+                    count=1,
+                    flags=re.IGNORECASE,
+                )
+            response_body = _html_text.encode("utf-8")
+        except Exception:
+            response_body = upstream.content
     if resolved_name in {"managerapp", "manager"} and "text/html" in content_type.lower():
         try:
-            html = upstream.content.decode(upstream.encoding or "utf-8", errors="replace")
+            html = (response_body if isinstance(response_body, bytes) else upstream.content).decode(upstream.encoding or "utf-8", errors="replace")
 
             def _rewrite_attr(match: re.Match[str]) -> str:
                 attr = match.group("attr")
@@ -3091,6 +4094,7 @@ def app_root(name: str) -> Response:
     "/app/<name>/<path:path>",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
 )
+@csrf.exempt
 def app_proxy(name: str, path: str) -> Response:
     return _proxy(name, path)
 
@@ -3117,6 +4121,7 @@ def contextual_static_proxy(path: str) -> Response:
     "/<path:path>",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
 )
+@csrf.exempt
 def contextual_proxy(path: str) -> Response:
     # Some upstream apps emit absolute root paths (for example /product-mix).
     # This fallback keeps those routes inside the expected proxied app context.
@@ -3172,8 +4177,10 @@ def contextual_proxy(path: str) -> Response:
 
 if __name__ == "__main__":
     front = CONFIG.get("front_door", {})
-    host = front.get("host", "127.0.0.1")
-    port = int(front.get("port", 5080))
+    # Allow overriding the bind host via env var (e.g. DEXTER_HOST=0.0.0.0
+    # to expose the launcher to phones / other devices on the LAN).
+    host = os.environ.get("DEXTER_HOST") or front.get("host", "127.0.0.1")
+    port = int(os.environ.get("DEXTER_PORT") or front.get("port", 5080))
     auto_open_browser = bool(front.get("auto_open_browser", True))
     open_path = str(front.get("open_path", "/")).strip() or "/"
     if not open_path.startswith("/"):
@@ -3183,8 +4190,21 @@ if __name__ == "__main__":
     if not startup_result.get("ok"):
         print("Dexter Assistant preflight warning:", startup_result)
 
+    MANAGER.start_watchdog()
+
     if auto_open_browser:
         startup_url = f"http://{host}:{port}{open_path}"
         threading.Timer(1.0, lambda: open_url_in_chrome(startup_url)).start()
 
-    app.run(host=host, port=port, debug=False)
+    debug_mode = os.environ.get("PM_DEBUG", "0") == "1"
+    if debug_mode:
+        print(f"[dexter] Running in DEBUG mode on {host}:{port}", file=sys.stderr)
+        app.run(host=host, port=port, debug=True)
+    else:
+        try:
+            from waitress import serve  # type: ignore[import]
+            print(f"[dexter] Running via waitress on {host}:{port} (threads=8)", file=sys.stderr)
+            serve(app, host=host, port=port, threads=8)
+        except ImportError:
+            print("[dexter] waitress not installed — falling back to Flask dev server.", file=sys.stderr)
+            app.run(host=host, port=port, debug=False)

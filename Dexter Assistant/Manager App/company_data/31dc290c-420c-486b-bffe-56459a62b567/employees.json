@@ -1,0 +1,343 @@
+{
+  "employees": [
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "David",
+      "id": 1763625144381.0115,
+      "lastName": "Barraza"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Abran",
+      "id": 1763625144381.6646,
+      "lastName": "Rosalez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Marissa",
+      "id": 1763625144381.69,
+      "lastName": "Alvarez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Indira",
+      "id": 1763625144381.9373,
+      "lastName": "Garcia"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Felicity",
+      "id": 1763625144381.5435,
+      "lastName": "Alaniz"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Kristin",
+      "id": 1763625144381.2585,
+      "lastName": "Trevino"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Isabel",
+      "id": 1763625144381.429,
+      "lastName": "Garcia"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Dominique",
+      "id": 1763625144381.238,
+      "lastName": "Zamora"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Blaine",
+      "id": 1763625144381.2603,
+      "lastName": "Roberson"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Savannah",
+      "id": 1763625144381.9746,
+      "lastName": "Barrientes"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Mason",
+      "id": 1763625144381.1902,
+      "lastName": "Cantu"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Selena",
+      "id": 1763625144381.4585,
+      "lastName": "Cuellar"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Jesselle",
+      "id": 1763625144381.8462,
+      "lastName": "Dominguez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Bryan",
+      "id": 1763625144381.8196,
+      "lastName": "Garcia"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Selena",
+      "id": 1763625144381.7773,
+      "lastName": "Gomez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Hannah",
+      "id": 1763625144381.62,
+      "lastName": "Griffith"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Michaela",
+      "id": 1763625144381.0176,
+      "lastName": "Mireles"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Lainey",
+      "id": 1763625144381.7288,
+      "lastName": "Pickard"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Lariah",
+      "id": 1763625144381.4084,
+      "lastName": "Saenz"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Emileigh",
+      "id": 1763625144381.144,
+      "lastName": "Salinas"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Isabella",
+      "id": 1763625144381.97,
+      "lastName": "Salinas"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Karson",
+      "id": 1763625144381.8196,
+      "lastName": "Shepherd"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Nevaeh",
+      "id": 1763625144381.6565,
+      "lastName": "Solis"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Raelynn",
+      "id": 1763625144381.6282,
+      "lastName": "Utley"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Arnold",
+      "id": 1763625144381.4912,
+      "lastName": "Ramirez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Mia",
+      "id": 1763625144381.8696,
+      "lastName": "Alvarez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Elinnah",
+      "id": 1763625144381.3513,
+      "lastName": "Castro"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Olivia",
+      "id": 1763625144381.3625,
+      "lastName": "Moralez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Danielle",
+      "id": 1763625144381.8335,
+      "lastName": "Reyes"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Nevaeh",
+      "id": 1763625144381.5898,
+      "lastName": "Sherrell"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Abigail",
+      "id": 1763625144381.0076,
+      "lastName": "Alegria"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Katie",
+      "id": 1763625144381.1333,
+      "lastName": "Arnold"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Lauran",
+      "id": 1763625144381.8142,
+      "lastName": "Banda"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Alexis",
+      "id": 1763625144381.4373,
+      "lastName": "Beltran"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Clarissa",
+      "id": 1763625144381.64,
+      "lastName": "Cantu"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Gianna",
+      "id": 1763625144381.0835,
+      "lastName": "Cantu"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Victoria",
+      "id": 1763625144381.118,
+      "lastName": "Cavazos"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Elena",
+      "id": 1763625144381.8958,
+      "lastName": "Escudero"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Aliah",
+      "id": 1763625144381.9243,
+      "lastName": "Garcia"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Alexa Rae",
+      "id": 1763625144381.097,
+      "lastName": "Garcia"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Alyssa",
+      "id": 1763625144381.3496,
+      "lastName": "Garcia"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Alejandro",
+      "id": 1763625144381.753,
+      "lastName": "Gonzalez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Jada",
+      "id": 1763625144381.003,
+      "lastName": "Hayes"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Ananda",
+      "id": 1763625144381.7905,
+      "lastName": "Lopez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Jason",
+      "id": 1763625144381.0645,
+      "lastName": "Martinez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Kiara",
+      "id": 1763625144381.888,
+      "lastName": "Mccoy"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Sarah",
+      "id": 1763625144381.4592,
+      "lastName": "Moralez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Pablo",
+      "id": 1763625144381.524,
+      "lastName": "Ochoa"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Isaac",
+      "id": 1763625144381.2092,
+      "lastName": "Pena"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Kassidy",
+      "id": 1763625144381.8242,
+      "lastName": "Pena"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Alexandra",
+      "id": 1763625144381.991,
+      "lastName": "Perez"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Noah",
+      "id": 1763625144381.9524,
+      "lastName": "Robledo"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Julissa",
+      "id": 1763625144381.3027,
+      "lastName": "Robles"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "Theresa",
+      "id": 1763625144381.821,
+      "lastName": "Salinas"
+    },
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "First Name",
+      "id": 1763625144381.8027,
+      "lastName": "Last Name"
+    }
+  ],
+  "removedEmployees": [
+    {
+      "dateOfHire": "2025-11-20",
+      "firstName": "YSIDRO TITO",
+      "id": 1763625144381.9966,
+      "lastName": "VILLARREAL",
+      "removedDate": "2025-11-20"
+    }
+  ]
+}

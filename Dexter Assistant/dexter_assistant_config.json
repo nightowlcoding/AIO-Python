@@ -3,7 +3,9 @@
     "host": "127.0.0.1",
     "port": 5080,
     "auto_open_browser": true,
-    "open_path": "/portal/managerapp"
+    "open_path": "/portal/managerapp",
+    "session_hours": 8,
+    "registration_open": false
   },
   "apps": {
     "productmix": {

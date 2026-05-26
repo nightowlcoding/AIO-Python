@@ -1,0 +1,4 @@
+name,position,phone,email,status
+John Doe,Server,555-0123,john.doe@example.com,Active
+Jane Smith,Bartender,555-0124,jane.smith@example.com,Active
+Bob Johnson,Manager,555-0125,bob.johnson@example.com,Active

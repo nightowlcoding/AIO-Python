@@ -7,8 +7,15 @@
   "arnoldrjr@gmail.com": {
     "password_hash": "scrypt:32768:8:1$ImggofhOASH2yurN$7e0caef93c8d24d0a5faa44006584225ca64d2e56ddb8fc14c2a6e940a57a4bf4eaf00a40aef2c3d6fe58126aa87d4823d994b900f40814bb610910110c74e71",
     "created_at": "2026-05-18T23:29:57",
-    "last_login": "2026-05-18T23:53:19",
+    "last_login": "2026-05-20T19:33:16",
     "is_admin": true,
     "email": "arnoldrjr@gmail.com"
+  },
+  "e2e_shared_check": {
+    "password_hash": "scrypt:32768:8:1$PeNKgVcynOkb1P2U$e5b63d957eb0db21a4c0511276d709534c272bae15a26b6f193d3e1cf4b2ae445361bb793d11605c37c8855afe536112ae33ee13f976d764f494acc96fc2163c",
+    "created_at": "2026-05-20T04:12:43",
+    "last_login": "2026-05-20T04:15:16",
+    "is_admin": false,
+    "email": "e2e_shared_check"
   }
 }

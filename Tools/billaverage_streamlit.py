@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from collections import defaultdict
-import io
+from difflib import SequenceMatcher
 
 # Category mapping
 CATEGORY_MAP = {
@@ -147,16 +147,16 @@ def process_excel_file(df):
                                                        row.get(payroll_col, '')) == cat, axis=1)]
         if not cat_df.empty:
             rows.append({'Category': f"{cat} (Expense)", 'Name': '', 'Amount': ''})
+            cat_total = 0.0
             for _, row in cat_df.iterrows():
                 name = row.get(name_col, '')
                 try:
                     amount = float(row.get(amount_col, 0) or 0)
                 except:
                     amount = 0
+                cat_total += amount
                 rows.append({'Category': '', 'Name': name, 'Amount': f"${amount:,.2f}"})
-            total = sum([float(r['Amount'].replace('$','').replace(',','')) 
-                        for r in rows if r['Category'] == '' and r['Amount'] != ''])
-            rows.append({'Category': '', 'Name': f"Total {cat} Expense", 'Amount': f"${total:,.2f}"})
+            rows.append({'Category': '', 'Name': f"Total {cat} Expense", 'Amount': f"${cat_total:,.2f}"})
     
     sorted_df = pd.DataFrame(rows)
     
@@ -194,12 +194,6 @@ def compare_budget(budget_csv_df, budget_tab_df):
     if budget_csv_df.empty or budget_tab_df.empty:
         return pd.DataFrame()
 
-    # Try to import fuzzywuzzy for fuzzy matching, fallback if not available
-    try:
-        from fuzzywuzzy import process as fuzzy_process
-    except ImportError:
-        fuzzy_process = None
-
     # Extract actual expenses from budget tab
     actual_expenses = {}
     for _, row in budget_tab_df.iterrows():
@@ -236,22 +230,28 @@ def compare_budget(budget_csv_df, budget_tab_df):
             budget_amount = float(budget_str) if budget_str else 0.0
         except:
             budget_amount = 0.0
-        # Find matching actual expense (case-insensitive, trimmed, fuzzy if available)
+        # Find matching actual expense (case-insensitive, trimmed, stdlib similarity fallback)
         budget_name_key = budget_name.strip().lower()
         actual_data = None
         match_name = None
         if budget_name_key in actual_expenses:
             actual_data = actual_expenses[budget_name_key]
             match_name = budget_name_key
-        elif fuzzy_process:
-            # Use fuzzy matching with a threshold
-            choices = list(actual_expenses.keys())
-            match, score = fuzzy_process.extractOne(budget_name_key, choices)
-            if score >= 90:
-                actual_data = actual_expenses[match]
-                match_name = match
         else:
-            # fallback: substring match
+            best_match = None
+            best_score = 0.0
+            for actual_name in actual_expenses:
+                score = SequenceMatcher(None, budget_name_key, actual_name).ratio()
+                if score > best_score:
+                    best_score = score
+                    best_match = actual_name
+            # Use a conservative threshold to avoid weak name matches.
+            if best_match and best_score >= 0.90:
+                actual_data = actual_expenses[best_match]
+                match_name = best_match
+
+        if not actual_data:
+            # Last fallback: simple substring match
             for actual_name in actual_expenses:
                 if budget_name_key in actual_name or actual_name in budget_name_key:
                     actual_data = actual_expenses[actual_name]

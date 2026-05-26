@@ -1,3 +1,23 @@
+# === AIO-Python archive/backup patterns (added by overhaul) ===
+# Local backup, snapshot, and consolidated copies must never be committed.
+*_backup_*/
+*Backup*/
+*_snapshot_*/
+AIO_Snapshots/
+AIO_Consolidated_*/
+AIO_Enclosed_Apps/
+AIO_Tidy/
+_dexter_assistant_build/
+RestaurantStack-Combined/
+archived_files/
+# Runtime logs (per-app, regenerable)
+runtime_logs/
+*.log
+*.log.old
+# Local sibling archive root (in case it ever lands inside the workspace)
+AIO-Python-Archive/
+AIO-Python-PreOverhaul-Backup-*/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
