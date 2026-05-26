@@ -937,7 +937,7 @@ OVERRIDE_SCRIPT = r"""
             '<div style="max-width: 900px; margin: 0 auto; background: #f8fffb; border: 2px solid #c8e6c9; border-radius: 12px; padding: 22px;">' +
             '<h2 style="margin: 0 0 10px 0; color: #2e7d32;">Rename Order CSVs</h2>' +
             '<p style="margin: 0 0 16px 0; color: #455a64;">Use the same logic as the renamer tool to preview and apply names like <strong>Location_YYYY-MM-DD_order.csv</strong>.</p>' +
-            '<div style="display: grid; grid-template-columns: 1fr 220px; gap: 12px; margin-bottom: 12px;">' +
+            '<div id="renameFolderSection" style="display: grid; grid-template-columns: 1fr 220px; gap: 12px; margin-bottom: 12px;">' +
             '<div>' +
             '<label for="renameFolderPath" style="display: block; margin-bottom: 5px; font-weight: 600;">Folder Path</label>' +
             '<input id="renameFolderPath" type="text" readonly style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px; background: #f0f0f0;" />' +
@@ -948,9 +948,23 @@ OVERRIDE_SCRIPT = r"""
             '<input id="renameLocationPrefix" type="text" value="" placeholder="Auto from shared locations" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px;" />' +
             '</div>' +
             '</div>' +
+            '<div id="renameWebSection" style="display: none; margin-bottom: 12px;">' +
+            '<div style="display: grid; grid-template-columns: 1fr 220px; gap: 12px;">' +
+            '<div>' +
+            '<label style="display: block; margin-bottom: 5px; font-weight: 600;">Select CSV Files to Rename</label>' +
+            '<input id="renameWebFileInput" type="file" multiple accept=".csv" style="display: block; padding: 8px; border: 2px dashed #a5d6a7; border-radius: 8px; width: 100%; cursor: pointer;" />' +
+            '<span id="renameWebFileCount" style="display: block; font-size: 0.9rem; color: #607d8b; margin-top: 5px;"></span>' +
+            '</div>' +
+            '<div>' +
+            '<label for="renameLocationPrefix" style="display: block; margin-bottom: 5px; font-weight: 600;">Location Prefix</label>' +
+            '<input id="renameLocationPrefixWeb" type="text" value="" placeholder="Auto from shared locations" style="width: 100%; padding: 10px; border: 2px solid #dee2e6; border-radius: 8px;" />' +
+            '</div>' +
+            '</div>' +
+            '</div>' +
             '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">' +
             '<button class="btn" style="background: #1976d2; color: white;" onclick="previewOrderCsvRename()">Preview Rename</button>' +
-            '<button class="btn" style="background: #2e7d32; color: white;" onclick="applyOrderCsvRename()">Apply Rename</button>' +
+            '<button id="renameApplyBtn" class="btn" style="background: #2e7d32; color: white;" onclick="applyOrderCsvRename()">Apply Rename</button>' +
+            '<button id="renameWebDownloadBtn" class="btn" style="background: #6a1b9a; color: white; display: none;" onclick="downloadWebRenameZip()">&#11015; Download Renamed ZIP</button>' +
             '</div>' +
             '<div id="renameCsvStatus" style="display: none; border-radius: 8px; padding: 12px; margin-bottom: 12px;"></div>' +
             '<div id="renameCsvResults" style="max-height: 380px; overflow: auto; border: 1px solid #e0e0e0; border-radius: 8px; background: white; padding: 10px;">' +
@@ -968,8 +982,8 @@ OVERRIDE_SCRIPT = r"""
                 try {
                     const response = await fetch('/api/tools/select-folder', { method: 'POST' });
                     const payload = await response.json();
-                    if (!response.ok || !payload.success) {
-                        renderRenameStatus('&#10060; ' + escapeHtml(payload.message || 'Unable to open folder picker.'), false);
+                    if (!payload.success) {
+                        activateWebRenameMode();
                         return;
                     }
                     if (!payload.folder_path) {
@@ -982,10 +996,78 @@ OVERRIDE_SCRIPT = r"""
                     renderRenameStatus('&#10060; Error opening folder picker: ' + escapeHtml(error.message), false);
                 }
             };
-        }, 100);
+
+            // Auto-detect web mode on tab load
+            fetch('/api/tools/select-folder', { method: 'POST' })
+                .then(function (r) { return r.json(); })
+                .then(function (payload) {
+                    if (!payload.success) {
+                        activateWebRenameMode();
+                    }
+                })
+                .catch(function () { activateWebRenameMode(); });
+        }, 200);
 
         container.appendChild(tabContent);
     }
+
+    function activateWebRenameMode() {
+        const folderSection = document.getElementById('renameFolderSection');
+        if (folderSection) folderSection.style.display = 'none';
+        const webSection = document.getElementById('renameWebSection');
+        if (webSection) webSection.style.display = 'block';
+        const applyBtn = document.getElementById('renameApplyBtn');
+        if (applyBtn) applyBtn.style.display = 'none';
+        const dlBtn = document.getElementById('renameWebDownloadBtn');
+        if (dlBtn) dlBtn.style.display = '';
+        const fileInput = document.getElementById('renameWebFileInput');
+        if (fileInput && !fileInput.dataset.hooked) {
+            fileInput.dataset.hooked = '1';
+            fileInput.addEventListener('change', function () {
+                const countEl = document.getElementById('renameWebFileCount');
+                if (countEl) countEl.textContent = this.files.length ? this.files.length + ' file(s) selected' : '';
+            });
+        }
+    }
+
+    function getWebLocationPrefix() {
+        const prefixWeb = document.getElementById('renameLocationPrefixWeb');
+        const prefixLocal = document.getElementById('renameLocationPrefix');
+        return (prefixWeb && prefixWeb.value.trim()) || (prefixLocal && prefixLocal.value.trim()) || (typeof guessCurrentLocation === 'function' ? guessCurrentLocation() : '') || 'Location';
+    }
+
+    window.downloadWebRenameZip = async function () {
+        const fileInput = document.getElementById('renameWebFileInput');
+        if (!fileInput || !fileInput.files.length) {
+            renderRenameStatus('Please select CSV files first.', false);
+            return;
+        }
+        renderRenameStatus('&#8987; Preparing ZIP...', true);
+        const fd = new FormData();
+        fd.append('mode', 'download');
+        fd.append('location', getWebLocationPrefix());
+        for (const f of fileInput.files) fd.append('files', f);
+        try {
+            const r = await fetch('/api/tools/rename-order-csvs-web', { method: 'POST', body: fd });
+            if (!r.ok) {
+                const p = await r.json().catch(function () { return {}; });
+                renderRenameStatus('&#10060; ' + escapeHtml(p.message || 'Download failed.'), false);
+                return;
+            }
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'renamed_order_csvs.zip';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            renderRenameStatus('&#9989; ZIP downloaded with renamed files.', true);
+        } catch (e) {
+            renderRenameStatus('&#10060; Error: ' + escapeHtml(e.message), false);
+        }
+    };
 
     function renderRenameStatus(message, ok) {
         const statusDiv = document.getElementById('renameCsvStatus');
@@ -1028,6 +1110,36 @@ OVERRIDE_SCRIPT = r"""
     }
 
     async function runOrderCsvRename(applyChanges) {
+        const webSection = document.getElementById('renameWebSection');
+        const isWebMode = webSection && webSection.style.display !== 'none';
+
+        if (isWebMode) {
+            const fileInput = document.getElementById('renameWebFileInput');
+            if (!fileInput || !fileInput.files.length) {
+                renderRenameStatus('Please select CSV files first.', false);
+                return;
+            }
+            renderRenameStatus('&#8987; Previewing...', true);
+            const fd = new FormData();
+            fd.append('mode', 'preview');
+            fd.append('location', getWebLocationPrefix());
+            for (const f of fileInput.files) fd.append('files', f);
+            try {
+                const r = await fetch('/api/tools/rename-order-csvs-web', { method: 'POST', body: fd });
+                const payload = await r.json();
+                if (!payload.success) {
+                    renderRenameStatus('&#10060; ' + escapeHtml(payload.message || 'Failed.'), false);
+                    return;
+                }
+                const count = (payload.items || []).length;
+                renderRenameStatus('&#128270; ' + count + ' file(s) will be renamed. Click "Download Renamed ZIP" to get them.', count > 0);
+                renderRenameResults(payload.items || []);
+            } catch (e) {
+                renderRenameStatus('&#10060; Error: ' + escapeHtml(e.message), false);
+            }
+            return;
+        }
+
         const folderPath = document.getElementById('renameFolderPath')?.value?.trim();
         const locationPrefix = document.getElementById('renameLocationPrefix')?.value?.trim() || guessCurrentLocation() || 'Location';
 
@@ -2902,6 +3014,60 @@ def _register_order_csv_rename_endpoint(flask_app) -> None:
             return jsonify({"success": False, "message": "Folder picker is only available when running locally. Please type the folder path manually."}), 200
         except Exception as exc:
             return jsonify({"success": False, "message": f"Folder picker unavailable: {exc}"}), 200
+
+    @flask_app.post("/api/tools/rename-order-csvs-web")
+    def rename_order_csvs_web():
+        import io
+        import zipfile as _zipfile
+        from flask import send_file
+
+        location = str(request.form.get("location") or _runtime_default_location("Location")).strip() or _runtime_default_location("Location")
+        mode = str(request.form.get("mode") or "preview").strip()
+        uploaded_files = request.files.getlist("files")
+
+        if not uploaded_files or not any(f.filename for f in uploaded_files):
+            return jsonify({"success": False, "message": "No files uploaded."}), 400
+
+        seen_per_day: dict[str, int] = {}
+        planned_targets: set[str] = set()
+        planned = []
+        unchanged = []
+
+        for f in sorted(uploaded_files, key=lambda x: (x.filename or "")):
+            fname = Path(f.filename).name if f.filename else ""
+            if not fname:
+                continue
+            new_name = _build_order_csv_target_name(Path(fname), location, seen_per_day)
+            if not new_name or new_name == fname:
+                unchanged.append(f)
+                continue
+            stem = Path(new_name).stem
+            suffix = Path(new_name).suffix
+            candidate = new_name
+            counter = 1
+            while candidate.lower() in planned_targets:
+                candidate = f"{stem}_{counter}{suffix}"
+                counter += 1
+            planned.append({"old_name": fname, "new_name": candidate, "file_obj": f})
+            planned_targets.add(candidate.lower())
+
+        if mode == "preview":
+            return jsonify({
+                "success": True,
+                "items": [{"old_name": p["old_name"], "new_name": p["new_name"]} for p in planned],
+                "unchanged_count": len(unchanged),
+            })
+
+        buf = io.BytesIO()
+        with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+            for item in planned:
+                item["file_obj"].stream.seek(0)
+                zf.writestr(item["new_name"], item["file_obj"].stream.read())
+            for f in unchanged:
+                f.stream.seek(0)
+                zf.writestr(Path(f.filename).name, f.stream.read())
+        buf.seek(0)
+        return send_file(buf, mimetype="application/zip", as_attachment=True, download_name="renamed_order_csvs.zip")
 
 
 def _register_invoice_import_log_endpoint(flask_app) -> None:
