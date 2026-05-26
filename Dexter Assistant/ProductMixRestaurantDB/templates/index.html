@@ -266,35 +266,44 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function sortRows(key, direction, sortType) {
-      var rows = Array.from(tbody.querySelectorAll('tr')).filter(function (row) {
-        var cells = row.querySelectorAll('td');
-        return cells.length >= 6 && !row.querySelector('td[colspan]');
+      // Build groups: preserve header rows in place, sort only within each group
+      var allRows = Array.from(tbody.querySelectorAll('tr'));
+      var groups = [];
+      var currentGroup = null;
+      allRows.forEach(function (row) {
+        if (row.querySelector('td[colspan]')) {
+          currentGroup = { header: row, rows: [] };
+          groups.push(currentGroup);
+        } else if (currentGroup) {
+          currentGroup.rows.push(row);
+        }
       });
 
-      if (!rows.length) {
+      if (!groups.length) {
         return;
       }
 
-      rows.sort(function (a, b) {
-        var aCell = a.querySelector('td[data-sort-key="' + key + '"]');
-        var bCell = b.querySelector('td[data-sort-key="' + key + '"]');
-        var aValue = parseSortValue(aCell ? aCell.getAttribute('data-sort-value') : '', sortType);
-        var bValue = parseSortValue(bCell ? bCell.getAttribute('data-sort-value') : '', sortType);
+      groups.forEach(function (group) {
+        group.rows.sort(function (a, b) {
+          var aCell = a.querySelector('td[data-sort-key="' + key + '"]');
+          var bCell = b.querySelector('td[data-sort-key="' + key + '"]');
+          var aValue = parseSortValue(aCell ? aCell.getAttribute('data-sort-value') : '', sortType);
+          var bValue = parseSortValue(bCell ? bCell.getAttribute('data-sort-value') : '', sortType);
 
-        if (aValue < bValue) {
-          return direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return direction === 'asc' ? 1 : -1;
-        }
+          if (aValue < bValue) {
+            return direction === 'asc' ? -1 : 1;
+          }
+          if (aValue > bValue) {
+            return direction === 'asc' ? 1 : -1;
+          }
 
-        var aId = parseInt((a.querySelector('td') || {}).textContent || '0', 10) || 0;
-        var bId = parseInt((b.querySelector('td') || {}).textContent || '0', 10) || 0;
-        return direction === 'asc' ? aId - bId : bId - aId;
-      });
+          var aId = parseInt((a.querySelector('td') || {}).textContent || '0', 10) || 0;
+          var bId = parseInt((b.querySelector('td') || {}).textContent || '0', 10) || 0;
+          return direction === 'asc' ? aId - bId : bId - aId;
+        });
 
-      rows.forEach(function (row) {
-        tbody.appendChild(row);
+        tbody.appendChild(group.header);
+        group.rows.forEach(function (row) { tbody.appendChild(row); });
       });
     }
 
