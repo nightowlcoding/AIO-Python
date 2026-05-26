@@ -4611,7 +4611,18 @@ def reports_page():
     end_date = _normalize_report_date_filter(request.args.get("end_date"))
 
     conn = get_db_connection()
-    if _is_admin_user():
+    location_id_filter = (request.args.get("location_id") or "").strip()
+    if _is_admin_user() and scoped_restaurant and location_id_filter:
+        restaurants_count = 1
+        uploads_count = conn.execute(
+            "SELECT COUNT(*) AS total FROM product_mix_uploads WHERE restaurant_id = ?",
+            (scoped_restaurant["id"],),
+        ).fetchone()["total"]
+        items_count = conn.execute(
+            "SELECT COUNT(*) AS total FROM all_levels_items WHERE restaurant_id = ?",
+            (scoped_restaurant["id"],),
+        ).fetchone()["total"]
+    elif _is_admin_user():
         restaurants_count = conn.execute("SELECT COUNT(*) AS total FROM restaurants").fetchone()["total"]
         uploads_count = conn.execute("SELECT COUNT(*) AS total FROM product_mix_uploads").fetchone()["total"]
         items_count = conn.execute("SELECT COUNT(*) AS total FROM all_levels_items").fetchone()["total"]
