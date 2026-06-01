@@ -4,11 +4,11 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="daily-log-header d-flex justify-content-between align-items-start align-items-md-center gap-3 mb-4 flex-column flex-md-row">
         <h1><i class="bi bi-calendar-check"></i> Daily Operations Log</h1>
-        <div class="d-flex gap-2">
+        <div class="daily-log-toolbar d-flex gap-2 flex-wrap justify-content-start justify-content-md-end">
             {% if locations %}
-            <select class="form-select" id="locationSelector" onchange="changeLocation(this.value)" style="width: auto;">
+            <select class="form-select daily-log-context-select" id="locationSelector" onchange="changeLocation(this.value)">
                 <option value="">Select Location</option>
                 {% for location in locations %}
                 <option value="{{ location.id }}" {% if location.id == selected_location_id %}selected{% endif %}>
@@ -17,12 +17,40 @@
                 {% endfor %}
             </select>
             {% endif %}
-            <input type="date" id="dateSelector" class="form-control" value="{{ date }}" 
+                 <input type="date" id="dateSelector" class="form-control daily-log-context-input" value="{{ date }}"
                    onchange="changeDateAndLocation()">
-            <button type="button" class="btn btn-secondary" onclick="document.getElementById('csvImport').click()">
+            <button type="button" class="btn btn-secondary daily-log-context-button" onclick="document.getElementById('csvImport').click()">
                 <i class="bi bi-file-earmark-spreadsheet"></i> Import Excel File
             </button>
             <input type="file" id="csvImport" accept=".csv,.xlsx" multiple style="display: none;" onchange="importCSV(event)">
+        </div>
+        <div class="daily-log-draft-status text-muted small text-end mt-2" id="dailyLogDraftStatus">Draft sync off</div>
+    </div>
+
+    <div class="daily-log-summary row g-2 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="dx-summary-card">
+                <div class="text-muted small">Employees</div>
+                <div class="fs-4 fw-semibold" id="top_employee_count">0</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="dx-summary-card">
+                <div class="text-muted small">Expected Deposit</div>
+                <div class="fs-4 fw-semibold text-success">$<span id="top_expected_deposit">0.00</span></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="dx-summary-card">
+                <div class="text-muted small">Cash Difference</div>
+                <div class="fs-4 fw-semibold text-primary">$<span id="top_cash_difference">0.00</span></div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="dx-summary-card">
+                <div class="text-muted small">Draft</div>
+                <div class="fw-semibold" id="top_draft_status">Sync off</div>
+            </div>
         </div>
     </div>
     
@@ -68,7 +96,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="table-responsive mb-3" style="max-height: 400px; overflow: auto;">
+                            <div class="table-responsive bulk-entry-table-wrap mb-3" style="max-height: 400px; overflow: auto;">
                                 <table class="table table-sm table-bordered" style="min-width: 1800px;">
                                     <thead class="table-light sticky-top">
                                         <tr>
@@ -95,6 +123,7 @@
                                     </tbody>
                                 </table>
                             </div>
+                            <div id="bulkEntryMobileCards" class="bulk-entry-mobile-cards mb-3"></div>
                             <div class="d-flex gap-2">
                                 <button type="button" class="btn btn-sm btn-success" onclick="addBulkRow()">
                                     <i class="bi bi-plus"></i> Add Row
@@ -114,21 +143,21 @@
 
                         <!-- Basic Info -->
                         <div class="row g-2 mb-3">
-                            <div class="col-4">
+                            <div class="col-12 col-md-4">
                                 <label class="form-label small">Name</label>
                                 <input type="text" class="form-control form-control-sm" id="emp_name" placeholder="Employee Name" list="employeeNameList" autocomplete="off">
                                 <datalist id="employeeNameList">
                                     <!-- Populated by JavaScript -->
                                 </datalist>
                             </div>
-                            <div class="col-4">
+                            <div class="col-12 col-md-4">
                                 <label class="form-label small">Shift</label>
                                 <select class="form-select form-select-sm" id="emp_shift">
                                     <option value="Day">Day</option>
                                     <option value="Night">Night</option>
                                 </select>
                             </div>
-                            <div class="col-4">
+                            <div class="col-12 col-md-4">
                                 <label class="form-label small">Area</label>
                                 <select class="form-select form-select-sm" id="emp_area">
                                     <option value="Dining">Dining</option>
@@ -140,11 +169,11 @@
                         
                         <!-- Cash & Tips -->
                         <div class="row g-2 mb-3">
-                            <div class="col-6">
+                            <div class="col-12 col-md-6">
                                 <label class="form-label small">Cash</label>
                                 <input type="number" class="form-control form-control-sm" id="emp_cash" step="0.01" value="0.00" oninput="updateCashDifference()">
                             </div>
-                            <div class="col-6">
+                            <div class="col-12 col-md-6">
                                 <label class="form-label small">CC Tips</label>
                                 <input type="number" class="form-control form-control-sm" id="emp_cc_tips" step="0.01" value="0.00" oninput="updateCashDifference()">
                             </div>
@@ -163,19 +192,19 @@
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Credit Cards</label>
                             <div class="row g-2">
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Visa</label>
                                     <input type="number" class="form-control form-control-sm credit-card" id="emp_visa" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
                                 </div>
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Mastercard</label>
                                     <input type="number" class="form-control form-control-sm credit-card" id="emp_mastercard" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
                                 </div>
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Amex</label>
                                     <input type="number" class="form-control form-control-sm credit-card" id="emp_amex" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
                                 </div>
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Discover</label>
                                     <input type="number" class="form-control form-control-sm credit-card" id="emp_discover" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
                                 </div>
@@ -189,19 +218,19 @@
                         <div class="mb-3">
                             <label class="form-label small fw-bold">Sales</label>
                             <div class="row g-2">
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Beer</label>
                                     <input type="number" class="form-control form-control-sm" id="emp_beer" step="0.01" value="0.00">
                                 </div>
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Liquor</label>
                                     <input type="number" class="form-control form-control-sm" id="emp_liquor" step="0.01" value="0.00">
                                 </div>
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Wine</label>
                                     <input type="number" class="form-control form-control-sm" id="emp_wine" step="0.01" value="0.00">
                                 </div>
-                                <div class="col-6">
+                                <div class="col-12 col-sm-6">
                                     <label class="form-label small">Food</label>
                                     <input type="number" class="form-control form-control-sm" id="emp_food" step="0.01" value="0.00">
                                 </div>
@@ -214,10 +243,15 @@
                             <input type="number" class="form-control form-control-sm" id="emp_voids" step="0.01" value="0.00">
                         </div>
                         
-                        <div id="formButtons">
-                            <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
-                                <i class="bi bi-save"></i> Save Entry
-                            </button>
+                        <div id="formButtons" class="employee-form-actions">
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
+                                    <i class="bi bi-save"></i> Save Entry
+                                </button>
+                                <button type="button" class="btn btn-outline-success w-100" onclick="addEmployeeEntry(true)">
+                                    <i class="bi bi-plus-circle"></i> Save & Add Another
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -327,20 +361,20 @@
                         <div id="cashDeductionsContainer" class="mb-3">
                             {% if log_data and log_data.deduction_descs %}
                                 {% for i in range(log_data.deduction_descs|length) %}
-                                <div class="row mb-2 cash-deduction-row g-2">
-                                    <div class="col-4">
+                                    <div class="row mb-2 cash-deduction-row g-2">
+                                    <div class="col-12 col-md-4">
                                         <input type="text" class="form-control form-control-sm" name="deduction_desc" 
                                                placeholder="Description" value="{{ log_data.deduction_descs[i] }}">
                                     </div>
-                                    <div class="col-4">
+                                    <div class="col-12 col-md-4">
                                         <input type="text" class="form-control form-control-sm" name="deduction_location" 
                                                placeholder="Location" value="{{ log_data.deduction_locations[i] if log_data.deduction_locations and i < log_data.deduction_locations|length else '' }}">
                                     </div>
-                                    <div class="col-3">
+                                    <div class="col-8 col-md-3">
                                         <input type="number" class="form-control form-control-sm cash-deduction-amount" name="deduction_amount" 
                                                placeholder="0.00" step="0.01" value="{{ log_data.deduction_amounts[i] }}" onchange="calculateDeposit()">
                                     </div>
-                                    <div class="col-1">
+                                    <div class="col-4 col-md-1">
                                         <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateDeposit()">
                                             <i class="bi bi-trash"></i>
                                         </button>
@@ -349,19 +383,19 @@
                                 {% endfor %}
                             {% else %}
                             <div class="row mb-2 cash-deduction-row g-2">
-                                <div class="col-4">
+                                <div class="col-12 col-md-4">
                                     <input type="text" class="form-control form-control-sm" name="deduction_desc" 
                                            placeholder="Description">
                                 </div>
-                                <div class="col-4">
+                                <div class="col-12 col-md-4">
                                     <input type="text" class="form-control form-control-sm" name="deduction_location" 
                                            placeholder="Location">
                                 </div>
-                                <div class="col-3">
+                                <div class="col-8 col-md-3">
                                     <input type="number" class="form-control form-control-sm cash-deduction-amount" name="deduction_amount" 
                                            placeholder="0.00" step="0.01" onchange="calculateDeposit()">
                                 </div>
-                                <div class="col-1">
+                                <div class="col-4 col-md-1">
                                     <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateDeposit()">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -455,7 +489,7 @@
                             <i class="bi bi-cash-stack"></i> Expected Deposit
                         </h6>
                     </div>
-                    <div class="card-body" id="depositBody">>
+                    <div class="card-body" id="depositBody">
                         <div class="row g-2">
                             <div class="col-12">
                                 <div class="d-flex justify-content-between">
@@ -482,6 +516,11 @@
                                 <div class="d-flex justify-content-between">
                                     <strong class="text-success fs-5">Deposit:</strong>
                                     <strong class="text-success fs-5">$<span id="expected_deposit">0.00</span></strong>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div id="depositFormulaText" class="small text-muted text-center py-1">
+                                    Formula: $0.00 - $0.00 - $0.00 = $0.00
                                 </div>
                             </div>
                             
@@ -737,16 +776,22 @@
         </div>
         
         <!-- Actions -->
-        <div class="d-flex gap-2 mt-4">
-            <button type="submit" class="btn btn-primary btn-lg">
+        <div class="daily-log-actions d-flex gap-2 mt-4 flex-column flex-md-row">
+            <button type="submit" class="btn btn-primary btn-lg flex-fill flex-md-grow-0">
                 <i class="bi bi-save"></i> Save Daily Log
             </button>
-            <button type="button" class="btn btn-outline-secondary btn-lg" onclick="clearForm()">
+            <button type="button" class="btn btn-outline-secondary btn-lg flex-fill flex-md-grow-0" onclick="clearForm()">
                 <i class="bi bi-x-circle"></i> Clear
             </button>
-            <button type="button" class="btn btn-outline-info btn-lg" onclick="preparePrintSummary(); setTimeout(() => window.print(), 200)">
+            <button type="button" class="btn btn-outline-info btn-lg flex-fill flex-md-grow-0" onclick="preparePrintSummary(); setTimeout(() => window.print(), 200)">
                 <i class="bi bi-printer"></i> Print
             </button>
+        </div>
+
+        <div id="employeeUndoToast" class="employee-undo-toast d-none" role="status" aria-live="polite">
+            <span id="employeeUndoText" class="small fw-semibold">Employee entry deleted.</span>
+            <button type="button" class="btn btn-sm btn-outline-light" onclick="undoRemoveEmployee()">Undo</button>
+            <button type="button" class="btn btn-sm btn-light" onclick="dismissUndoEmployee()" aria-label="Dismiss undo">Dismiss</button>
         </div>
     </form>
     {% endif %}
@@ -923,7 +968,506 @@
 <script>
 // Employee data array
 let employees = {{ log_data.employees|tojson if log_data and log_data.employees else '[]'|safe }};
+const initialServerEmployeeCount = Array.isArray(employees) ? employees.length : 0;
 let editingIndex = null; // Track which employee is being edited
+let pendingEmployeeUndo = null;
+let dailyLogDraftTimer = null;
+let dailyLogDraftReady = false;
+let dailyLogLiveVersion = null;
+let dailyLogLivePollTimer = null;
+let dailyLogHasUnsavedChanges = false;
+const DAILY_LOG_DEFAULTS_KEY = 'dx_daily_log_defaults';
+const DAILY_LOG_RECENT_NAMES_KEY = 'dx_daily_log_recent_names';
+const DAILY_LOG_LIVE_POLL_MS = 10000;
+
+function getDailyLogDefaults() {
+    try {
+        const stored = localStorage.getItem(DAILY_LOG_DEFAULTS_KEY);
+        if (stored) {
+            const defaults = JSON.parse(stored);
+            return {
+                shift: defaults.shift || 'Day',
+                area: defaults.area || 'Dining'
+            };
+        }
+    } catch (error) {
+        console.error('Failed to load Daily Log defaults:', error);
+    }
+
+    return { shift: 'Day', area: 'Dining' };
+}
+
+function saveDailyLogDefaults(defaults) {
+    try {
+        const current = getDailyLogDefaults();
+        localStorage.setItem(DAILY_LOG_DEFAULTS_KEY, JSON.stringify({
+            shift: defaults.shift || current.shift || 'Day',
+            area: defaults.area || current.area || 'Dining'
+        }));
+    } catch (error) {
+        console.error('Failed to save Daily Log defaults:', error);
+    }
+}
+
+function applyDailyLogDefaults() {
+    const defaults = getDailyLogDefaults();
+    const shiftField = document.getElementById('emp_shift');
+    const areaField = document.getElementById('emp_area');
+
+    if (shiftField && !shiftField.value) {
+        shiftField.value = defaults.shift;
+    }
+
+    if (areaField && !areaField.value) {
+        areaField.value = defaults.area;
+    }
+}
+
+function getDailyLogRecentNames() {
+    try {
+        const stored = localStorage.getItem(DAILY_LOG_RECENT_NAMES_KEY);
+        if (stored) {
+            const names = JSON.parse(stored);
+            return Array.isArray(names) ? names.filter(Boolean) : [];
+        }
+    } catch (error) {
+        console.error('Failed to load recent Daily Log names:', error);
+    }
+
+    return [];
+}
+
+function rememberDailyLogEmployeeName(name) {
+    const cleanedName = (name || '').trim();
+    if (!cleanedName) {
+        return;
+    }
+
+    try {
+        const existing = getDailyLogRecentNames().filter(entry => entry !== cleanedName);
+        existing.unshift(cleanedName);
+        localStorage.setItem(DAILY_LOG_RECENT_NAMES_KEY, JSON.stringify(existing.slice(0, 12)));
+    } catch (error) {
+        console.error('Failed to save recent Daily Log name:', error);
+    }
+}
+
+function getDailyLogAllRecentNames(employeeList = []) {
+    const merged = [];
+    const seen = new Set();
+
+    [...getDailyLogRecentNames(), ...employeeList.map(emp => {
+        if (typeof emp === 'string') {
+            return emp;
+        }
+
+        if (emp && typeof emp === 'object') {
+            return emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+        }
+
+        return '';
+    })].forEach(name => {
+        const cleanedName = (name || '').trim();
+        if (cleanedName && !seen.has(cleanedName)) {
+            seen.add(cleanedName);
+            merged.push(cleanedName);
+        }
+    });
+
+    return merged;
+}
+
+function focusEmployeeShiftField() {
+    window.requestAnimationFrame(() => {
+        const shiftField = document.getElementById('emp_shift');
+        if (shiftField) {
+            shiftField.focus();
+        }
+    });
+}
+
+function applyNumericKeyboardHints(scope = document) {
+    const numericInputs = scope.querySelectorAll('input[type="number"]');
+    numericInputs.forEach(input => {
+        const stepValue = input.getAttribute('step') || '';
+        const wantsDecimal = stepValue.includes('.') || stepValue === 'any';
+        input.setAttribute('inputmode', wantsDecimal ? 'decimal' : 'numeric');
+        if (!input.hasAttribute('pattern')) {
+            input.setAttribute('pattern', wantsDecimal ? '[0-9]*[.,]?[0-9]*' : '[0-9]*');
+        }
+
+        // Currency-like fields normalize to 2 decimals after editing.
+        if (wantsDecimal) {
+            input.classList.add('currency-field');
+            if (!input.placeholder && !input.readOnly && !input.disabled) {
+                input.placeholder = '$0.00';
+            }
+        }
+
+        if (wantsDecimal && !input.readOnly && !input.disabled && !input.dataset.currencyBound) {
+            input.dataset.currencyBound = '1';
+            input.addEventListener('focus', () => {
+                const rawValue = String(input.value || '').replace(/[$,\s]/g, '');
+                const numericValue = parseFloat(rawValue);
+                if (!rawValue || !Number.isFinite(numericValue) || numericValue <= 0) {
+                    input.value = '';
+                }
+            });
+            input.addEventListener('blur', () => {
+                const rawValue = String(input.value || '').replace(/[$,\s]/g, '');
+                const numericValue = parseFloat(rawValue);
+                input.value = Number.isFinite(numericValue) && numericValue > 0 ? numericValue.toFixed(2) : '';
+            });
+        }
+    });
+}
+
+function getDailyLogDraftKey() {
+    const date = document.getElementById('dateSelector')?.value || '{{ date }}';
+    const locationId = document.getElementById('locationSelector')?.value || '{{ selected_location_id or "" }}';
+    return ['dx_daily_log_draft', date, locationId || 'none'].join(':');
+}
+
+function getDailyLogLiveContext() {
+    return {
+        date: document.getElementById('dateSelector')?.value || '{{ date }}',
+        locationId: document.getElementById('locationSelector')?.value || '{{ selected_location_id or "" }}'
+    };
+}
+
+function markDailyLogDirty() {
+    dailyLogHasUnsavedChanges = true;
+}
+
+async function fetchDailyLogVersion() {
+    const context = getDailyLogLiveContext();
+    const params = new URLSearchParams({ date: context.date });
+    if (context.locationId) {
+        params.set('location_id', context.locationId);
+    }
+
+    const response = await fetch(`/api/daily-log/version?${params.toString()}`, {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+    });
+
+    if (!response.ok) {
+        throw new Error(`Live version request failed: ${response.status}`);
+    }
+
+    const payload = await response.json();
+    return Number(payload.version || 0);
+}
+
+async function checkDailyLogLiveUpdates() {
+    try {
+        const latestVersion = await fetchDailyLogVersion();
+        if (dailyLogLiveVersion === null) {
+            dailyLogLiveVersion = latestVersion;
+            return;
+        }
+
+        if (latestVersion <= dailyLogLiveVersion) {
+            return;
+        }
+
+        dailyLogLiveVersion = latestVersion;
+        if (dailyLogHasUnsavedChanges) {
+            setDailyLogDraftStatus('Another manager saved updates. Refresh when ready to pull latest.', 'warning');
+            return;
+        }
+
+        setDailyLogDraftStatus('New updates detected. Reloading latest Daily Log...', 'success');
+        window.setTimeout(() => window.location.reload(), 350);
+    } catch (error) {
+        console.debug('Daily Log live update check skipped:', error);
+    }
+}
+
+function startDailyLogLiveUpdates() {
+    window.clearInterval(dailyLogLivePollTimer);
+    checkDailyLogLiveUpdates();
+    dailyLogLivePollTimer = window.setInterval(checkDailyLogLiveUpdates, DAILY_LOG_LIVE_POLL_MS);
+}
+
+function setDailyLogDraftStatus(message, tone = 'muted') {
+    const status = document.getElementById('dailyLogDraftStatus');
+    const topStatus = document.getElementById('top_draft_status');
+    if (status) {
+        status.textContent = message;
+        status.classList.remove('text-muted', 'text-success', 'text-warning', 'text-danger');
+        if (tone === 'success') {
+            status.classList.add('text-success');
+        } else if (tone === 'warning') {
+            status.classList.add('text-warning');
+        } else if (tone === 'danger') {
+            status.classList.add('text-danger');
+        } else {
+            status.classList.add('text-muted');
+        }
+    }
+    if (topStatus) {
+        topStatus.textContent = message;
+    }
+}
+
+function syncDailyLogSummary() {
+    const employeeCountEl = document.getElementById('top_employee_count');
+    const expectedDepositSource = document.getElementById('expected_deposit');
+    const cashDifferenceSource = document.getElementById('cash_difference');
+    const expectedDepositTarget = document.getElementById('top_expected_deposit');
+    const cashDifferenceTarget = document.getElementById('top_cash_difference');
+
+    if (employeeCountEl) {
+        employeeCountEl.textContent = String(employees.length);
+    }
+    if (expectedDepositSource && expectedDepositTarget) {
+        expectedDepositTarget.textContent = expectedDepositSource.textContent || '0.00';
+    }
+    if (cashDifferenceSource && cashDifferenceTarget) {
+        cashDifferenceTarget.textContent = cashDifferenceSource.textContent || '0.00';
+    }
+}
+
+function setFieldValidationState(fieldId, isValid) {
+    const field = document.getElementById(fieldId);
+    if (!field) {
+        return;
+    }
+
+    field.classList.toggle('is-invalid', !isValid);
+    field.classList.toggle('is-valid', isValid);
+}
+
+function clearEmployeeValidationStates() {
+    [
+        'emp_name', 'emp_cash', 'emp_cc_tips', 'emp_visa', 'emp_mastercard',
+        'emp_amex', 'emp_discover', 'emp_beer', 'emp_liquor', 'emp_wine',
+        'emp_food', 'emp_voids'
+    ].forEach(fieldId => setFieldValidationState(fieldId, true));
+}
+
+function validateEmployeeForm() {
+    clearEmployeeValidationStates();
+
+    const nameField = document.getElementById('emp_name');
+    const name = nameField ? nameField.value.trim() : '';
+    if (!name) {
+        setFieldValidationState('emp_name', false);
+        setDailyLogDraftStatus('Enter a name before saving the entry.', 'warning');
+        return false;
+    }
+
+    const numericFields = ['emp_cash', 'emp_cc_tips', 'emp_visa', 'emp_mastercard', 'emp_amex', 'emp_discover', 'emp_beer', 'emp_liquor', 'emp_wine', 'emp_food', 'emp_voids'];
+    let isValid = true;
+
+    numericFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (!field) {
+            return;
+        }
+
+        const value = parseFloat(field.value);
+        const validValue = !Number.isNaN(value) && value >= 0;
+        setFieldValidationState(fieldId, validValue);
+
+        if (!validValue) {
+            isValid = false;
+        }
+    });
+
+    if (!isValid) {
+        setDailyLogDraftStatus('Fix the highlighted amounts before saving.', 'warning');
+    }
+
+    return isValid;
+}
+
+function captureCashDeductions() {
+    return Array.from(document.querySelectorAll('.cash-deduction-row')).map(row => ({
+        desc: row.querySelector('input[name="deduction_desc"]')?.value || '',
+        location: row.querySelector('input[name="deduction_location"]')?.value || '',
+        amount: row.querySelector('input[name="deduction_amount"]')?.value || '0'
+    }));
+}
+
+function restoreCashDeductions(rows) {
+    const container = document.getElementById('cashDeductionsContainer');
+    if (!container || !Array.isArray(rows) || rows.length === 0) {
+        return;
+    }
+
+    const existing = container.querySelectorAll('.cash-deduction-row');
+    if (existing.length > 0) {
+        container.innerHTML = '';
+    }
+
+    rows.forEach((row, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'row mb-2 cash-deduction-row g-2';
+        wrapper.innerHTML = `
+            <div class="col-12 col-md-4">
+                <input type="text" class="form-control form-control-sm" name="deduction_desc" placeholder="Description" value="${row.desc || ''}">
+            </div>
+            <div class="col-12 col-md-4">
+                <input type="text" class="form-control form-control-sm" name="deduction_location" placeholder="Location" value="${row.location || ''}">
+            </div>
+            <div class="col-8 col-md-3">
+                <input type="number" class="form-control form-control-sm cash-deduction-amount" name="deduction_amount" placeholder="0.00" step="0.01" value="${row.amount || '0'}" onchange="calculateDeposit()">
+            </div>
+            <div class="col-4 col-md-1">
+                <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateDeposit()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(wrapper);
+    });
+}
+
+function saveDailyLogDraft() {
+    if (!dailyLogDraftReady) {
+        return;
+    }
+
+    const payload = {
+        savedAt: new Date().toISOString(),
+        employees: employees,
+        form: {
+            emp_name: document.getElementById('emp_name')?.value || '',
+            emp_shift: document.getElementById('emp_shift')?.value || 'Day',
+            emp_area: document.getElementById('emp_area')?.value || 'Dining',
+            emp_cash: document.getElementById('emp_cash')?.value || '0.00',
+            emp_cc_tips: document.getElementById('emp_cc_tips')?.value || '0.00',
+            emp_cash_diff: document.getElementById('emp_cash_diff')?.value || '0.00',
+            emp_visa: document.getElementById('emp_visa')?.value || '0.00',
+            emp_mastercard: document.getElementById('emp_mastercard')?.value || '0.00',
+            emp_amex: document.getElementById('emp_amex')?.value || '0.00',
+            emp_discover: document.getElementById('emp_discover')?.value || '0.00',
+            emp_beer: document.getElementById('emp_beer')?.value || '0.00',
+            emp_liquor: document.getElementById('emp_liquor')?.value || '0.00',
+            emp_wine: document.getElementById('emp_wine')?.value || '0.00',
+            emp_food: document.getElementById('emp_food')?.value || '0.00',
+            emp_voids: document.getElementById('emp_voids')?.value || '0.00'
+        },
+        cashDrawer: {
+            pennies: document.querySelector('input[name="pennies"]')?.value || '0',
+            nickels: document.querySelector('input[name="nickels"]')?.value || '0',
+            dimes: document.querySelector('input[name="dimes"]')?.value || '0',
+            quarters: document.querySelector('input[name="quarters"]')?.value || '0',
+            ones: document.querySelector('input[name="ones"]')?.value || '0',
+            fives: document.querySelector('input[name="fives"]')?.value || '0',
+            tens: document.querySelector('input[name="tens"]')?.value || '0',
+            twenties: document.querySelector('input[name="twenties"]')?.value || '0',
+            fifties: document.querySelector('input[name="fifties"]')?.value || '0',
+            hundreds: document.querySelector('input[name="hundreds"]')?.value || '0'
+        },
+        deductions: captureCashDeductions()
+    };
+
+    try {
+        localStorage.setItem(getDailyLogDraftKey(), JSON.stringify(payload));
+        setDailyLogDraftStatus('Draft saved just now', 'success');
+    } catch (error) {
+        console.error('Failed to save draft:', error);
+        setDailyLogDraftStatus('Draft save failed', 'danger');
+    }
+}
+
+function scheduleDailyLogDraftSave() {
+    if (!dailyLogDraftReady) {
+        return;
+    }
+
+    markDailyLogDirty();
+    window.clearTimeout(dailyLogDraftTimer);
+    dailyLogDraftTimer = window.setTimeout(saveDailyLogDraft, 350);
+    setDailyLogDraftStatus('Saving draft...', 'muted');
+}
+
+function clearDailyLogDraft() {
+    try {
+        localStorage.removeItem(getDailyLogDraftKey());
+        dailyLogHasUnsavedChanges = false;
+        setDailyLogDraftStatus('Draft cleared', 'muted');
+    } catch (error) {
+        console.error('Failed to clear draft:', error);
+    }
+}
+
+function restoreDailyLogDraft() {
+    try {
+        const stored = localStorage.getItem(getDailyLogDraftKey());
+        if (!stored) {
+            setDailyLogDraftStatus('Draft sync off');
+            return;
+        }
+
+        const draft = JSON.parse(stored);
+        if (!draft || (!draft.employees && !draft.form && !draft.cashDrawer)) {
+            return;
+        }
+
+        const draftEmployeeCount = Array.isArray(draft.employees) ? draft.employees.length : 0;
+        if (initialServerEmployeeCount > 0 && draftEmployeeCount === 0) {
+            localStorage.removeItem(getDailyLogDraftKey());
+            setDailyLogDraftStatus('Ignored empty local draft because saved log data already exists.', 'warning');
+            return;
+        }
+
+        if (initialServerEmployeeCount > 0 && draftEmployeeCount < initialServerEmployeeCount) {
+            const keepServerData = confirm(`Saved Daily Log has ${initialServerEmployeeCount} employees, but local draft only has ${draftEmployeeCount}. Restore older draft anyway?`);
+            if (!keepServerData) {
+                setDailyLogDraftStatus('Using saved server data.', 'success');
+                return;
+            }
+        }
+
+        const restored = confirm('An unsaved Daily Log draft was found for this date and location. Restore it now?');
+        if (!restored) {
+            return;
+        }
+
+        employees = Array.isArray(draft.employees) ? draft.employees : employees;
+        if (draft.form) {
+            Object.entries(draft.form).forEach(([key, value]) => {
+                const field = document.getElementById(key);
+                if (field) {
+                    field.value = value;
+                }
+            });
+        }
+
+        if (draft.cashDrawer) {
+            Object.entries(draft.cashDrawer).forEach(([key, value]) => {
+                const field = document.querySelector(`input[name="${key}"]`);
+                if (field) {
+                    field.value = value;
+                }
+            });
+        }
+
+        if (Array.isArray(draft.deductions) && draft.deductions.length > 0) {
+            restoreCashDeductions(draft.deductions);
+        }
+
+        dailyLogHasUnsavedChanges = true;
+
+        updateEmpCreditTotal();
+        updateCashDifference();
+        updateEmployeeList();
+        updateTotals();
+        calculateDrawerTotal();
+        calculateDeposit();
+        syncDailyLogSummary();
+
+        const savedAt = draft.savedAt ? new Date(draft.savedAt) : null;
+        setDailyLogDraftStatus(savedAt && !Number.isNaN(savedAt.getTime()) ? `Draft restored from ${savedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Draft restored', 'success');
+    } catch (error) {
+        console.error('Failed to restore draft:', error);
+        setDailyLogDraftStatus('Draft restore failed', 'danger');
+    }
+}
 
 function changeLocation(locationId) {
     const date = document.getElementById('dateSelector').value;
@@ -952,6 +1496,202 @@ function toggleSection(sectionId) {
     }
 }
 
+function isBulkMobileView() {
+    return window.matchMedia('(max-width: 767.98px)').matches;
+}
+
+function getBulkEntryContainer() {
+    return isBulkMobileView()
+        ? document.getElementById('bulkEntryMobileCards')
+        : document.getElementById('bulkEntryRows');
+}
+
+function getBulkEmployeeDataFromElement(element) {
+    return {
+        name: element.querySelector(`[id$="_name"]`)?.value || '',
+        file_name: element.querySelector(`[id$="_file_name"]`)?.value || '',
+        shift: element.querySelector(`[id$="_shift"]`)?.value || 'Day',
+        area: element.querySelector(`[id$="_area"]`)?.value || 'Dining',
+        cash: parseFloat(element.querySelector(`[id$="_cash"]`)?.value) || 0,
+        cc_tips: parseFloat(element.querySelector(`[id$="_cc_tips"]`)?.value) || 0,
+        visa: parseFloat(element.querySelector(`[id$="_visa"]`)?.value) || 0,
+        mastercard: parseFloat(element.querySelector(`[id$="_mastercard"]`)?.value) || 0,
+        amex: parseFloat(element.querySelector(`[id$="_amex"]`)?.value) || 0,
+        discover: parseFloat(element.querySelector(`[id$="_discover"]`)?.value) || 0,
+        beer: parseFloat(element.querySelector(`[id$="_beer"]`)?.value) || 0,
+        liquor: parseFloat(element.querySelector(`[id$="_liquor"]`)?.value) || 0,
+        wine: parseFloat(element.querySelector(`[id$="_wine"]`)?.value) || 0,
+        food: parseFloat(element.querySelector(`[id$="_food"]`)?.value) || 0,
+        voids: parseFloat(element.querySelector(`[id$="_voids"]`)?.value) || 0
+    };
+}
+
+function syncBulkCardTitle(rowId) {
+    const card = document.querySelector(`[data-bulk-row-id="${rowId}"]`);
+    if (!card) {
+        return;
+    }
+
+    const name = document.getElementById(`${rowId}_name`)?.value?.trim() || 'New Employee';
+    const title = card.querySelector('.bulk-card-title');
+    if (title) {
+        title.textContent = name;
+    }
+}
+
+function toggleBulkCardDetails(rowId) {
+    const details = document.getElementById(`${rowId}_details`);
+    const button = document.getElementById(`${rowId}_details_toggle`);
+    if (!details || !button) {
+        return;
+    }
+
+    const isHidden = details.classList.contains('d-none');
+    details.classList.toggle('d-none');
+    button.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    button.innerHTML = isHidden
+        ? '<i class="bi bi-chevron-up me-1"></i>Less'
+        : '<i class="bi bi-chevron-down me-1"></i>More';
+}
+
+function buildBulkEmployeeMarkup(rowId, empData, mode) {
+    const fileName = empData.file_name || '';
+    const name = empData.name || '';
+    const defaults = getDailyLogDefaults();
+    const shift = empData.shift || defaults.shift;
+    const area = empData.area || defaults.area;
+    const toCurrencyInputValue = (value) => {
+        const numeric = Number(value) || 0;
+        return numeric > 0 ? numeric.toFixed(2) : '';
+    };
+    const cash = toCurrencyInputValue(empData.cash);
+    const ccTips = toCurrencyInputValue(empData.cc_tips);
+    const visa = toCurrencyInputValue(empData.visa);
+    const mastercard = toCurrencyInputValue(empData.mastercard);
+    const amex = toCurrencyInputValue(empData.amex);
+    const discover = toCurrencyInputValue(empData.discover);
+    const beer = toCurrencyInputValue(empData.beer);
+    const liquor = toCurrencyInputValue(empData.liquor);
+    const wine = toCurrencyInputValue(empData.wine);
+    const food = toCurrencyInputValue(empData.food);
+    const voids = toCurrencyInputValue(empData.voids);
+
+    if (mode === 'mobile') {
+        return `
+            <div class="bulk-entry-card card mb-2" data-bulk-row-id="${rowId}">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                        <div>
+                            <div class="fw-semibold bulk-card-title">${name || 'New Employee'}</div>
+                            <div class="text-muted small">${fileName || 'Manual entry'}</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeBulkRow('${rowId}')" title="Remove row">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label small mb-1">Name</label>
+                            <input type="text" class="form-control form-control-sm" id="${rowId}_name" list="employeeNameList" placeholder="Name" value="${name}" oninput="syncBulkCardTitle('${rowId}')">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small mb-1">Shift</label>
+                            <select class="form-select form-select-sm" id="${rowId}_shift">
+                                <option value="Day" ${shift === 'Day' ? 'selected' : ''}>Day</option>
+                                <option value="Night" ${shift === 'Night' ? 'selected' : ''}>Night</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small mb-1">Area</label>
+                            <select class="form-select form-select-sm" id="${rowId}_area">
+                                <option value="Dining" ${area === 'Dining' ? 'selected' : ''}>Dining</option>
+                                <option value="Bar" ${area === 'Bar' ? 'selected' : ''}>Bar</option>
+                                <option value="To Go" ${area === 'To Go' ? 'selected' : ''}>To Go</option>
+                            </select>
+                        </div>
+                        <div class="col-6"><label class="form-label small mb-1">Cash</label><input type="number" class="form-control form-control-sm" id="${rowId}_cash" step="0.01" value="${cash}"></div>
+                        <div class="col-6"><label class="form-label small mb-1">CC Tips</label><input type="number" class="form-control form-control-sm" id="${rowId}_cc_tips" step="0.01" value="${ccTips}"></div>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100 bulk-details-toggle" id="${rowId}_details_toggle" onclick="toggleBulkCardDetails('${rowId}')" aria-expanded="false">
+                            <i class="bi bi-chevron-down me-1"></i>More
+                        </button>
+                    </div>
+                    <div class="bulk-card-details d-none mt-3" id="${rowId}_details">
+                        <div class="row g-2">
+                            <div class="col-6"><label class="form-label small mb-1">Visa</label><input type="number" class="form-control form-control-sm" id="${rowId}_visa" step="0.01" value="${visa}"></div>
+                            <div class="col-6"><label class="form-label small mb-1">Mastercard</label><input type="number" class="form-control form-control-sm" id="${rowId}_mastercard" step="0.01" value="${mastercard}"></div>
+                            <div class="col-6"><label class="form-label small mb-1">Amex</label><input type="number" class="form-control form-control-sm" id="${rowId}_amex" step="0.01" value="${amex}"></div>
+                            <div class="col-6"><label class="form-label small mb-1">Discover</label><input type="number" class="form-control form-control-sm" id="${rowId}_discover" step="0.01" value="${discover}"></div>
+                            <div class="col-6"><label class="form-label small mb-1">Beer</label><input type="number" class="form-control form-control-sm" id="${rowId}_beer" step="0.01" value="${beer}"></div>
+                            <div class="col-6"><label class="form-label small mb-1">Liquor</label><input type="number" class="form-control form-control-sm" id="${rowId}_liquor" step="0.01" value="${liquor}"></div>
+                            <div class="col-6"><label class="form-label small mb-1">Wine</label><input type="number" class="form-control form-control-sm" id="${rowId}_wine" step="0.01" value="${wine}"></div>
+                            <div class="col-6"><label class="form-label small mb-1">Food</label><input type="number" class="form-control form-control-sm" id="${rowId}_food" step="0.01" value="${food}"></div>
+                            <div class="col-12"><label class="form-label small mb-1">Voids</label><input type="number" class="form-control form-control-sm" id="${rowId}_voids" step="0.01" value="${voids}"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <tr id="${rowId}">
+            <td><input type="text" class="form-control form-control-sm" id="${rowId}_name" list="employeeNameList" placeholder="Name" value="${name}" style="min-width: 130px;"></td>
+            <td><input type="text" class="form-control form-control-sm" id="${rowId}_file_name" placeholder="File Name" value="${fileName}" readonly style="background-color: #f8f9fa; min-width: 200px;"></td>
+            <td><select class="form-select form-select-sm" id="${rowId}_shift"><option value="Day" ${shift === 'Day' ? 'selected' : ''}>Day</option><option value="Night" ${shift === 'Night' ? 'selected' : ''}>Night</option></select></td>
+            <td><select class="form-select form-select-sm" id="${rowId}_area"><option value="Dining" ${area === 'Dining' ? 'selected' : ''}>Dining</option><option value="Bar" ${area === 'Bar' ? 'selected' : ''}>Bar</option><option value="To Go" ${area === 'To Go' ? 'selected' : ''}>To Go</option></select></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_cash" step="0.01" value="${cash}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_cc_tips" step="0.01" value="${ccTips}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_visa" step="0.01" value="${visa}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_mastercard" step="0.01" value="${mastercard}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_amex" step="0.01" value="${amex}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_discover" step="0.01" value="${discover}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_beer" step="0.01" value="${beer}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_liquor" step="0.01" value="${liquor}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_wine" step="0.01" value="${wine}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_food" step="0.01" value="${food}"></td>
+            <td><input type="number" class="form-control form-control-sm" id="${rowId}_voids" step="0.01" value="${voids}"></td>
+            <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeBulkRow('${rowId}')" title="Remove row"><i class="bi bi-x-lg"></i></button></td>
+        </tr>
+    `;
+}
+
+function renderBulkEntryRow(rowId, empData) {
+    const container = getBulkEntryContainer();
+    if (!container) {
+        return;
+    }
+
+    const mode = isBulkMobileView() ? 'mobile' : 'desktop';
+    const wrapper = document.createElement(isBulkMobileView() ? 'div' : 'tbody');
+    wrapper.innerHTML = buildBulkEmployeeMarkup(rowId, empData, mode);
+    const rowElement = wrapper.firstElementChild;
+    container.appendChild(rowElement);
+    if (rowElement) {
+        applyNumericKeyboardHints(rowElement);
+    }
+}
+
+function syncBulkEntryPresentation() {
+    const table = document.getElementById('bulkEntryRows');
+    const cards = document.getElementById('bulkEntryMobileCards');
+    const target = getBulkEntryContainer();
+    const source = isBulkMobileView() ? table : cards;
+
+    if (!target || !source || source.children.length === 0 || target.children.length > 0) {
+        return;
+    }
+
+    const rows = Array.from(source.children).map(element => ({
+        rowId: element.id || element.getAttribute('data-bulk-row-id') || `bulk_row_${Date.now()}`,
+        data: getBulkEmployeeDataFromElement(element)
+    }));
+
+    source.innerHTML = '';
+    rows.forEach(({ rowId, data }) => renderBulkEntryRow(rowId, data));
+}
+
 function updateEmpCreditTotal() {
     const visa = parseFloat(document.getElementById('emp_visa').value) || 0;
     const mastercard = parseFloat(document.getElementById('emp_mastercard').value) || 0;
@@ -976,8 +1716,22 @@ function updateCashDifference() {
     }
 }
 
-function addEmployeeEntry() {
+function focusEmployeeNameField() {
+    window.requestAnimationFrame(() => {
+        const nameField = document.getElementById('emp_name');
+        if (nameField) {
+            nameField.focus();
+            nameField.select();
+        }
+    });
+}
+
+function addEmployeeEntry(keepAdding = false) {
     try {
+        if (!validateEmployeeForm()) {
+            return;
+        }
+
         const name = document.getElementById('emp_name').value.trim();
         if (!name) {
             alert('Please enter employee name');
@@ -1015,21 +1769,30 @@ function addEmployeeEntry() {
         } else {
             employees.push(employee);
         }
+
+        rememberDailyLogEmployeeName(employee.name);
+        saveDailyLogDefaults({ shift: employee.shift, area: employee.area });
         
         updateEmployeeList();
-        clearEmployeeForm();
+        clearEmployeeForm(true);
         updateTotals();
+        clearEmployeeValidationStates();
+
+        if (keepAdding) {
+            focusEmployeeNameField();
+        }
     } catch (error) {
         alert('Error adding employee: ' + error.message);
         console.error('Error in addEmployeeEntry:', error);
     }
 }
 
-function clearEmployeeForm() {
+function clearEmployeeForm(preserveDefaults = false) {
+    const defaults = preserveDefaults ? getDailyLogDefaults() : { shift: 'Day', area: 'Dining' };
     const fields = [
         { id: 'emp_name', value: '' },
-        { id: 'emp_shift', value: 'Day' },
-        { id: 'emp_area', value: 'Dining' },
+        { id: 'emp_shift', value: defaults.shift },
+        { id: 'emp_area', value: defaults.area },
         { id: 'emp_cash', value: '0.00' },
         { id: 'emp_cc_tips', value: '0.00' },
         { id: 'emp_cash_diff', value: '0.00' },
@@ -1052,6 +1815,7 @@ function clearEmployeeForm() {
     });
     
     updateEmpCreditTotal();
+    clearEmployeeValidationStates();
 }
 
 function editEmployee(index) {
@@ -1078,6 +1842,7 @@ function editEmployee(index) {
     // Update credit total display
     updateEmpCreditTotal();
     updateCashDifference();
+    clearEmployeeValidationStates();
     
     // Change form buttons to edit mode
     const formButtons = document.getElementById('formButtons');
@@ -1101,27 +1866,30 @@ function editEmployee(index) {
 
 function deleteEditingEmployee() {
     if (editingIndex !== null && confirm('Are you sure you want to delete this employee entry?')) {
-        employees.splice(editingIndex, 1);
+        removeEmployee(editingIndex, true);
         editingIndex = null;
         resetFormButtons();
-        clearEmployeeForm();
-        updateEmployeeList();
-        updateTotals();
+        clearEmployeeForm(true);
     }
 }
 
 function cancelEdit() {
     editingIndex = null;
     resetFormButtons();
-    clearEmployeeForm();
+    clearEmployeeForm(true);
 }
 
 function resetFormButtons() {
     const formButtons = document.getElementById('formButtons');
     formButtons.innerHTML = `
-        <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
-            <i class="bi bi-save"></i> Save Entry
-        </button>
+        <div class="d-grid gap-2">
+            <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
+                <i class="bi bi-save"></i> Save Entry
+            </button>
+            <button type="button" class="btn btn-outline-success w-100" onclick="addEmployeeEntry(true)">
+                <i class="bi bi-plus-circle"></i> Save & Add Another
+            </button>
+        </div>
     `;
 }
 
@@ -1138,9 +1906,10 @@ function toggleBulkEntry() {
         bulkSection.style.display = 'block';
         icon.classList.remove('bi-chevron-double-down');
         icon.classList.add('bi-chevron-double-up');
+        syncBulkEntryPresentation();
         
         // Add initial row if no rows exist
-        if (document.getElementById('bulkEntryRows').children.length === 0) {
+        if (getBulkEntryContainer().children.length === 0) {
             addBulkRow();
         }
     } else {
@@ -1151,53 +1920,17 @@ function toggleBulkEntry() {
 }
 
 function addBulkRow() {
-    const tbody = document.getElementById('bulkEntryRows');
+    syncBulkEntryPresentation();
+    const container = getBulkEntryContainer();
     
     // Check if already at max rows
-    if (tbody.children.length >= MAX_BULK_ROWS) {
+    if (container.children.length >= MAX_BULK_ROWS) {
         alert(`Maximum of ${MAX_BULK_ROWS} employees can be added at once in bulk mode.`);
         return;
     }
     
     const rowId = 'bulk_row_' + (++bulkRowCounter);
-    
-    const row = document.createElement('tr');
-    row.id = rowId;
-    row.innerHTML = `
-        <td><input type="text" class="form-control form-control-sm" id="${rowId}_name" list="employeeNameList" placeholder="Name"></td>
-        <td><input type="text" class="form-control form-control-sm" id="${rowId}_file_name" placeholder="File Name" readonly style="background-color: #f8f9fa; min-width: 200px;"></td>
-        <td>
-            <select class="form-select form-select-sm" id="${rowId}_shift">
-                <option value="Day">Day</option>
-                <option value="Night">Night</option>
-            </select>
-        </td>
-        <td>
-            <select class="form-select form-select-sm" id="${rowId}_area">
-                <option value="Dining">Dining</option>
-                <option value="Bar">Bar</option>
-                <option value="To Go">To Go</option>
-            </select>
-        </td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_cash" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_cc_tips" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_visa" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_mastercard" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_amex" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_discover" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_beer" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_liquor" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_wine" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_food" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td><input type="number" class="form-control form-control-sm" id="${rowId}_voids" step="0.01" value="0" readonly style="background-color: #f8f9fa;"></td>
-        <td class="text-center">
-            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeBulkRow('${rowId}')" title="Remove row">
-                <i class="bi bi-x-lg"></i>
-            </button>
-        </td>
-    `;
-    
-    tbody.appendChild(row);
+    renderBulkEntryRow(rowId, {});
     
     // Focus on the name field of the new row
     document.getElementById(rowId + '_name').focus();
@@ -1208,11 +1941,17 @@ function removeBulkRow(rowId) {
     if (row) {
         row.remove();
     }
+
+    const card = document.querySelector(`[data-bulk-row-id="${rowId}"]`);
+    if (card) {
+        card.remove();
+    }
 }
 
 function clearBulkEntries() {
-    const tbody = document.getElementById('bulkEntryRows');
-    const rowCount = tbody.getElementsByTagName('tr').length;
+    syncBulkEntryPresentation();
+    const container = getBulkEntryContainer();
+    const rowCount = container ? container.children.length : 0;
     
     if (rowCount === 0) {
         alert('No entries to clear.');
@@ -1220,19 +1959,20 @@ function clearBulkEntries() {
     }
     
     if (confirm(`Are you sure you want to clear all ${rowCount} row(s)? This cannot be undone.`)) {
-        tbody.innerHTML = '';
+        clearBulkEntryContainers();
         console.log('Bulk entries cleared');
     }
 }
 
 function saveBulkEntries() {
-    const tbody = document.getElementById('bulkEntryRows');
-    const rows = tbody.getElementsByTagName('tr');
+    syncBulkEntryPresentation();
+    const container = getBulkEntryContainer();
+    const rows = container ? container.children : [];
     
     let addedCount = 0;
     
     for (let row of rows) {
-        const rowId = row.id;
+        const rowId = row.id || row.getAttribute('data-bulk-row-id');
         const name = document.getElementById(rowId + '_name').value.trim();
         
         if (!name) continue; // Skip empty rows
@@ -1269,7 +2009,7 @@ function saveBulkEntries() {
         calculateRevenueCenters();
         
         // Clear bulk entry rows
-        tbody.innerHTML = '';
+        clearBulkEntryContainers();
         
         // Close bulk entry section
         toggleBulkEntry();
@@ -1515,19 +2255,19 @@ function parseBulkCSV(csvContent) {
 function fillBulkTableWithData(employeeDataArray) {
     console.log('fillBulkTableWithData called with:', employeeDataArray);
     
-    const tbody = document.getElementById('bulkEntryRows');
+    const container = getBulkEntryContainer();
     
-    if (!tbody) {
-        console.error('bulkEntryRows element not found!');
+    if (!container) {
+        console.error('Bulk entry container not found!');
         if (bulkImportQuietMode) {
-            throw new Error('Bulk entry table not found.');
+            throw new Error('Bulk entry container not found.');
         }
-        alert('Error: Bulk entry table not found. Please refresh the page.');
+        alert('Error: Bulk entry container not found. Please refresh the page.');
         return;
     }
     
     // Find existing rows and check which are blank (no name entered)
-    const existingRows = Array.from(tbody.getElementsByTagName('tr'));
+    const existingRows = Array.from(container.children);
     let blankRowIndex = -1;
     
     // Look for first blank row (no name or name is empty)
@@ -1544,7 +2284,7 @@ function fillBulkTableWithData(employeeDataArray) {
     if (blankRowIndex >= 0 && employeeDataArray.length === 1) {
         const empData = employeeDataArray[0];
         const blankRow = existingRows[blankRowIndex];
-        const rowId = blankRow.id;
+        const rowId = blankRow.id || blankRow.getAttribute('data-bulk-row-id');
         
         console.log('Filling existing blank row:', rowId);
         
@@ -1564,17 +2304,19 @@ function fillBulkTableWithData(employeeDataArray) {
         document.getElementById(rowId + '_wine').value = (empData.wine || 0).toFixed(2);
         document.getElementById(rowId + '_food').value = (empData.food || 0).toFixed(2);
         document.getElementById(rowId + '_voids').value = (empData.voids || 0).toFixed(2);
-        
-        // Update status icon
-        const hasData = (empData.cash || 0) > 0 || (empData.cc_tips || 0) > 0 || 
-                       (empData.visa || 0) > 0 || (empData.mastercard || 0) > 0 || 
-                       (empData.beer || 0) > 0 || (empData.food || 0) > 0;
-        
-        const statusCell = blankRow.querySelector('td:last-child');
-        if (statusCell) {
-            statusCell.innerHTML = hasData ? 
-                '<i class="bi bi-check-circle-fill text-success" title="Data imported successfully"></i>' : 
-                '<i class="bi bi-x-circle-fill text-danger" title="No data found"></i>';
+
+        if (isBulkMobileView()) {
+            syncBulkCardTitle(rowId);
+        } else {
+            const hasData = (empData.cash || 0) > 0 || (empData.cc_tips || 0) > 0 ||
+                           (empData.visa || 0) > 0 || (empData.mastercard || 0) > 0 ||
+                           (empData.beer || 0) > 0 || (empData.food || 0) > 0;
+            const statusCell = blankRow.querySelector('td:last-child');
+            if (statusCell) {
+                statusCell.innerHTML = hasData ?
+                    '<i class="bi bi-check-circle-fill text-success" title="Data imported successfully"></i>' :
+                    '<i class="bi bi-x-circle-fill text-danger" title="No data found"></i>';
+            }
         }
         
         console.log('Blank row filled successfully');
@@ -1610,51 +2352,7 @@ function fillBulkTableWithData(employeeDataArray) {
         console.log('Creating row for:', empData);
         
         const rowId = 'bulk_row_' + (++bulkRowCounter);
-        
-        // Check if data import was successful (has at least some non-zero values)
-        const hasData = (empData.cash || 0) > 0 || (empData.cc_tips || 0) > 0 || 
-                       (empData.visa || 0) > 0 || (empData.mastercard || 0) > 0 || 
-                       (empData.beer || 0) > 0 || (empData.food || 0) > 0;
-        
-        console.log('Has data:', hasData);
-        
-        const statusIcon = hasData ? 
-            '<i class="bi bi-check-circle-fill text-success" title="Data imported successfully"></i>' : 
-            '<i class="bi bi-x-circle-fill text-danger" title="No data found"></i>';
-        
-        const row = document.createElement('tr');
-        row.id = rowId;
-        row.innerHTML = `
-            <td><input type="text" class="form-control form-control-sm" id="${rowId}_name" list="employeeNameList" placeholder="Name" value="${empData.name || ''}" style="min-width: 130px;"></td>
-            <td><input type="text" class="form-control form-control-sm" id="${rowId}_file_name" placeholder="File Name" value="${empData.file_name || ''}" readonly style="background-color: #f8f9fa; min-width: 200px;"></td>
-            <td>
-                <select class="form-select form-select-sm" id="${rowId}_shift">
-                    <option value="Day" ${empData.shift === 'Day' ? 'selected' : ''}>Day</option>
-                    <option value="Night" ${empData.shift === 'Night' ? 'selected' : ''}>Night</option>
-                </select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm" id="${rowId}_area">
-                    <option value="Dining" ${empData.area === 'Dining' ? 'selected' : ''}>Dining</option>
-                    <option value="Bar" ${empData.area === 'Bar' ? 'selected' : ''}>Bar</option>
-                    <option value="To Go" ${empData.area === 'To Go' ? 'selected' : ''}>To Go</option>
-                </select>
-            </td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_cash" step="0.01" value="${(empData.cash || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_cc_tips" step="0.01" value="${(empData.cc_tips || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_visa" step="0.01" value="${(empData.visa || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_mastercard" step="0.01" value="${(empData.mastercard || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_amex" step="0.01" value="${(empData.amex || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_discover" step="0.01" value="${(empData.discover || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_beer" step="0.01" value="${(empData.beer || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_liquor" step="0.01" value="${(empData.liquor || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_wine" step="0.01" value="${(empData.wine || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_food" step="0.01" value="${(empData.food || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td><input type="number" class="form-control form-control-sm" id="${rowId}_voids" step="0.01" value="${(empData.voids || 0).toFixed(2)}" readonly style="background-color: #f8f9fa;"></td>
-            <td class="text-center">${statusIcon}</td>
-        `;
-        
-        tbody.appendChild(row);
+        renderBulkEntryRow(rowId, empData);
         console.log('Row added:', rowId);
     }
     
@@ -1676,6 +2374,7 @@ function updateEmployeeList() {
         
         // Update employee count
         document.getElementById('employeeCount').textContent = employees.length;
+        syncDailyLogSummary();
         
         // Check if filter is active and use filter function instead
         const filterSelect = document.getElementById('shiftFilter');
@@ -1711,6 +2410,7 @@ function updateEmployeeList() {
         
         // Update employee count
         document.getElementById('employeeCount').textContent = employees.length;
+        syncDailyLogSummary();
         
         // Create compact table view
         list.innerHTML = `
@@ -1783,8 +2483,62 @@ function updateEmployeeList() {
     }
 }
 
-function removeEmployee(index) {
-    employees.splice(index, 1);
+function showEmployeeUndo(removedEmployee, originalIndex) {
+    const toast = document.getElementById('employeeUndoToast');
+    const text = document.getElementById('employeeUndoText');
+    if (!toast || !text) {
+        return;
+    }
+
+    if (pendingEmployeeUndo?.timerId) {
+        clearTimeout(pendingEmployeeUndo.timerId);
+    }
+
+    pendingEmployeeUndo = {
+        employee: removedEmployee,
+        index: originalIndex,
+        timerId: window.setTimeout(() => {
+            dismissUndoEmployee();
+        }, 5000)
+    };
+
+    text.textContent = `${removedEmployee.name || 'Employee'} removed.`;
+    toast.classList.remove('d-none');
+}
+
+function dismissUndoEmployee() {
+    const toast = document.getElementById('employeeUndoToast');
+    if (toast) {
+        toast.classList.add('d-none');
+    }
+    if (pendingEmployeeUndo?.timerId) {
+        clearTimeout(pendingEmployeeUndo.timerId);
+    }
+    pendingEmployeeUndo = null;
+}
+
+function undoRemoveEmployee() {
+    if (!pendingEmployeeUndo || !pendingEmployeeUndo.employee) {
+        return;
+    }
+
+    const safeIndex = Math.max(0, Math.min(pendingEmployeeUndo.index, employees.length));
+    employees.splice(safeIndex, 0, pendingEmployeeUndo.employee);
+    dismissUndoEmployee();
+    updateEmployeeList();
+    updateTotals();
+    setDailyLogDraftStatus('Employee entry restored.', 'success');
+}
+
+function removeEmployee(index, skipConfirm = false) {
+    if (!skipConfirm && !confirm('Delete this employee entry?')) {
+        return;
+    }
+
+    const [removedEmployee] = employees.splice(index, 1);
+    if (removedEmployee) {
+        showEmployeeUndo(removedEmployee, index);
+    }
     updateEmployeeList();
     updateTotals();
 }
@@ -2068,8 +2822,15 @@ function calculateDrawerTotal() {
         total += count * value;
     });
     
-    document.getElementById('drawerTotal').textContent = total.toFixed(2);
-    document.getElementById('drawerTotalInput').value = total.toFixed(2);
+    const drawerTotalElement = document.getElementById('drawerTotal');
+    if (drawerTotalElement) {
+        drawerTotalElement.textContent = total.toFixed(2);
+    }
+
+    const drawerTotalInput = document.getElementById('drawerTotalInput');
+    if (drawerTotalInput) {
+        drawerTotalInput.value = total.toFixed(2);
+    }
     
     // Recalculate deposit when drawer changes
     calculateDeposit();
@@ -2077,13 +2838,14 @@ function calculateDrawerTotal() {
 
 function calculateDeposit() {
     // Get total sales from employee totals (not from old form fields)
-    const totalSales = parseFloat(document.getElementById('total_sales_calc').textContent) || 0;
-    const totalCash = parseFloat(document.getElementById('total_cash').textContent) || 0;
-    const totalCCTips = parseFloat(document.getElementById('total_cc_tips').textContent) || 0;
-    const totalCredit = parseFloat(document.getElementById('total_credit').textContent) || 0;
+    const totalSales = parseFloat(document.getElementById('total_sales_calc')?.textContent) || 0;
+    const totalCash = parseFloat(document.getElementById('total_cash')?.textContent) || 0;
+    const totalCCTips = parseFloat(document.getElementById('total_cc_tips')?.textContent) || 0;
+    const totalCredit = parseFloat(document.getElementById('total_credit')?.textContent) || 0;
     
     // Get cash in drawer
-    const drawerCash = parseFloat(document.getElementById('drawerTotalInput').value) || 0;
+    const drawerInput = document.getElementById('drawerTotalInput');
+    const drawerCash = parseFloat(drawerInput?.value) || 0;
     
     // Get total cash deductions
     let deductionsTotal = 0;
@@ -2091,7 +2853,10 @@ function calculateDeposit() {
         deductionsTotal += parseFloat(input.value) || 0;
     });
     
-    document.getElementById('totalCashDeductions').textContent = deductionsTotal.toFixed(2);
+    const totalCashDeductionsEl = document.getElementById('totalCashDeductions');
+    if (totalCashDeductionsEl) {
+        totalCashDeductionsEl.textContent = deductionsTotal.toFixed(2);
+    }
     
     // Update Deposit section with element checks
     const depositTotalCashEl = document.getElementById('deposit_total_cash');
@@ -2106,6 +2871,13 @@ function calculateDeposit() {
     // Deposit = Total Cash - Total CC Tips - Cash Deductions
     const expectedDeposit = totalCash - totalCCTips - deductionsTotal;
     if (expectedDepositEl) expectedDepositEl.textContent = expectedDeposit.toFixed(2);
+
+    const formulaEl = document.getElementById('depositFormulaText');
+    if (formulaEl) {
+        formulaEl.textContent = `Formula: $${totalCash.toFixed(2)} - $${totalCCTips.toFixed(2)} - $${deductionsTotal.toFixed(2)} = $${expectedDeposit.toFixed(2)}`;
+        formulaEl.classList.toggle('text-danger', expectedDeposit < 0);
+        formulaEl.classList.toggle('text-muted', expectedDeposit >= 0);
+    }
     
     // Update hidden field for form submission
     const depositHiddenField = document.getElementById('deposit_amount_hidden');
@@ -2113,6 +2885,7 @@ function calculateDeposit() {
     
     // Update cash assistant difference
     calculateCashAssistant();
+    syncDailyLogSummary();
 }
 
 function calculateCashAssistant() {
@@ -2182,6 +2955,8 @@ function calculateCashAssistant() {
         differenceElement.textContent = difference.toFixed(2);
         differenceElement.style.display = ''; // Ensure it's visible
     }
+
+    syncDailyLogSummary();
 }
 
 function addCashDeductionRow() {
@@ -2208,6 +2983,7 @@ function addCashDeductionRow() {
         </div>
     `;
     container.appendChild(row);
+    applyNumericKeyboardHints(row);
 }
 
 function calculateRevenueCenters() {
@@ -2327,6 +3103,7 @@ function clearForm() {
         document.querySelectorAll('.cash-deduction-amount').forEach(input => input.value = 0);
         calculateDrawerTotal();
         calculateDeposit();
+        clearDailyLogDraft();
     }
 }
 
@@ -2572,10 +3349,14 @@ document.getElementById('dailyLogForm').addEventListener('submit', function(e) {
         hiddenField.value = JSON.stringify(employees);
     }
     console.log('Submitting with employees:', employees.length);
+    dailyLogHasUnsavedChanges = false;
+    clearDailyLogDraft();
 });
 
 // Initialize calculations on page load
 document.addEventListener('DOMContentLoaded', function() {
+    dailyLogDraftReady = true;
+
     // Load existing employees if any
     if (employees.length > 0) {
         updateEmployeeList();
@@ -2583,9 +3364,42 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTotals();
     calculateDrawerTotal();
     calculateDeposit();
+    syncDailyLogSummary();
     
     // Load employee names for autocomplete
     loadEmployeeNames();
+    applyDailyLogDefaults();
+    syncBulkEntryPresentation();
+    applyNumericKeyboardHints();
+
+    const nameField = document.getElementById('emp_name');
+    if (nameField) {
+        nameField.addEventListener('change', function() {
+            if (this.value.trim() && editingIndex === null) {
+                rememberDailyLogEmployeeName(this.value);
+                focusEmployeeShiftField();
+            }
+        });
+
+        nameField.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && this.value.trim()) {
+                event.preventDefault();
+                rememberDailyLogEmployeeName(this.value);
+                focusEmployeeShiftField();
+            }
+        });
+    }
+
+    restoreDailyLogDraft();
+
+    const draftInputs = document.querySelectorAll('#dailyLogForm input, #dailyLogForm select, #dailyLogForm textarea');
+    draftInputs.forEach(input => {
+        input.addEventListener('input', scheduleDailyLogDraftSave);
+        input.addEventListener('change', scheduleDailyLogDraftSave);
+    });
+
+    startDailyLogLiveUpdates();
+    window.addEventListener('beforeunload', saveDailyLogDraft);
 });
 
 // Load employee names from backend for autocomplete
@@ -2600,7 +3414,7 @@ function loadEmployeeNames() {
             console.log('Employee names data:', data);
             if (data.success && data.employees && data.employees.length > 0) {
                 console.log('Populating employee list with', data.employees.length, 'employees');
-                populateEmployeeNameList(data.employees);
+                populateEmployeeNameList(data.employees, employees);
             } else {
                 console.log('No employees found in backend, trying localStorage');
                 loadEmployeeNamesFromLocalStorage();
@@ -2620,9 +3434,10 @@ function loadEmployeeNamesFromLocalStorage() {
         if (stored) {
             const employees = JSON.parse(stored);
             console.log('Loaded', employees.length, 'employees from localStorage');
-            populateEmployeeNameList(employees);
+            populateEmployeeNameList(employees, employees);
         } else {
             console.log('No employees in localStorage either');
+            populateEmployeeNameList([], employees);
         }
     } catch (e) {
         console.error('Error loading from localStorage:', e);
@@ -2630,7 +3445,7 @@ function loadEmployeeNamesFromLocalStorage() {
 }
 
 // Populate the datalist with employee names
-function populateEmployeeNameList(employeeList) {
+function populateEmployeeNameList(employeeList, recentNames = []) {
     const datalist = document.getElementById('employeeNameList');
     if (!datalist) {
         console.error('Datalist element not found');
@@ -2638,14 +3453,15 @@ function populateEmployeeNameList(employeeList) {
     }
     
     datalist.innerHTML = '';
+    const combinedNames = getDailyLogAllRecentNames([...(recentNames || []), ...(employeeList || [])]);
     
-    employeeList.forEach(emp => {
+    combinedNames.forEach(name => {
         const option = document.createElement('option');
-        option.value = `${emp.firstName} ${emp.lastName}`;
+        option.value = name;
         datalist.appendChild(option);
     });
     
-    console.log('Added', employeeList.length, 'employee names to datalist');
+    console.log('Added', combinedNames.length, 'employee names to datalist');
 }
 
 function preparePrintSummary() {

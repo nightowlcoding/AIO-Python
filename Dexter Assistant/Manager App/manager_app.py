@@ -1083,6 +1083,45 @@ def daily_log():
                          selected_location_id=selected_location)
 
 
+@app.route('/api/daily-log/version')
+@login_required
+@company_required
+def api_daily_log_version():
+    """Return a lightweight version marker for Daily Log live updates."""
+    selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    selected_location = request.args.get('location_id') or session.get('selected_location_id')
+
+    if selected_location:
+        data_dir = f"company_data/{current_user.current_company_id}/locations/{selected_location}/daily_logs"
+    else:
+        data_dir = f"company_data/{current_user.current_company_id}/daily_logs"
+
+    date_prefix = selected_date.replace('-', '') + '_'
+    latest_mtime = 0.0
+    latest_file = None
+
+    if os.path.isdir(data_dir):
+        for filename in os.listdir(data_dir):
+            if not (filename.startswith(date_prefix) and filename.endswith('.csv')):
+                continue
+            full_path = os.path.join(data_dir, filename)
+            try:
+                mtime = os.path.getmtime(full_path)
+            except OSError:
+                continue
+            if mtime >= latest_mtime:
+                latest_mtime = mtime
+                latest_file = filename
+
+    return jsonify({
+        'success': True,
+        'date': selected_date,
+        'location_id': str(selected_location) if selected_location else None,
+        'version': int(latest_mtime * 1000),
+        'latest_file': latest_file,
+    })
+
+
 @app.route('/cash-manager', methods=['GET', 'POST'])
 @login_required
 @company_required
@@ -2599,6 +2638,19 @@ def employee_profile(company_id, filename):
 
 
 if __name__ == '__main__':
-    # Development server
-    app.run(debug=True, host='0.0.0.0', port=8000, use_reloader=False)
+    host = os.environ.get('MGR_HOST', '0.0.0.0')
+    port = int(os.environ.get('MGR_PORT', '8000'))
+    debug_mode = os.environ.get('MGR_DEBUG', '0') == '1'
+
+    if debug_mode:
+        app.run(debug=True, host=host, port=port, use_reloader=False)
+    else:
+        try:
+            from waitress import serve  # type: ignore[import]
+            waitress_threads = int(os.environ.get('MGR_WAITRESS_THREADS', '8'))
+            print(f"[managerapp] Running via waitress on {host}:{port} (threads={waitress_threads})")
+            serve(app, host=host, port=port, threads=waitress_threads)
+        except ImportError:
+            print('[managerapp] waitress not installed — falling back to Flask dev server.')
+            app.run(debug=False, host=host, port=port, use_reloader=False)
 

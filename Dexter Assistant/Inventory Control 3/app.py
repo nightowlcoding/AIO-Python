@@ -3830,4 +3830,19 @@ _install_dexter_ui_patch()
 if __name__ == "__main__":
     runtime_app = globals().get("app")
     if runtime_app is not None:
-        runtime_app.run()
+        host = os.getenv("IC3_HOST", "127.0.0.1")
+        port = int(os.getenv("IC3_PORT", "5003"))
+        force_prod = os.getenv("IC3_FORCE_PROD", "1").strip().lower() not in {"0", "false", "no"}
+        use_waitress = os.getenv("IC3_USE_WAITRESS", "1").strip().lower() not in {"0", "false", "no"}
+
+        if force_prod and use_waitress:
+            try:
+                from waitress import serve  # type: ignore[import]
+                waitress_threads = int(os.getenv("IC3_WAITRESS_THREADS", "8"))
+                print(f"[ic3] Running via waitress on {host}:{port} (threads={waitress_threads})")
+                serve(runtime_app, host=host, port=port, threads=waitress_threads)
+            except ImportError:
+                print("[ic3] waitress not installed — falling back to Flask dev server.")
+                runtime_app.run(host=host, port=port, debug=False, use_reloader=False)
+        else:
+            runtime_app.run(host=host, port=port)

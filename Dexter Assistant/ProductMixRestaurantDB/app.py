@@ -7427,6 +7427,19 @@ def handle_rate_limit(error):
 if __name__ == "__main__":
     debug_mode = os.environ.get("PM_DEBUG", "1") == "1"
     should_open_browser = os.environ.get("PM_OPEN_BROWSER", "1") == "1"
+    host = os.environ.get("PM_HOST", "127.0.0.1")
+    port = int(os.environ.get("PM_PORT", "5050"))
     if should_open_browser and (not debug_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
-        webbrowser.open("http://localhost:5050", new=0, autoraise=True)
-    app.run(debug=debug_mode, port=5050)
+        webbrowser.open(f"http://{host}:{port}", new=0, autoraise=True)
+
+    if debug_mode:
+        app.run(debug=True, host=host, port=port)
+    else:
+        try:
+            from waitress import serve  # type: ignore[import]
+            waitress_threads = int(os.environ.get("PM_WAITRESS_THREADS", "8"))
+            print(f"[productmix] Running via waitress on {host}:{port} (threads={waitress_threads})")
+            serve(app, host=host, port=port, threads=waitress_threads)
+        except ImportError:
+            print("[productmix] waitress not installed — falling back to Flask dev server.")
+            app.run(debug=False, host=host, port=port)

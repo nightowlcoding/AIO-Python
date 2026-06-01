@@ -51,16 +51,17 @@ DASHBOARD_HTML = """
         <style>
                 :root {
                     --bg:#f3f4f6;
-                        --panel:#ffffff;
-                        --ink:#1f2937;
-                        --muted:#6b7280;
-                        --ok:#166534;
-                        --bad:#991b1b;
-                    --accent:#22427A;
-                    --accent2:#1A335F;
-                        --edge:#d1d5db;
-                        --left:#f8fafc;
-                        --left2:#f3f4f6;
+                    --panel:#ffffff;
+                    --ink:#1f2937;
+                    --muted:#6b7280;
+                    --ok:#166534;
+                    --bad:#991b1b;
+                    --accent:#ea580c;
+                    --accent2:#0f766e;
+                    --edge:#d1d5db;
+                    --left:#f8fafc;
+                    --left2:#f3f4f6;
+                    --radius:12px;
                 }
                 * { box-sizing: border-box; }
                 html, body { -webkit-text-size-adjust: 100%; }
@@ -79,7 +80,7 @@ DASHBOARD_HTML = """
                 }
                 .shell {
                         display: grid;
-                        grid-template-columns: 220px 220px minmax(0, 1fr);
+                    grid-template-columns: 204px 204px minmax(0, 1fr);
                         height: 100dvh;
                 }
                 .left-primary,
@@ -89,7 +90,7 @@ DASHBOARD_HTML = """
                 }
                 .left-primary {
                     background: var(--left);
-                    padding: 12px 10px;
+                    padding: 10px 9px;
                 }
                 .left-sub {
                     background: var(--left2);
@@ -107,7 +108,7 @@ DASHBOARD_HTML = """
                     gap: 8px;
                 }
                 .brand {
-                    font-size: 23px;
+                    font-size: 20px;
                     font-weight: 800;
                     color: #0f172a;
                 }
@@ -123,7 +124,6 @@ DASHBOARD_HTML = """
                     object-fit: contain;
                     border-radius: 8px;
                     background: #fff;
-                    border: 1px solid #e5e7eb;
                     padding: 2px;
                     flex-shrink: 0;
                 }
@@ -131,9 +131,9 @@ DASHBOARD_HTML = """
                     border: 1px solid var(--edge);
                     background: #fff;
                     color: #334155;
-                    border-radius: 10px;
-                    width: 36px;
-                    height: 36px;
+                    border-radius: 8px;
+                    width: 32px;
+                    height: 32px;
                     cursor: pointer;
                 }
                 .primary-menu,
@@ -148,10 +148,10 @@ DASHBOARD_HTML = """
                     background: transparent;
                     text-align: left;
                     color: #1f2937;
-                    border-radius: 10px;
-                    padding: 9px 10px;
+                    border-radius: 8px;
+                    padding: 8px 9px;
                     cursor: pointer;
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
                 }
                 .primary-menu button:hover,
@@ -203,13 +203,13 @@ DASHBOARD_HTML = """
                 }
                 body.sub-hidden .sub-show-btn { display: flex; align-items:center; justify-content:center; }
                 .shell.group-open {
-                    grid-template-columns: 220px 220px minmax(0, 1fr);
+                    grid-template-columns: 204px 204px minmax(0, 1fr);
                 }
                 body.collapsed .shell.group-open {
-                    grid-template-columns: 72px 220px minmax(0, 1fr);
+                    grid-template-columns: 68px 204px minmax(0, 1fr);
                 }
                 body.sub-hidden .shell.group-open {
-                    grid-template-columns: 220px 0 minmax(0, 1fr);
+                    grid-template-columns: 204px 0 minmax(0, 1fr);
                 }
                 body.collapsed.sub-hidden .shell.group-open {
                     grid-template-columns: 72px 0 minmax(0, 1fr);
@@ -259,7 +259,7 @@ DASHBOARD_HTML = """
                         justify-content: space-between;
                 }
                 body.collapsed .shell {
-                    grid-template-columns: 72px 0 minmax(0, 1fr);
+                    grid-template-columns: 68px 0 minmax(0, 1fr);
                 }
                 body.collapsed .brand {
                         display: none;
@@ -294,7 +294,7 @@ DASHBOARD_HTML = """
                 }
                 .main {
                         min-width: 0;
-                        padding: 20px;
+                        padding: 14px;
                     display: flex;
                     flex-direction: column;
                     min-height: 0;
@@ -323,17 +323,81 @@ DASHBOARD_HTML = """
                         justify-content: space-between;
                         gap: 12px;
                         flex-wrap: wrap;
-                        margin-bottom: 14px;
+                    margin-bottom: 10px;
+                }
+                body.viewer-active .topbar {
+                    display: none;
+                }
+                body.viewer-active .main {
+                    padding: 8px 10px 10px;
+                }
+                body.viewer-active #pane-viewer {
+                    border: 0;
+                    box-shadow: none;
+                    background: transparent;
+                    padding: 0;
+                }
+                .sub-head-actions {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                .sub-logout {
+                    border: 1px solid #fecaca;
+                    background: #fff5f5;
+                    color: #991b1b;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    text-decoration: none;
+                    text-transform: none;
+                    letter-spacing: normal;
                 }
                 .title {
                         margin: 0;
-                        font-size: 34px;
+                    font-size: 28px;
                         font-weight: 800;
                         color: #111827;
                 }
                 .subtitle {
                         margin: 6px 0 0;
                         color: var(--muted);
+                }
+                .company-context {
+                    margin-top: 10px;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+                .company-label {
+                    color: #475569;
+                    font-size: 12px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                }
+                .company-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    border: 1px solid #cbd5e1;
+                    background: #ffffff;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #1e293b;
+                }
+                .role-chip {
+                    border: 1px solid #fed7aa;
+                    background: #fff7ed;
+                    color: #9a3412;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: 700;
                 }
                 .actions {
                         display: flex;
@@ -364,9 +428,9 @@ DASHBOARD_HTML = """
                         display: none;
                         background: var(--panel);
                         border: 1px solid var(--edge);
-                        border-radius: 16px;
+                    border-radius: var(--radius);
                         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-                        padding: 16px;
+                    padding: 12px;
                 }
                 .pane.active { display: block; }
                     .viewer-pane {
@@ -402,8 +466,8 @@ DASHBOARD_HTML = """
                 }
                 .stat {
                         border: 1px solid var(--edge);
-                        border-radius: 12px;
-                        padding: 12px;
+                    border-radius: 10px;
+                    padding: 10px;
                         background: #f9fafb;
                 }
                 .stat .label {
@@ -412,7 +476,7 @@ DASHBOARD_HTML = """
                         margin-bottom: 6px;
                 }
                 .stat .value {
-                        font-size: 24px;
+                    font-size: 21px;
                         font-weight: 800;
                         color: #0f172a;
                 }
@@ -423,8 +487,8 @@ DASHBOARD_HTML = """
                 }
                 .card {
                         border: 1px solid var(--edge);
-                        border-radius: 14px;
-                        padding: 14px;
+                    border-radius: 12px;
+                    padding: 12px;
                         background: var(--panel);
                         box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
                 }
@@ -435,7 +499,7 @@ DASHBOARD_HTML = """
                         gap: 8px;
                 }
                 .name {
-                        font-size: 20px;
+                    font-size: 17px;
                         font-weight: 700;
                         color: #0f172a;
                 }
@@ -451,8 +515,8 @@ DASHBOARD_HTML = """
                 .error { color: var(--bad); background: #fee2e2; border-color: #fecaca; }
                 .meta {
                         color: var(--muted);
-                        font-size: 13px;
-                        margin: 8px 0 10px;
+                    font-size: 12px;
+                    margin: 6px 0 8px;
                         word-break: break-word;
                 }
                 .btns {
@@ -462,17 +526,17 @@ DASHBOARD_HTML = """
                 }
                 .list {
                         border: 1px solid var(--edge);
-                        border-radius: 12px;
+                    border-radius: 10px;
                         overflow: hidden;
                 }
                 .list-row {
                         display: grid;
                         grid-template-columns: 1.3fr 0.8fr 1fr;
                         gap: 8px;
-                        padding: 10px 12px;
+                    padding: 8px 10px;
                         border-bottom: 1px solid #e5e7eb;
                         align-items: center;
-                        font-size: 13px;
+                    font-size: 12px;
                 }
                 .list-row:last-child { border-bottom: 0; }
                 .list-head {
@@ -603,7 +667,7 @@ DASHBOARD_HTML = """
                 </aside>
 
                 <aside class="left-sub">
-                    <div class="sub-head" id="subHead"><span id="subHeadLabel">Sub Menu</span><button class="sub-toggle-btn" onclick="toggleSubSidebar()" title="Hide panel">&#8249;</button></div>
+                    <div class="sub-head" id="subHead"><span id="subHeadLabel">Sub Menu</span><div class="sub-head-actions"><a class="sub-logout" href="/auth/logout">Logout</a><button class="sub-toggle-btn" onclick="toggleSubSidebar()" title="Hide panel">&#8249;</button></div></div>
                         <nav id="subNav" class="sub-menu"></nav>
                 </aside>
 
@@ -612,9 +676,11 @@ DASHBOARD_HTML = """
                                 <div>
                             <h1 id="pageTitle" class="title">Home</h1>
                             <p id="pageSubtitle" class="subtitle">Overview of all operations.</p>
-                                </div>
-                                <div class="actions">
-                                        <a class="btn" href="/auth/logout">Logout</a>
+                            <div class="company-context">
+                                <span class="company-label">Company</span>
+                                <span class="company-chip">{{ current_company_name or 'Not Assigned' }}</span>
+                                <span class="role-chip">{{ current_role_name }}</span>
+                            </div>
                                 </div>
                         </div>
 
@@ -692,6 +758,8 @@ DASHBOARD_HTML = """
                     title: 'Admin',
                     subtitle: 'Company administration, user roles, task controls, and audit records.',
                     items: [
+                        { id: 'admin-companies', label: 'Companies', url: '/admin/companies' },
+                        { id: 'admin-company-health', label: 'Company Health', url: '/admin/company-health' },
                         { id: 'admin-users', label: 'User Management', url: '/admin/users' },
                         { id: 'admin-tasks', label: 'Operational Tasks', url: '/admin/tasks' },
                         { id: 'admin-audit', label: 'Audit Logs', url: '/admin/audit-logs' },
@@ -834,8 +902,9 @@ DASHBOARD_HTML = """
                 const title = document.getElementById('pageTitle');
                 const subtitle = document.getElementById('pageSubtitle');
                 title.textContent = menuGroups[section].title;
-                subtitle.textContent = menuGroups[section].subtitle;
+                subtitle.textContent = section === 'home' ? menuGroups[section].subtitle : '';
                 document.getElementById('shell').classList.add('group-open');
+                document.body.classList.add('viewer-active');
                 renderSubmenu(section);
                 openApp(menuGroups[section].items[0]);
             }
@@ -878,9 +947,11 @@ DASHBOARD_HTML = """
 
             function renderSubmenu(section) {
                 const nav = document.getElementById('subNav');
-                const head = document.getElementById('subHead');
+                const headLabel = document.getElementById('subHeadLabel');
                 nav.innerHTML = '';
-                head.textContent = menuGroups[section].title;
+                if (headLabel) {
+                    headLabel.textContent = menuGroups[section].title;
+                }
                 (menuGroups[section].items || []).forEach(function(item) {
                     const btn = document.createElement('button');
                     btn.textContent = item.label;
@@ -889,6 +960,7 @@ DASHBOARD_HTML = """
                     btn.onclick = function() { openApp(item); };
                     nav.appendChild(btn);
                 });
+
             }
 
             var _pollTimer = null;
@@ -929,6 +1001,7 @@ DASHBOARD_HTML = """
             function openHome() {
                 try { localStorage.setItem('dexterNav', JSON.stringify({home: true})); } catch(e) {}
                 if (_dashPollTimer) { clearInterval(_dashPollTimer); _dashPollTimer = null; }
+                document.body.classList.remove('viewer-active');
                 document.getElementById('pane-viewer').classList.remove('active');
                 document.getElementById('pane-home').classList.add('active');
                 document.querySelectorAll('#primaryNav button').forEach(function(b) {
@@ -943,6 +1016,7 @@ DASHBOARD_HTML = """
 
             function switchToViewerPane() {
                 if (_dashPollTimer) { clearInterval(_dashPollTimer); _dashPollTimer = null; }
+                document.body.classList.add('viewer-active');
                 document.getElementById('pane-home').classList.remove('active');
                 document.getElementById('pane-viewer').classList.add('active');
             }
@@ -1101,6 +1175,7 @@ PORTAL_HOME_HTML = """
             --edge:#d1d5db;
             --ok:#166534;
             --bad:#991b1b;
+            --radius:10px;
         }
         * { box-sizing: border-box; }
         html, body { -webkit-text-size-adjust: 100%; overflow-x: hidden; }
@@ -1117,7 +1192,7 @@ PORTAL_HOME_HTML = """
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 12px 18px;
+            padding: 9px 12px;
             border-bottom: 1px solid var(--edge);
             background: #ffffff;
             position: sticky;
@@ -1125,58 +1200,76 @@ PORTAL_HOME_HTML = """
             z-index: 5;
             box-shadow: 0 1px 4px rgba(15,23,42,0.06);
         }
-        .brand { font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: 0.2px; }
+        .brand { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: 0.2px; }
         .brand-wrap { display: flex; align-items: center; gap: 10px; }
-        .brand-logo { width: 30px; height: 30px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        .brand-logo { width: 26px; height: 26px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
         .nav { display: flex; gap: 8px; flex-wrap: wrap; }
         .nav a, .nav button {
             border: 1px solid var(--edge);
             background: #fff;
             color: var(--ink);
-            border-radius: 10px;
-            padding: 8px 13px;
+            border-radius: var(--radius);
+            padding: 6px 10px;
             text-decoration: none;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
+        .mini-ico {
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .nav-short { display: none; }
         .nav a:hover, .nav button:hover { background: #f1f5f9; }
         .nav .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
         .nav .primary:hover { background: #c2410c; }
         .nav .danger { background: var(--bad); color: #fff; border-color: #7f1d1d; }
         .nav .danger:hover { background: #7f1d1d; }
         .nav button:disabled { opacity: 0.55; cursor: not-allowed; }
-        .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 18px 36px; }
-        h1 { margin: 0 0 6px; font-size: 34px; font-weight: 800; color: #111827; }
-        .subtitle { color: var(--muted); margin: 0 0 18px; }
+        .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 12px 24px; }
+        h1 { margin: 0 0 4px; font-size: 27px; font-weight: 800; color: #111827; }
+        .subtitle { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
         .banner {
             border: 1px solid #fed7aa;
             background: #fff7ed;
-            border-radius: 12px;
-            padding: 10px 14px;
+            border-radius: var(--radius);
+            padding: 8px 10px;
             color: #9a3412;
-            margin-bottom: 18px;
-            font-size: 13px;
+            margin-bottom: 12px;
+            font-size: 12px;
         }
-        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
         .card {
             background: var(--panel);
             border: 1px solid var(--edge);
-            border-radius: 16px;
-            padding: 18px;
+            border-radius: 12px;
+            padding: 12px;
             box-shadow: 0 8px 24px rgba(15,23,42,0.07);
         }
-        .card h2 { margin: 0 0 6px; font-size: 21px; font-weight: 700; color: #0f172a; }
-        .card p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+        .card h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; color: #0f172a; }
+        .card p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
         .actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .actions a {
             border: 1px solid var(--edge);
             background: #fff;
             color: var(--ink);
-            border-radius: 10px;
-            padding: 8px 13px;
+            border-radius: var(--radius);
+            padding: 6px 10px;
             text-decoration: none;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
         }
         .actions a:hover { background: #f1f5f9; }
@@ -1195,6 +1288,9 @@ PORTAL_HOME_HTML = """
             .cards { gap: 10px; }
             .card { padding: 12px; }
             .topbar { flex-wrap: wrap; gap: 8px; }
+            .nav-label { display: none; }
+            .nav-short { display: inline; }
+            .nav a, .nav button { padding: 5px 8px; }
         }
     </style>
 </head>
@@ -1205,13 +1301,13 @@ PORTAL_HOME_HTML = """
             <div class="brand">Dexter Ops Portal</div>
         </div>
         <div class="nav">
-            <a href="/">Home</a>
-            <a href="/portal/productmix">ProductMix</a>
-            <a href="/portal/ic3">Inventory Control 3</a>
-            <a href="/portal/managerapp">Daily Log</a>
+            <a href="/"><span class="mini-ico">H</span><span class="nav-label">Home</span><span class="nav-short">HM</span></a>
+            <a href="/portal/productmix"><span class="mini-ico">P</span><span class="nav-label">ProductMix</span><span class="nav-short">PM</span></a>
+            <a href="/portal/ic3"><span class="mini-ico">I</span><span class="nav-label">Inventory Control 3</span><span class="nav-short">IC3</span></a>
+            <a href="/portal/managerapp"><span class="mini-ico">D</span><span class="nav-label">Daily Log</span><span class="nav-short">DL</span></a>
             <button class="primary" id="btnStartAll" onclick="act('/api/start-all', this)">Start All</button>
             <button class="danger" id="btnStopAll" onclick="act('/api/stop-all', this)">Stop All</button>
-            <a href="/auth/logout">Logout</a>
+            <a href="/auth/logout"><span class="mini-ico">L</span><span class="nav-label">Logout</span><span class="nav-short">Out</span></a>
         </div>
     </div>
     <div class="toast-wrap" id="toastWrap"></div>
@@ -1283,6 +1379,15 @@ PORTAL_HOME_HTML = """
 
 
 RBAC_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS companies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    slug TEXT NOT NULL UNIQUE,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS roles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE CHECK (name IN ('Super Admin', 'Manager', 'Employee')),
@@ -1294,11 +1399,13 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role_id INTEGER NOT NULL,
+    company_id INTEGER,
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_login TEXT,
-    FOREIGN KEY (role_id) REFERENCES roles(id)
+    FOREIGN KEY (role_id) REFERENCES roles(id),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -1311,8 +1418,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed_at TEXT,
     created_by INTEGER NOT NULL,
     assigned_to INTEGER,
+    company_id INTEGER,
     FOREIGN KEY (created_by) REFERENCES users(id),
-    FOREIGN KEY (assigned_to) REFERENCES users(id)
+    FOREIGN KEY (assigned_to) REFERENCES users(id),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
 );
 
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -1321,9 +1430,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     action TEXT NOT NULL,
     target_table TEXT NOT NULL,
     target_id INTEGER,
+    company_id INTEGER,
     details TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (actor_user_id) REFERENCES users(id)
+    FOREIGN KEY (actor_user_id) REFERENCES users(id),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
 );
 
 CREATE TABLE IF NOT EXISTS migration_meta (
@@ -1334,11 +1445,14 @@ CREATE TABLE IF NOT EXISTS migration_meta (
 
 CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
 CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by);
+CREATE INDEX IF NOT EXISTS idx_tasks_company_id ON tasks(company_id);
 CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_company_id ON audit_logs(company_id);
 """
 
 
@@ -1352,6 +1466,34 @@ def get_rbac_db_connection() -> sqlite3.Connection:
 def seed_default_roles(conn: sqlite3.Connection) -> None:
     for role_name in ("Super Admin", "Manager", "Employee"):
         conn.execute("INSERT OR IGNORE INTO roles (name) VALUES (?)", (role_name,))
+
+
+def _slugify_company_name(name: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", str(name or "").strip().lower()).strip("-")
+    return base or "company"
+
+
+def ensure_default_company(conn: sqlite3.Connection) -> int:
+    default_name = "Default Company"
+    row = conn.execute("SELECT id FROM companies WHERE name = ? LIMIT 1", (default_name,)).fetchone()
+    if row:
+        return int(row["id"])
+
+    slug_base = _slugify_company_name(default_name)
+    slug = slug_base
+    suffix = 1
+    while conn.execute("SELECT 1 FROM companies WHERE slug = ? LIMIT 1", (slug,)).fetchone():
+        suffix += 1
+        slug = f"{slug_base}-{suffix}"
+
+    cur = conn.execute(
+        """
+        INSERT INTO companies (name, slug, is_active, created_at, updated_at)
+        VALUES (?, ?, 1, datetime('now'), datetime('now'))
+        """,
+        (default_name, slug),
+    )
+    return int(cur.lastrowid)
 
 
 def initialize_rbac_db() -> None:
@@ -1374,9 +1516,11 @@ def _get_role_id(conn: sqlite3.Connection, role_name: str) -> int:
 def _get_user_by_username(conn: sqlite3.Connection, username: str) -> sqlite3.Row | None:
     return conn.execute(
         """
-        SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login, r.name AS role_name
+        SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login,
+               u.company_id, c.name AS company_name, r.name AS role_name
         FROM users u
         JOIN roles r ON r.id = u.role_id
+        LEFT JOIN companies c ON c.id = u.company_id
         WHERE LOWER(u.username) = LOWER(?)
         LIMIT 1
         """,
@@ -1491,6 +1635,54 @@ def migrate_add_password_reset_fields_v1() -> None:
         conn.close()
 
 
+def migrate_add_company_scope_v1() -> None:
+    migration_key = "company_scope_v1"
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS companies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                slug TEXT NOT NULL UNIQUE,
+                is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        if _is_migration_complete(conn, migration_key):
+            return
+
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN company_id INTEGER")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN company_id INTEGER")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE audit_logs ADD COLUMN company_id INTEGER")
+        except Exception:
+            pass
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_company_id ON tasks(company_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_company_id ON audit_logs(company_id)")
+
+        default_company_id = ensure_default_company(conn)
+        conn.execute("UPDATE users SET company_id = ? WHERE company_id IS NULL", (default_company_id,))
+        conn.execute("UPDATE tasks SET company_id = ? WHERE company_id IS NULL", (default_company_id,))
+        conn.execute("UPDATE audit_logs SET company_id = ? WHERE company_id IS NULL", (default_company_id,))
+
+        _mark_migration_complete(conn, migration_key)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def ensure_default_super_admin_user() -> None:
     admin_username = os.environ.get("DEXTER_ADMIN_USER", "").strip()
     admin_password = os.environ.get("DEXTER_ADMIN_PASS", "").strip()
@@ -1499,24 +1691,26 @@ def ensure_default_super_admin_user() -> None:
 
     conn = get_rbac_db_connection()
     try:
+        default_company_id = ensure_default_company(conn)
         role_id = _get_role_id(conn, "Super Admin")
         existing = _get_user_by_username(conn, admin_username)
         if existing:
             conn.execute(
                 """
                 UPDATE users
-                SET password_hash = ?, role_id = ?, is_active = 1, updated_at = datetime('now')
+                SET password_hash = ?, role_id = ?, is_active = 1,
+                    company_id = COALESCE(company_id, ?), updated_at = datetime('now')
                 WHERE id = ?
                 """,
-                (generate_password_hash(admin_password), role_id, int(existing["id"])),
+                (generate_password_hash(admin_password), role_id, default_company_id, int(existing["id"])),
             )
         else:
             conn.execute(
                 """
-                INSERT INTO users (username, password_hash, role_id, is_active, created_at, updated_at)
-                VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+                INSERT INTO users (username, password_hash, role_id, company_id, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))
                 """,
-                (admin_username, generate_password_hash(admin_password), role_id),
+                (admin_username, generate_password_hash(admin_password), role_id, default_company_id),
             )
         conn.commit()
     finally:
@@ -1532,9 +1726,11 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
     try:
         row = conn.execute(
             """
-            SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login, r.name AS role_name
+            SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login,
+                   u.company_id, c.name AS company_name, r.name AS role_name
             FROM users u
             JOIN roles r ON r.id = u.role_id
+            LEFT JOIN companies c ON c.id = u.company_id
             WHERE LOWER(u.username) = LOWER(?)
             LIMIT 1
             """,
@@ -1569,6 +1765,16 @@ def current_user_id() -> int | None:
         return None
 
 
+def current_user_company_id() -> int | None:
+    raw_company_id = (session.get(SESSION_USER_KEY) or {}).get("company_id")
+    if raw_company_id is None:
+        return None
+    try:
+        return int(raw_company_id)
+    except (TypeError, ValueError):
+        return None
+
+
 def current_role_name() -> str:
     user = session.get(SESSION_USER_KEY) or {}
     role_name = str(user.get("role_name") or "").strip()
@@ -1577,6 +1783,230 @@ def current_role_name() -> str:
     if bool(user.get("is_admin")):
         return "Super Admin"
     return "Employee"
+
+
+def _normalize_company_id(value: Any) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text.isdigit():
+        return None
+    parsed = int(text)
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def _company_exists(conn: sqlite3.Connection, company_id: int) -> bool:
+    return bool(conn.execute("SELECT 1 FROM companies WHERE id = ? LIMIT 1", (int(company_id),)).fetchone())
+
+
+def _get_actor_context(conn: sqlite3.Connection, actor_user_id: int) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT u.id, u.company_id, u.is_active, r.name AS role_name
+        FROM users u
+        JOIN roles r ON r.id = u.role_id
+        WHERE u.id = ?
+        LIMIT 1
+        """,
+        (int(actor_user_id),),
+    ).fetchone()
+
+
+def list_companies(active_only: bool = False) -> list[dict[str, Any]]:
+    conn = get_rbac_db_connection()
+    try:
+        where_sql = "WHERE c.is_active = 1" if active_only else ""
+        rows = conn.execute(
+            f"""
+            SELECT c.id, c.name, c.slug, c.is_active, c.created_at, c.updated_at,
+                   COALESCE(user_counts.total_users, 0) AS total_users
+            FROM companies c
+            LEFT JOIN (
+                SELECT company_id, COUNT(*) AS total_users
+                FROM users
+                GROUP BY company_id
+            ) AS user_counts ON user_counts.company_id = c.id
+            {where_sql}
+            ORDER BY LOWER(c.name) ASC
+            """
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def list_company_health() -> list[dict[str, Any]]:
+    conn = get_rbac_db_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT c.id, c.name, c.slug, c.is_active, c.created_at, c.updated_at,
+                   COALESCE(user_counts.total_users, 0) AS total_users,
+                   COALESCE(user_counts.active_users, 0) AS active_users,
+                   COALESCE(task_counts.total_tasks, 0) AS total_tasks,
+                   COALESCE(task_counts.open_tasks, 0) AS open_tasks,
+                   COALESCE(task_counts.completed_tasks, 0) AS completed_tasks
+            FROM companies c
+            LEFT JOIN (
+                SELECT company_id,
+                       COUNT(*) AS total_users,
+                       SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_users
+                FROM users
+                GROUP BY company_id
+            ) AS user_counts ON user_counts.company_id = c.id
+            LEFT JOIN (
+                SELECT company_id,
+                       COUNT(*) AS total_tasks,
+                       SUM(CASE WHEN status IN ('pending', 'in-progress') THEN 1 ELSE 0 END) AS open_tasks,
+                       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_tasks
+                FROM tasks
+                GROUP BY company_id
+            ) AS task_counts ON task_counts.company_id = c.id
+            ORDER BY LOWER(c.name) ASC
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def create_company(actor_user_id: int, company_name: str) -> tuple[bool, str]:
+    cleaned_name = str(company_name or "").strip()
+    if len(cleaned_name) < 2:
+        return False, "Company name must be at least 2 characters."
+
+    conn = get_rbac_db_connection()
+    try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or str(actor["role_name"]) != "Super Admin":
+            return False, "Only Super Admin can create companies."
+
+        if conn.execute("SELECT 1 FROM companies WHERE LOWER(name) = LOWER(?) LIMIT 1", (cleaned_name,)).fetchone():
+            return False, "Company already exists."
+
+        slug_base = _slugify_company_name(cleaned_name)
+        slug = slug_base
+        suffix = 1
+        while conn.execute("SELECT 1 FROM companies WHERE slug = ? LIMIT 1", (slug,)).fetchone():
+            suffix += 1
+            slug = f"{slug_base}-{suffix}"
+
+        cur = conn.execute(
+            """
+            INSERT INTO companies (name, slug, is_active, created_at, updated_at)
+            VALUES (?, ?, 1, datetime('now'), datetime('now'))
+            """,
+            (cleaned_name, slug),
+        )
+        new_company_id = int(cur.lastrowid)
+        conn.commit()
+        add_audit_log(actor_user_id, "create_company", "companies", new_company_id, json.dumps({"name": cleaned_name}), company_id=new_company_id)
+        return True, "Company created."
+    finally:
+        conn.close()
+
+
+def rename_company(actor_user_id: int, company_id: int, new_name: str) -> tuple[bool, str]:
+    cleaned_name = str(new_name or "").strip()
+    if len(cleaned_name) < 2:
+        return False, "Company name must be at least 2 characters."
+
+    conn = get_rbac_db_connection()
+    try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or str(actor["role_name"]) != "Super Admin":
+            return False, "Only Super Admin can rename companies."
+
+        company = conn.execute(
+            "SELECT id, name, slug FROM companies WHERE id = ? LIMIT 1",
+            (int(company_id),),
+        ).fetchone()
+        if not company:
+            return False, "Company not found."
+
+        duplicate = conn.execute(
+            "SELECT 1 FROM companies WHERE LOWER(name) = LOWER(?) AND id <> ? LIMIT 1",
+            (cleaned_name, int(company_id)),
+        ).fetchone()
+        if duplicate:
+            return False, "Another company already uses that name."
+
+        slug_base = _slugify_company_name(cleaned_name)
+        slug = slug_base
+        suffix = 1
+        while conn.execute("SELECT 1 FROM companies WHERE slug = ? AND id <> ? LIMIT 1", (slug, int(company_id))).fetchone():
+            suffix += 1
+            slug = f"{slug_base}-{suffix}"
+
+        conn.execute(
+            "UPDATE companies SET name = ?, slug = ?, updated_at = datetime('now') WHERE id = ?",
+            (cleaned_name, slug, int(company_id)),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "rename_company",
+            "companies",
+            int(company_id),
+            json.dumps({"from": str(company["name"]), "to": cleaned_name}),
+            company_id=int(company_id),
+        )
+        return True, "Company renamed."
+    finally:
+        conn.close()
+
+
+def set_company_active_state(actor_user_id: int, company_id: int, is_active: bool) -> tuple[bool, str]:
+    conn = get_rbac_db_connection()
+    try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or str(actor["role_name"]) != "Super Admin":
+            return False, "Only Super Admin can activate/deactivate companies."
+
+        company = conn.execute(
+            "SELECT id, name, is_active FROM companies WHERE id = ? LIMIT 1",
+            (int(company_id),),
+        ).fetchone()
+        if not company:
+            return False, "Company not found."
+
+        target_active = 1 if is_active else 0
+        if int(company["is_active"]) == target_active:
+            return True, "Company already in requested state."
+
+        if not is_active:
+            users_count_row = conn.execute(
+                "SELECT COUNT(*) AS total FROM users WHERE company_id = ?",
+                (int(company_id),),
+            ).fetchone()
+            users_count = int(users_count_row["total"] if users_count_row else 0)
+            if users_count > 0:
+                return False, "Cannot deactivate a company that still has users."
+
+            active_companies_row = conn.execute(
+                "SELECT COUNT(*) AS total FROM companies WHERE is_active = 1",
+            ).fetchone()
+            if int(active_companies_row["total"] if active_companies_row else 0) <= 1:
+                return False, "Cannot deactivate the last active company."
+
+        conn.execute(
+            "UPDATE companies SET is_active = ?, updated_at = datetime('now') WHERE id = ?",
+            (target_active, int(company_id)),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "activate_company" if is_active else "deactivate_company",
+            "companies",
+            int(company_id),
+            json.dumps({"name": str(company["name"])}),
+            company_id=int(company_id),
+        )
+        return True, "Company updated."
+    finally:
+        conn.close()
 
 
 def user_has_role(user_id: int, allowed_roles: tuple[str, ...]) -> bool:
@@ -1604,15 +2034,29 @@ def can_user_create_task(user_id: int) -> bool:
     return user_has_role(int(user_id), ("Super Admin", "Manager"))
 
 
-def add_audit_log(actor_user_id: int, action: str, target_table: str, target_id: int | None = None, details: str | None = None) -> None:
+def add_audit_log(
+    actor_user_id: int,
+    action: str,
+    target_table: str,
+    target_id: int | None = None,
+    details: str | None = None,
+    company_id: int | None = None,
+) -> None:
     conn = get_rbac_db_connection()
     try:
         conn.execute(
             """
-            INSERT INTO audit_logs (actor_user_id, action, target_table, target_id, details)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO audit_logs (actor_user_id, action, target_table, target_id, company_id, details)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (int(actor_user_id), str(action), str(target_table), int(target_id) if target_id is not None else None, details),
+            (
+                int(actor_user_id),
+                str(action),
+                str(target_table),
+                int(target_id) if target_id is not None else None,
+                int(company_id) if company_id is not None else None,
+                details,
+            ),
         )
         conn.commit()
     finally:
@@ -1634,17 +2078,34 @@ def role_required(*allowed_roles: str):
     return decorator
 
 
-def list_users_with_roles() -> list[dict[str, Any]]:
+def list_users_with_roles(company_id: int | None = None) -> list[dict[str, Any]]:
     conn = get_rbac_db_connection()
     try:
-        rows = conn.execute(
-            """
-            SELECT u.id, u.username, u.is_active, u.created_at, u.updated_at, u.last_login, r.name AS role_name
-            FROM users u
-            JOIN roles r ON r.id = u.role_id
-            ORDER BY LOWER(u.username) ASC
-            """
-        ).fetchall()
+        normalized_company_id = _normalize_company_id(company_id)
+        if normalized_company_id is not None:
+            rows = conn.execute(
+                """
+                SELECT u.id, u.username, u.is_active, u.created_at, u.updated_at, u.last_login,
+                       u.company_id, c.name AS company_name, r.name AS role_name
+                FROM users u
+                JOIN roles r ON r.id = u.role_id
+                LEFT JOIN companies c ON c.id = u.company_id
+                WHERE u.company_id = ?
+                ORDER BY LOWER(u.username) ASC
+                """,
+                (normalized_company_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT u.id, u.username, u.is_active, u.created_at, u.updated_at, u.last_login,
+                       u.company_id, c.name AS company_name, r.name AS role_name
+                FROM users u
+                JOIN roles r ON r.id = u.role_id
+                LEFT JOIN companies c ON c.id = u.company_id
+                ORDER BY LOWER(u.username) ASC
+                """
+            ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -1662,7 +2123,13 @@ def _active_super_admin_count(conn: sqlite3.Connection) -> int:
     return int(row["total"] if row else 0)
 
 
-def create_user_account(actor_user_id: int, username: str, password: str, role_name: str = "Employee") -> tuple[bool, str]:
+def create_user_account(
+    actor_user_id: int,
+    username: str,
+    password: str,
+    role_name: str = "Employee",
+    company_id: int | None = None,
+) -> tuple[bool, str]:
     normalized_username = str(username or "").strip()
     if len(normalized_username) < 3:
         return False, "Username must be at least 3 characters."
@@ -1673,6 +2140,30 @@ def create_user_account(actor_user_id: int, username: str, password: str, role_n
 
     conn = get_rbac_db_connection()
     try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or int(actor["is_active"]) != 1:
+            return False, "Actor is invalid or inactive."
+
+        actor_role = str(actor["role_name"])
+        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
+
+        target_company_id = _normalize_company_id(company_id)
+        if actor_role == "Super Admin":
+            if target_company_id is None:
+                target_company_id = actor_company_id
+            if role_name != "Super Admin" and target_company_id is None:
+                return False, "Company is required for non-Super Admin users."
+            if target_company_id is not None and not _company_exists(conn, target_company_id):
+                return False, "Selected company does not exist."
+        elif actor_role == "Manager":
+            if role_name == "Super Admin":
+                return False, "Manager cannot assign Super Admin role."
+            if actor_company_id is None:
+                return False, "Manager account has no company assigned."
+            target_company_id = actor_company_id
+        else:
+            return False, "Only Super Admin or Manager can create users."
+
         exists = conn.execute(
             "SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1",
             (normalized_username,),
@@ -1683,13 +2174,20 @@ def create_user_account(actor_user_id: int, username: str, password: str, role_n
         role_id = _get_role_id(conn, role_name)
         cur = conn.execute(
             """
-            INSERT INTO users (username, password_hash, role_id, is_active, created_at, updated_at)
-            VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+            INSERT INTO users (username, password_hash, role_id, company_id, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))
             """,
-            (normalized_username, generate_password_hash(password), role_id),
+            (normalized_username, generate_password_hash(password), role_id, target_company_id),
         )
         conn.commit()
-        add_audit_log(actor_user_id, "create_user", "users", int(cur.lastrowid), json.dumps({"username": normalized_username, "role": role_name}))
+        add_audit_log(
+            actor_user_id,
+            "create_user",
+            "users",
+            int(cur.lastrowid),
+            json.dumps({"username": normalized_username, "role": role_name, "company_id": target_company_id}),
+            company_id=target_company_id,
+        )
         return True, "User created."
     finally:
         conn.close()
@@ -1698,9 +2196,16 @@ def create_user_account(actor_user_id: int, username: str, password: str, role_n
 def set_user_active_state(actor_user_id: int, target_user_id: int, is_active: bool) -> tuple[bool, str]:
     conn = get_rbac_db_connection()
     try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or int(actor["is_active"]) != 1:
+            return False, "Actor is invalid or inactive."
+
+        actor_role = str(actor["role_name"])
+        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
+
         target = conn.execute(
             """
-            SELECT u.id, u.username, u.is_active, r.name AS role_name
+            SELECT u.id, u.username, u.is_active, u.company_id, r.name AS role_name
             FROM users u
             JOIN roles r ON r.id = u.role_id
             WHERE u.id = ?
@@ -1710,6 +2215,16 @@ def set_user_active_state(actor_user_id: int, target_user_id: int, is_active: bo
         ).fetchone()
         if not target:
             return False, "User not found."
+
+        target_company_id = int(target["company_id"]) if target["company_id"] is not None else None
+
+        if actor_role == "Manager":
+            if actor_company_id is None or target_company_id != actor_company_id:
+                return False, "Manager can only manage users in the same company."
+            if str(target["role_name"]) == "Super Admin":
+                return False, "Manager cannot manage Super Admin users."
+        elif actor_role != "Super Admin":
+            return False, "Only Super Admin or Manager can update users."
 
         if int(actor_user_id) == int(target["id"]) and not is_active:
             return False, "You cannot deactivate your own account."
@@ -1728,6 +2243,7 @@ def set_user_active_state(actor_user_id: int, target_user_id: int, is_active: bo
             "users",
             int(target_user_id),
             json.dumps({"username": str(target["username"]), "role": str(target["role_name"])}),
+            company_id=target_company_id,
         )
         return True, "User updated."
     finally:
@@ -1740,9 +2256,16 @@ def set_user_role_name(actor_user_id: int, target_user_id: int, role_name: str) 
 
     conn = get_rbac_db_connection()
     try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or int(actor["is_active"]) != 1:
+            return False, "Actor is invalid or inactive."
+
+        actor_role = str(actor["role_name"])
+        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
+
         target = conn.execute(
             """
-            SELECT u.id, u.username, u.is_active, r.name AS role_name
+            SELECT u.id, u.username, u.is_active, u.company_id, r.name AS role_name
             FROM users u
             JOIN roles r ON r.id = u.role_id
             WHERE u.id = ?
@@ -1752,6 +2275,16 @@ def set_user_role_name(actor_user_id: int, target_user_id: int, role_name: str) 
         ).fetchone()
         if not target:
             return False, "User not found."
+
+        target_company_id = int(target["company_id"]) if target["company_id"] is not None else None
+
+        if actor_role == "Manager":
+            if actor_company_id is None or target_company_id != actor_company_id:
+                return False, "Manager can only manage users in the same company."
+            if str(target["role_name"]) == "Super Admin" or role_name == "Super Admin":
+                return False, "Manager cannot assign Super Admin role."
+        elif actor_role != "Super Admin":
+            return False, "Only Super Admin or Manager can change roles."
 
         if str(target["role_name"]) == "Super Admin" and role_name != "Super Admin" and _active_super_admin_count(conn) <= 1:
             return False, "Cannot demote the last active Super Admin."
@@ -1768,6 +2301,7 @@ def set_user_role_name(actor_user_id: int, target_user_id: int, role_name: str) 
             "users",
             int(target_user_id),
             json.dumps({"username": str(target["username"]), "from": str(target["role_name"]), "to": role_name}),
+            company_id=target_company_id,
         )
         return True, "Role updated."
     finally:
@@ -1781,10 +2315,8 @@ def create_task_record(
     assigned_to: int | None,
     due_date: str | None = None,
     priority: str = "normal",
+    company_id: int | None = None,
 ) -> tuple[bool, str]:
-    if not can_user_create_task(int(actor_user_id)):
-        return False, "Only Super Admin or Manager can create tasks."
-
     cleaned_title = str(title or "").strip()
     if not cleaned_title:
         return False, "Task title is required."
@@ -1798,19 +2330,44 @@ def create_task_record(
 
     conn = get_rbac_db_connection()
     try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or int(actor["is_active"]) != 1:
+            return False, "Actor is invalid or inactive."
+
+        actor_role = str(actor["role_name"])
+        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
+
+        effective_company_id = _normalize_company_id(company_id)
+        if actor_role == "Manager":
+            if actor_company_id is None:
+                return False, "Manager account has no company assigned."
+            effective_company_id = actor_company_id
+        elif actor_role == "Super Admin":
+            if effective_company_id is None:
+                effective_company_id = actor_company_id
+            if effective_company_id is None:
+                return False, "Company is required to create tasks."
+            if not _company_exists(conn, effective_company_id):
+                return False, "Selected company does not exist."
+        else:
+            return False, "Only Super Admin or Manager can create tasks."
+
         assigned_user_id = int(assigned_to) if assigned_to is not None else None
         if assigned_user_id is not None:
             assigned_row = conn.execute(
-                "SELECT id, is_active FROM users WHERE id = ? LIMIT 1",
+                "SELECT id, is_active, company_id FROM users WHERE id = ? LIMIT 1",
                 (assigned_user_id,),
             ).fetchone()
             if not assigned_row or int(assigned_row["is_active"]) != 1:
                 return False, "Assigned user must be an active user."
+            assigned_company_id = int(assigned_row["company_id"]) if assigned_row["company_id"] is not None else None
+            if assigned_company_id != effective_company_id:
+                return False, "Assigned user must belong to the selected company."
 
         cur = conn.execute(
             """
-            INSERT INTO tasks (title, description, status, created_by, assigned_to, due_date, priority, created_at, updated_at)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, datetime('now'), datetime('now'))
+            INSERT INTO tasks (title, description, status, created_by, assigned_to, due_date, priority, company_id, created_at, updated_at)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
             """,
             (
                 cleaned_title,
@@ -1819,6 +2376,7 @@ def create_task_record(
                 assigned_user_id,
                 cleaned_due_date,
                 cleaned_priority,
+                effective_company_id,
             ),
         )
         conn.commit()
@@ -1828,6 +2386,7 @@ def create_task_record(
             "tasks",
             int(cur.lastrowid),
             json.dumps({"title": cleaned_title, "assigned_to": assigned_user_id, "priority": cleaned_priority}),
+            company_id=effective_company_id,
         )
         return True, "Task created."
     finally:
@@ -1841,9 +2400,22 @@ def update_task_status(actor_user_id: int, task_id: int, status: str) -> tuple[b
 
     conn = get_rbac_db_connection()
     try:
-        row = conn.execute("SELECT id, title FROM tasks WHERE id = ? LIMIT 1", (int(task_id),)).fetchone()
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or int(actor["is_active"]) != 1:
+            return False, "Actor is invalid or inactive."
+
+        actor_role = str(actor["role_name"])
+        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
+
+        row = conn.execute("SELECT id, title, company_id FROM tasks WHERE id = ? LIMIT 1", (int(task_id),)).fetchone()
         if not row:
             return False, "Task not found."
+
+        task_company_id = int(row["company_id"]) if row["company_id"] is not None else None
+        if actor_role == "Manager" and actor_company_id != task_company_id:
+            return False, "Manager can only update tasks in their company."
+        if actor_role not in {"Super Admin", "Manager"}:
+            return False, "Only Super Admin or Manager can update task status."
 
         completed_at = "datetime('now')" if normalized_status == "completed" else "NULL"
         conn.execute(
@@ -1863,72 +2435,130 @@ def update_task_status(actor_user_id: int, task_id: int, status: str) -> tuple[b
             "tasks",
             int(task_id),
             json.dumps({"status": normalized_status, "title": str(row["title"])}),
+            company_id=task_company_id,
         )
         return True, "Task status updated."
     finally:
         conn.close()
 
 
-def list_tasks(limit: int = 200, status_filter: str | None = None) -> list[dict[str, Any]]:
+def list_tasks(limit: int = 200, status_filter: str | None = None, company_id: int | None = None) -> list[dict[str, Any]]:
     conn = get_rbac_db_connection()
     try:
+        normalized_company_id = _normalize_company_id(company_id)
         if status_filter and status_filter in {"pending", "in-progress", "completed"}:
-            rows = conn.execute(
-                """
-                SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
-                       t.created_at, t.updated_at, t.completed_at,
-                       creator.username AS created_by_username,
-                       assignee.username AS assigned_to_username
-                FROM tasks t
-                JOIN users creator ON creator.id = t.created_by
-                LEFT JOIN users assignee ON assignee.id = t.assigned_to
-                WHERE t.status = ?
-                ORDER BY
-                    CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
-                    t.due_date ASC NULLS LAST,
-                    t.id DESC
-                LIMIT ?
-                """,
-                (status_filter, int(limit)),
-            ).fetchall()
+            if normalized_company_id is not None:
+                rows = conn.execute(
+                    """
+                    SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
+                           t.created_at, t.updated_at, t.completed_at, t.company_id,
+                           creator.username AS created_by_username,
+                           assignee.username AS assigned_to_username
+                    FROM tasks t
+                    JOIN users creator ON creator.id = t.created_by
+                    LEFT JOIN users assignee ON assignee.id = t.assigned_to
+                    WHERE t.status = ? AND t.company_id = ?
+                    ORDER BY
+                        CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+                        t.due_date ASC NULLS LAST,
+                        t.id DESC
+                    LIMIT ?
+                    """,
+                    (status_filter, normalized_company_id, int(limit)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
+                           t.created_at, t.updated_at, t.completed_at, t.company_id,
+                           creator.username AS created_by_username,
+                           assignee.username AS assigned_to_username
+                    FROM tasks t
+                    JOIN users creator ON creator.id = t.created_by
+                    LEFT JOIN users assignee ON assignee.id = t.assigned_to
+                    WHERE t.status = ?
+                    ORDER BY
+                        CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+                        t.due_date ASC NULLS LAST,
+                        t.id DESC
+                    LIMIT ?
+                    """,
+                    (status_filter, int(limit)),
+                ).fetchall()
         else:
-            rows = conn.execute(
-                """
-                SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
-                       t.created_at, t.updated_at, t.completed_at,
-                       creator.username AS created_by_username,
-                       assignee.username AS assigned_to_username
-                FROM tasks t
-                JOIN users creator ON creator.id = t.created_by
-                LEFT JOIN users assignee ON assignee.id = t.assigned_to
-                ORDER BY
-                    CASE t.status WHEN 'pending' THEN 1 WHEN 'in-progress' THEN 2 ELSE 3 END,
-                    CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
-                    t.due_date ASC NULLS LAST,
-                    t.id DESC
-                LIMIT ?
-                """,
-                (int(limit),),
-            ).fetchall()
+            if normalized_company_id is not None:
+                rows = conn.execute(
+                    """
+                    SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
+                           t.created_at, t.updated_at, t.completed_at, t.company_id,
+                           creator.username AS created_by_username,
+                           assignee.username AS assigned_to_username
+                    FROM tasks t
+                    JOIN users creator ON creator.id = t.created_by
+                    LEFT JOIN users assignee ON assignee.id = t.assigned_to
+                    WHERE t.company_id = ?
+                    ORDER BY
+                        CASE t.status WHEN 'pending' THEN 1 WHEN 'in-progress' THEN 2 ELSE 3 END,
+                        CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+                        t.due_date ASC NULLS LAST,
+                        t.id DESC
+                    LIMIT ?
+                    """,
+                    (normalized_company_id, int(limit)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT t.id, t.title, t.description, t.status, t.due_date, t.priority,
+                           t.created_at, t.updated_at, t.completed_at, t.company_id,
+                           creator.username AS created_by_username,
+                           assignee.username AS assigned_to_username
+                    FROM tasks t
+                    JOIN users creator ON creator.id = t.created_by
+                    LEFT JOIN users assignee ON assignee.id = t.assigned_to
+                    ORDER BY
+                        CASE t.status WHEN 'pending' THEN 1 WHEN 'in-progress' THEN 2 ELSE 3 END,
+                        CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+                        t.due_date ASC NULLS LAST,
+                        t.id DESC
+                    LIMIT ?
+                    """,
+                    (int(limit),),
+                ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
 
 
-def list_audit_logs(limit: int = 300) -> list[dict[str, Any]]:
+def list_audit_logs(limit: int = 300, company_id: int | None = None) -> list[dict[str, Any]]:
     conn = get_rbac_db_connection()
     try:
-        rows = conn.execute(
-            """
-            SELECT a.id, a.action, a.target_table, a.target_id, a.details, a.created_at,
-                   u.username AS actor_username
-            FROM audit_logs a
-            JOIN users u ON u.id = a.actor_user_id
-            ORDER BY a.id DESC
-            LIMIT ?
-            """,
-            (int(limit),),
-        ).fetchall()
+        normalized_company_id = _normalize_company_id(company_id)
+        if normalized_company_id is not None:
+            rows = conn.execute(
+                """
+                SELECT a.id, a.action, a.target_table, a.target_id, a.company_id, a.details, a.created_at,
+                       u.username AS actor_username
+                FROM audit_logs a
+                JOIN users u ON u.id = a.actor_user_id
+                WHERE a.company_id = ?
+                ORDER BY a.id DESC
+                LIMIT ?
+                """,
+                (normalized_company_id, int(limit)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT a.id, a.action, a.target_table, a.target_id, a.company_id, a.details, a.created_at,
+                       u.username AS actor_username
+                FROM audit_logs a
+                JOIN users u ON u.id = a.actor_user_id
+                ORDER BY a.id DESC
+                LIMIT ?
+                """,
+                (int(limit),),
+            ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -2028,6 +2658,77 @@ ADMIN_USERS_HTML = """
 """
 
 
+ADMIN_COMPANIES_HTML = """
+<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+<title>Companies - Dexter Ops</title>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 14px}form.row{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}input{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem;background:#fff;color:var(--ink)}input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(234,88,12,.15)}button[type=submit]{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff;transition:opacity .15s}button[type=submit]:hover{opacity:.88}.table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}table{width:100%;border-collapse:collapse;font-size:.9rem}th{text-align:left;padding:9px 12px;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}td{padding:10px 12px;border-bottom:1px solid var(--edge);vertical-align:middle}tr:last-child td{border-bottom:none}.msg{padding:9px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid}.ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}.err{background:#fee2e2;color:#991b1b;border-color:#fecaca}.inline{display:inline-flex;gap:6px;align-items:center;margin:0}.inline input{min-width:160px}.action-btn{padding:6px 10px!important;font-size:.8rem!important}.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:600}.pill-on{background:#dcfce7;color:#166534}.pill-off{background:#fee2e2;color:#991b1b}</style>
+</head><body>
+<h1>Companies</h1>
+{% if message %}<div class=\"msg ok\">{{ message }}</div>{% endif %}
+{% if error %}<div class=\"msg err\">{{ error }}</div>{% endif %}
+<form method=\"post\" action=\"/admin/companies/create\" class=\"row\">
+    <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
+    <input name=\"name\" placeholder=\"New company name\" required style=\"min-width:260px\" />
+    <button type=\"submit\">Create Company</button>
+</form>
+<div class=\"table-card\"><table><thead><tr><th>ID</th><th>Name</th><th>Slug</th><th>Users</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>{% for c in companies %}<tr>
+    <td>{{ c.id }}</td>
+    <td>{{ c.name }}</td>
+    <td>{{ c.slug }}</td>
+    <td>{{ c.total_users }}</td>
+    <td>{% if c.is_active %}<span class=\"pill pill-on\">Active</span>{% else %}<span class=\"pill pill-off\">Inactive</span>{% endif %}</td>
+    <td>
+        <form method=\"post\" action=\"/admin/companies/{{ c.id }}/rename\" class=\"inline\">
+            <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
+            <input name=\"name\" value=\"{{ c.name }}\" required />
+            <button class=\"action-btn\" type=\"submit\">Rename</button>
+        </form>
+        <form method=\"post\" action=\"/admin/companies/{{ c.id }}/active\" class=\"inline\">
+            <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
+            <input type=\"hidden\" name=\"is_active\" value=\"{{ 0 if c.is_active else 1 }}\" />
+            <button class=\"action-btn\" type=\"submit\">{{ 'Deactivate' if c.is_active else 'Activate' }}</button>
+        </form>
+    </td>
+</tr>{% endfor %}</tbody></table></div>
+</body></html>
+"""
+
+
+ADMIN_COMPANY_HEALTH_HTML = """
+<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+<title>Company Health - Dexter Ops</title>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 10px}.sub{color:var(--muted);margin:0 0 14px}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px}.stat{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}.stat .label{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}.stat .value{font-size:28px;font-weight:800;margin-top:6px;color:#0f172a}.table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}table{width:100%;border-collapse:collapse;font-size:.9rem}th{text-align:left;padding:9px 12px;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}td{padding:10px 12px;border-bottom:1px solid var(--edge);vertical-align:middle}tr:last-child td{border-bottom:none}.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:600}.pill-on{background:#dcfce7;color:#166534}.pill-off{background:#fee2e2;color:#991b1b}.bar{height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden}.bar > span{display:block;height:100%;background:linear-gradient(90deg,#ea580c,#f97316)}.top-link{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;text-decoration:none;color:#0f766e;font-weight:700}.grid-note{margin-top:8px;color:var(--muted);font-size:12px}</style>
+</head><body>
+<a class=\"top-link\" href=\"/admin/companies\">&larr; Back to Companies</a>
+<h1>Company Health</h1>
+<p class=\"sub\">Read-only overview of company activity and workload.</p>
+<div class=\"stats\">
+    <div class=\"stat\"><div class=\"label\">Companies</div><div class=\"value\">{{ summary.total_companies }}</div></div>
+    <div class=\"stat\"><div class=\"label\">Active Companies</div><div class=\"value\">{{ summary.active_companies }}</div></div>
+    <div class=\"stat\"><div class=\"label\">Users</div><div class=\"value\">{{ summary.total_users }}</div></div>
+    <div class=\"stat\"><div class=\"label\">Open Tasks</div><div class=\"value\">{{ summary.open_tasks }}</div></div>
+</div>
+<div class=\"table-card\"><table><thead><tr><th>Company</th><th>Status</th><th>Users</th><th>Tasks</th><th>Completion</th></tr></thead>
+<tbody>{% for c in companies %}<tr>
+    <td><strong>{{ c.name }}</strong><div class=\"grid-note\">{{ c.slug }}</div></td>
+    <td>{% if c.is_active %}<span class=\"pill pill-on\">Active</span>{% else %}<span class=\"pill pill-off\">Inactive</span>{% endif %}</td>
+    <td>{{ c.active_users }}/{{ c.total_users }}</td>
+    <td>{{ c.open_tasks }} open / {{ c.completed_tasks }} done</td>
+    <td>
+        {% set total_tasks = c.total_tasks or 0 %}
+        {% set completed_tasks = c.completed_tasks or 0 %}
+        {% set pct = 0 if total_tasks == 0 else ((completed_tasks * 100) // total_tasks) %}
+        <div class=\"bar\"><span style=\"width: {{ pct }}%\"></span></div>
+        <div class=\"grid-note\">{{ pct }}% complete</div>
+    </td>
+</tr>{% endfor %}</tbody></table></div>
+</body></html>
+"""
+
+
 ADMIN_TASKS_HTML = """
 <!doctype html>
 <html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
@@ -2037,8 +2738,15 @@ ADMIN_TASKS_HTML = """
 <h1>Operational Tasks</h1>
 {% if message %}<div class=\"msg ok\">{{ message }}</div>{% endif %}
 {% if error %}<div class=\"msg err\">{{ error }}</div>{% endif %}
+{% if is_super_admin %}
+<form method=\"get\" action=\"/admin/tasks\" class=\"row\">
+    <select name=\"company_id\" required><option value=\"\">Select company</option>{% for c in companies %}<option value=\"{{ c.id }}\" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    <button type=\"submit\">Switch Company</button>
+</form>
+{% endif %}
 <form method=\"post\" action=\"/admin/tasks/create\" class=\"row\">
   <input type=\"hidden\" name=\"csrf_token\" value=\"{{ csrf_token() }}\" />
+    {% if selected_company_id %}<input type=\"hidden\" name=\"company_id\" value=\"{{ selected_company_id }}\" />{% endif %}
   <input name=\"title\" placeholder=\"Task title\" required style=\"min-width:180px\" />
   <input name=\"description\" placeholder=\"Description\" style=\"min-width:160px\" />
   <select name=\"assigned_to\"><option value=\"\">Unassigned</option>{% for u in active_users %}<option value=\"{{ u.id }}\">{{ u.username }}</option>{% endfor %}</select>
@@ -2047,10 +2755,10 @@ ADMIN_TASKS_HTML = """
   <button type=\"submit\">Create Task</button>
 </form>
 <div class=\"tabs\">
-  <a class=\"tab{% if not status_filter %} active{% endif %}\" href=\"/admin/tasks\">All</a>
-  <a class=\"tab{% if status_filter == 'pending' %} active{% endif %}\" href=\"/admin/tasks?status=pending\">Pending</a>
-  <a class=\"tab{% if status_filter == 'in-progress' %} active{% endif %}\" href=\"/admin/tasks?status=in-progress\">In Progress</a>
-  <a class=\"tab{% if status_filter == 'completed' %} active{% endif %}\" href=\"/admin/tasks?status=completed\">Completed</a>
+    <a class=\"tab{% if not status_filter %} active{% endif %}\" href=\"/admin/tasks{% if selected_company_id %}?company_id={{ selected_company_id }}{% endif %}\">All</a>
+    <a class=\"tab{% if status_filter == 'pending' %} active{% endif %}\" href=\"/admin/tasks?status=pending{% if selected_company_id %}&company_id={{ selected_company_id }}{% endif %}\">Pending</a>
+    <a class=\"tab{% if status_filter == 'in-progress' %} active{% endif %}\" href=\"/admin/tasks?status=in-progress{% if selected_company_id %}&company_id={{ selected_company_id }}{% endif %}\">In Progress</a>
+    <a class=\"tab{% if status_filter == 'completed' %} active{% endif %}\" href=\"/admin/tasks?status=completed{% if selected_company_id %}&company_id={{ selected_company_id }}{% endif %}\">Completed</a>
 </div>
 <div class=\"table-card\"><table><thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assigned To</th><th>Due</th><th>Created</th></tr></thead>
 <tbody>{% for t in tasks %}<tr>
@@ -2070,11 +2778,14 @@ ADMIN_AUDIT_HTML = """
 <!doctype html>
 <html lang=\"en\"><head><meta charset=\"utf-8\" /><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
 <title>Audit Logs — Dexter Ops</title>
-<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 18px}.table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}table{width:100%;border-collapse:collapse;font-size:.88rem}th{text-align:left;padding:9px 12px;font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}td{padding:9px 12px;border-bottom:1px solid var(--edge);vertical-align:top}tr:last-child td{border-bottom:none}.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.76rem;font-weight:600}.pill-act{background:#ede9fe;color:#5b21b6}.mono{font-family:'Consolas','Courier New',monospace;font-size:.8rem;color:var(--muted)}</style>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 12px}.table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}table{width:100%;border-collapse:collapse;font-size:.88rem}th{text-align:left;padding:9px 12px;font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}td{padding:9px 12px;border-bottom:1px solid var(--edge);vertical-align:top}tr:last-child td{border-bottom:none}.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.76rem;font-weight:600}.pill-act{background:#ede9fe;color:#5b21b6}.mono{font-family:'Consolas','Courier New',monospace;font-size:.8rem;color:var(--muted)}form.row{background:var(--panel);border-radius:12px;padding:14px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);display:flex;gap:10px;align-items:flex-end}select{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem;background:#fff;color:var(--ink)}button[type=submit]{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff;transition:opacity .15s}button[type=submit]:hover{opacity:.88}</style>
 </head><body>
 <h1>Audit Logs</h1>
-<div class="table-card"><table><thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>At</th></tr></thead>
-<tbody>{% for row in logs %}<tr><td style="color:var(--muted);font-size:.8rem">{{ row.id }}</td><td><strong>{{ row.actor_username }}</strong></td><td><span class="pill pill-act">{{ row.action }}</span></td><td class="mono">{{ row.target_table }}{% if row.target_id %}#{{ row.target_id }}{% endif %}</td><td style="max-width:260px;word-break:break-word;color:var(--muted);font-size:.82rem">{{ row.details or '—' }}</td><td style="color:var(--muted);font-size:.82rem;white-space:nowrap">{{ row.created_at }}</td></tr>{% endfor %}</tbody></table></div>
+{% if is_super_admin %}
+<form method=\"get\" action=\"/admin/audit-logs\" class=\"row\"><select name=\"company_id\" required>{% for c in companies %}<option value=\"{{ c.id }}\" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select><button type=\"submit\">Switch Company</button></form>
+{% endif %}
+<div class=\"table-card\"><table><thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>At</th></tr></thead>
+<tbody>{% for row in logs %}<tr><td style=\"color:var(--muted);font-size:.8rem\">{{ row.id }}</td><td><strong>{{ row.actor_username }}</strong></td><td><span class=\"pill pill-act\">{{ row.action }}</span></td><td class=\"mono\">{{ row.target_table }}{% if row.target_id %}#{{ row.target_id }}{% endif %}</td><td style=\"max-width:260px;word-break:break-word;color:var(--muted);font-size:.82rem\">{{ row.details or '—' }}</td><td style=\"color:var(--muted);font-size:.82rem;white-space:nowrap\">{{ row.created_at }}</td></tr>{% endfor %}</tbody></table></div>
 </body></html>
 """
 
@@ -2095,6 +2806,7 @@ PORTAL_APP_HTML = """
             --panel:#ffffff;
             --edge:#d1d5db;
             --bad:#991b1b;
+            --radius:10px;
         }
         * { box-sizing: border-box; }
         html, body { -webkit-text-size-adjust: 100%; }
@@ -2115,26 +2827,44 @@ PORTAL_APP_HTML = """
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 11px 16px;
+            padding: 8px 12px;
             border-bottom: 1px solid var(--edge);
             background: #ffffff;
             box-shadow: 0 1px 4px rgba(15,23,42,0.06);
         }
-        .brand { font-size: 17px; font-weight: 800; color: #0f172a; }
+        .brand { font-size: 16px; font-weight: 800; color: #0f172a; }
         .brand-wrap { display: flex; align-items: center; gap: 9px; }
-        .brand-logo { width: 26px; height: 26px; object-fit: contain; border-radius: 7px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        .brand-logo { width: 24px; height: 24px; object-fit: contain; border-radius: 7px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
         .nav { display: flex; gap: 7px; flex-wrap: wrap; }
         .nav a, .nav button {
             border: 1px solid var(--edge);
             background: #fff;
             color: var(--ink);
-            border-radius: 10px;
-            padding: 7px 12px;
+            border-radius: var(--radius);
+            padding: 6px 10px;
             text-decoration: none;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
+        .mini-ico {
+            width: 15px;
+            height: 15px;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .nav-short { display: none; }
         .nav a:hover, .nav button:hover { background: #f1f5f9; }
         .nav .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
         .nav .primary:hover { background: #c2410c; }
@@ -2146,9 +2876,9 @@ PORTAL_APP_HTML = """
             justify-content: space-between;
             border-bottom: 1px solid var(--edge);
             background: #f9fafb;
-            padding: 7px 16px;
+            padding: 6px 12px;
             color: var(--muted);
-            font-size: 12px;
+            font-size: 11px;
         }
         .subbar a { color: var(--accent2); font-weight: 600; text-decoration: none; }
         .subbar a:hover { text-decoration: underline; }
@@ -2167,6 +2897,9 @@ PORTAL_APP_HTML = """
             .topbar { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
             .brand { font-size: 1rem; }
             .nav { gap: 4px; }
+            .nav-label { display: none; }
+            .nav-short { display: inline; }
+            .nav a, .nav button { padding: 5px 8px; }
         }
     </style>
 </head>
@@ -2177,12 +2910,12 @@ PORTAL_APP_HTML = """
             <div class="brand">{{ app_title }}</div>
         </div>
         <div class="nav">
-            <a href="/">Home</a>
-            <a href="/portal/productmix">ProductMix</a>
-            <a href="/portal/ic3">IC3</a>
-            <a href="/portal/managerapp">Daily Log</a>
+            <a href="/"><span class="mini-ico">H</span><span class="nav-label">Home</span><span class="nav-short">HM</span></a>
+            <a href="/portal/productmix"><span class="mini-ico">P</span><span class="nav-label">ProductMix</span><span class="nav-short">PM</span></a>
+            <a href="/portal/ic3"><span class="mini-ico">I</span><span class="nav-label">IC3</span><span class="nav-short">IC3</span></a>
+            <a href="/portal/managerapp"><span class="mini-ico">D</span><span class="nav-label">Daily Log</span><span class="nav-short">DL</span></a>
             <button class="primary" id="btnRestart" onclick="doRestart(this)">Restart App</button>
-            <a href="/auth/logout">Logout</a>
+            <a href="/auth/logout"><span class="mini-ico">L</span><span class="nav-label">Logout</span><span class="nav-short">Out</span></a>
         </div>
     </div>
     <div class="subbar" id="subbar">
@@ -2451,11 +3184,11 @@ LOGIN_HTML = """
             padding: 32px 0;
         }
         .logo {
-            width: 80px;
-            height: 80px;
+            width: 130px;
+            height: 130px;
             margin-bottom: 18px;
             object-fit: contain;
-            border-radius: 14px;
+            border-radius: 20px;
             border: 1px solid var(--edge);
             background: #fff;
             padding: 5px;
@@ -2979,6 +3712,16 @@ class AppManager:
 
             env = os.environ.copy()
             env.update(app.get("env", {}))
+            # Ensure each managed app binds to its configured base_url host/port.
+            if resolved_name == "productmix":
+                env.setdefault("PM_HOST", host)
+                env.setdefault("PM_PORT", str(port))
+            elif resolved_name == "managerapp":
+                env.setdefault("MGR_HOST", host)
+                env.setdefault("MGR_PORT", str(port))
+            elif resolved_name == "ic3":
+                env.setdefault("IC3_HOST", host)
+                env.setdefault("IC3_PORT", str(port))
             log_file = self._log_file(resolved_name)
             self._rotate_log(resolved_name)
             with log_file.open("a", encoding="utf-8") as lf:
@@ -3191,6 +3934,7 @@ initialize_rbac_db()
 migrate_legacy_json_users_to_sqlite()
 migrate_add_task_fields_v1()
 migrate_add_password_reset_fields_v1()
+migrate_add_company_scope_v1()
 ensure_default_super_admin_user()
 
 
@@ -3233,6 +3977,8 @@ def auth_login() -> Response:
                 "username": key or username,
                 "user_id": int(user["id"]),
                 "role_name": role_name,
+                "company_id": int(user["company_id"]) if user.get("company_id") is not None else None,
+                "company_name": str(user.get("company_name") or ""),
                 "is_admin": role_name == "Super Admin",
                 "email": key or username,
             }
@@ -3293,18 +4039,21 @@ def auth_register() -> Response:
                     error = "Username already exists."
                 else:
                     employee_role_id = _get_role_id(conn, "Employee")
+                    default_company_id = ensure_default_company(conn)
                     cur = conn.execute(
                         """
-                        INSERT INTO users (username, password_hash, role_id, is_active, created_at, updated_at)
-                        VALUES (?, ?, ?, 1, datetime('now'), datetime('now'))
+                        INSERT INTO users (username, password_hash, role_id, company_id, is_active, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, 1, datetime('now'), datetime('now'))
                         """,
-                        (username, generate_password_hash(password), employee_role_id),
+                        (username, generate_password_hash(password), employee_role_id, default_company_id),
                     )
                     conn.commit()
                     session[SESSION_USER_KEY] = {
                         "username": username,
                         "user_id": int(cur.lastrowid),
                         "role_name": "Employee",
+                        "company_id": default_company_id,
+                        "company_name": "Default Company",
                         "is_admin": False,
                         "email": username,
                     }
@@ -3474,6 +4223,8 @@ def index() -> str:
         DASHBOARD_HTML,
         host=fd.get("host", "127.0.0.1"),
         port=fd.get("port", 5080),
+        current_company_name=str((session.get(SESSION_USER_KEY) or {}).get("company_name") or ""),
+        current_role_name=current_role_name(),
     )
 
 
@@ -3483,14 +4234,109 @@ def admin() -> str:
     return redirect("/admin/users")
 
 
-@app.route("/admin/users")
+def _requested_company_id() -> int | None:
+    raw = request.args.get("company_id")
+    if raw is None:
+        raw = request.form.get("company_id")
+    if raw is None and request.is_json:
+        payload = request.get_json(silent=True) or {}
+        raw = payload.get("company_id")
+    return _normalize_company_id(raw)
+
+
+def _effective_company_scope() -> int | None:
+    if current_role_name() == "Super Admin":
+        requested = _requested_company_id()
+        if requested is not None:
+            return requested
+    return current_user_company_id()
+
+
+@app.route("/admin/companies")
 @login_required
 @role_required("Super Admin")
+def admin_companies_page() -> Response:
+    return Response(
+        render_template_string(
+            ADMIN_COMPANIES_HTML,
+            companies=list_companies(),
+            message=request.args.get("message", ""),
+            error=request.args.get("error", ""),
+        )
+    )
+
+
+@app.route("/admin/companies/create", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_companies_create() -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/companies?error=Session+expired")
+
+    ok, msg = create_company(actor_id, request.form.get("name") or "")
+    key = "message" if ok else "error"
+    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+
+
+@app.route("/admin/companies/<int:company_id>/rename", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_companies_rename(company_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/companies?error=Session+expired")
+
+    ok, msg = rename_company(actor_id, int(company_id), request.form.get("name") or "")
+    key = "message" if ok else "error"
+    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+
+
+@app.route("/admin/companies/<int:company_id>/active", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_companies_active(company_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/companies?error=Session+expired")
+
+    is_active = str(request.form.get("is_active", "1")).strip() == "1"
+    ok, msg = set_company_active_state(actor_id, int(company_id), is_active)
+    key = "message" if ok else "error"
+    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+
+
+@app.route("/admin/company-health")
+@login_required
+@role_required("Super Admin")
+def admin_company_health_page() -> Response:
+    companies = list_company_health()
+    summary = {
+        "total_companies": len(companies),
+        "active_companies": sum(1 for c in companies if int(c.get("is_active", 0)) == 1),
+        "total_users": sum(int(c.get("total_users", 0)) for c in companies),
+        "open_tasks": sum(int(c.get("open_tasks", 0)) for c in companies),
+    }
+    return Response(render_template_string(ADMIN_COMPANY_HEALTH_HTML, companies=companies, summary=summary))
+
+
+@app.route("/admin/users")
+@login_required
+@role_required("Super Admin", "Manager")
 def admin_users_page() -> Response:
+    is_super_admin = current_role_name() == "Super Admin"
+    companies = list_companies(active_only=True) if is_super_admin else []
+    selected_company_id = _effective_company_scope()
+    if is_super_admin and selected_company_id is None and companies:
+        selected_company_id = int(companies[0]["id"])
+
     return Response(
         render_template_string(
             ADMIN_USERS_HTML,
-            users=list_users_with_roles(),
+            users=list_users_with_roles(company_id=selected_company_id),
+            is_super_admin=is_super_admin,
+            companies=companies,
+            selected_company_id=selected_company_id,
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
         )
@@ -3499,25 +4345,29 @@ def admin_users_page() -> Response:
 
 @app.route("/admin/users/create", methods=["POST"])
 @login_required
-@role_required("Super Admin")
+@role_required("Super Admin", "Manager")
 def admin_users_create() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
         return redirect("/admin/users?error=Session+expired")
+
+    selected_company_id = _effective_company_scope()
 
     ok, msg = create_user_account(
         actor_user_id=actor_id,
         username=(request.form.get("username") or ""),
         password=(request.form.get("password") or ""),
         role_name=(request.form.get("role_name") or "Employee"),
+        company_id=selected_company_id,
     )
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    company_qs = f"&company_id={selected_company_id}" if selected_company_id is not None else ""
+    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}{company_qs}")
 
 
 @app.route("/admin/users/<int:user_id>/active", methods=["POST"])
 @login_required
-@role_required("Super Admin")
+@role_required("Super Admin", "Manager")
 def admin_users_active(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
@@ -3526,12 +4376,14 @@ def admin_users_active(user_id: int) -> Response:
     is_active = str(request.form.get("is_active", "1")).strip() == "1"
     ok, msg = set_user_active_state(actor_id, int(user_id), is_active)
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    selected_company_id = _effective_company_scope()
+    company_qs = f"&company_id={selected_company_id}" if selected_company_id is not None else ""
+    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}{company_qs}")
 
 
 @app.route("/admin/users/<int:user_id>/role", methods=["POST"])
 @login_required
-@role_required("Super Admin")
+@role_required("Super Admin", "Manager")
 def admin_users_role(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
@@ -3540,22 +4392,33 @@ def admin_users_role(user_id: int) -> Response:
     role_name = str(request.form.get("role_name") or "Employee").strip()
     ok, msg = set_user_role_name(actor_id, int(user_id), role_name)
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    selected_company_id = _effective_company_scope()
+    company_qs = f"&company_id={selected_company_id}" if selected_company_id is not None else ""
+    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}{company_qs}")
 
 
 @app.route("/admin/tasks")
 @login_required
 @role_required("Super Admin", "Manager")
 def admin_tasks_page() -> Response:
+    is_super_admin = current_role_name() == "Super Admin"
+    companies = list_companies(active_only=True) if is_super_admin else []
+    selected_company_id = _effective_company_scope()
+    if is_super_admin and selected_company_id is None and companies:
+        selected_company_id = int(companies[0]["id"])
+
     status_filter = (request.args.get("status") or "").strip().lower() or None
     if status_filter not in {None, "pending", "in-progress", "completed"}:
         status_filter = None
-    users = [u for u in list_users_with_roles() if int(u.get("is_active", 0)) == 1]
+    users = [u for u in list_users_with_roles(company_id=selected_company_id) if int(u.get("is_active", 0)) == 1]
     return Response(
         render_template_string(
             ADMIN_TASKS_HTML,
+            is_super_admin=is_super_admin,
+            companies=companies,
+            selected_company_id=selected_company_id,
             active_users=users,
-            tasks=list_tasks(status_filter=status_filter),
+            tasks=list_tasks(status_filter=status_filter, company_id=selected_company_id),
             status_filter=status_filter,
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
@@ -3573,6 +4436,7 @@ def admin_tasks_create() -> Response:
 
     assigned_to_raw = (request.form.get("assigned_to") or "").strip()
     assigned_to = int(assigned_to_raw) if assigned_to_raw.isdigit() else None
+    selected_company_id = _effective_company_scope()
     ok, msg = create_task_record(
         actor_user_id=actor_id,
         title=(request.form.get("title") or ""),
@@ -3580,29 +4444,47 @@ def admin_tasks_create() -> Response:
         assigned_to=assigned_to,
         due_date=(request.form.get("due_date") or "").strip() or None,
         priority=(request.form.get("priority") or "normal"),
+        company_id=selected_company_id,
     )
     key = "message" if ok else "error"
-    return redirect(f"/admin/tasks?{key}={requests.utils.quote(msg)}")
+    status_filter = (request.args.get("status") or request.form.get("status") or "").strip().lower()
+    status_qs = f"&status={status_filter}" if status_filter in {"pending", "in-progress", "completed"} else ""
+    company_qs = f"&company_id={selected_company_id}" if selected_company_id is not None else ""
+    return redirect(f"/admin/tasks?{key}={requests.utils.quote(msg)}{status_qs}{company_qs}")
 
 
 @app.route("/admin/audit-logs")
 @login_required
 @role_required("Super Admin", "Manager")
 def admin_audit_logs_page() -> Response:
-    return Response(render_template_string(ADMIN_AUDIT_HTML, logs=list_audit_logs()))
+    is_super_admin = current_role_name() == "Super Admin"
+    companies = list_companies(active_only=True) if is_super_admin else []
+    selected_company_id = _effective_company_scope()
+    if is_super_admin and selected_company_id is None and companies:
+        selected_company_id = int(companies[0]["id"])
+    return Response(
+        render_template_string(
+            ADMIN_AUDIT_HTML,
+            logs=list_audit_logs(company_id=selected_company_id),
+            is_super_admin=is_super_admin,
+            companies=companies,
+            selected_company_id=selected_company_id,
+        )
+    )
 
 
 @app.route("/api/admin/users", methods=["GET"])
 @login_required
-@role_required("Super Admin")
+@role_required("Super Admin", "Manager")
 def api_admin_users_list() -> Response:
-    return jsonify({"ok": True, "users": list_users_with_roles()})
+    selected_company_id = _effective_company_scope()
+    return jsonify({"ok": True, "users": list_users_with_roles(company_id=selected_company_id)})
 
 
 @app.route("/api/admin/users", methods=["POST"])
 @csrf.exempt
 @login_required
-@role_required("Super Admin")
+@role_required("Super Admin", "Manager")
 def api_admin_users_create() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
@@ -3614,6 +4496,7 @@ def api_admin_users_create() -> Response:
         username=str(payload.get("username") or ""),
         password=str(payload.get("password") or ""),
         role_name=str(payload.get("role_name") or "Employee"),
+        company_id=_effective_company_scope(),
     )
     code = 200 if ok else 400
     return jsonify({"ok": ok, "message": msg}), code
@@ -3622,7 +4505,7 @@ def api_admin_users_create() -> Response:
 @app.route("/api/admin/users/<int:user_id>/role", methods=["PATCH"])
 @csrf.exempt
 @login_required
-@role_required("Super Admin")
+@role_required("Super Admin", "Manager")
 def api_admin_users_role(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
@@ -3637,7 +4520,7 @@ def api_admin_users_role(user_id: int) -> Response:
 @app.route("/api/admin/users/<int:user_id>/active", methods=["PATCH"])
 @csrf.exempt
 @login_required
-@role_required("Super Admin")
+@role_required("Super Admin", "Manager")
 def api_admin_users_active(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
@@ -3655,7 +4538,7 @@ def api_admin_users_active(user_id: int) -> Response:
 @login_required
 @role_required("Super Admin", "Manager")
 def api_admin_tasks_list() -> Response:
-    return jsonify({"ok": True, "tasks": list_tasks()})
+    return jsonify({"ok": True, "tasks": list_tasks(company_id=_effective_company_scope())})
 
 
 @app.route("/api/admin/tasks", methods=["POST"])
@@ -3677,6 +4560,7 @@ def api_admin_tasks_create() -> Response:
         assigned_to=assigned_to_id,
         due_date=str(payload.get("due_date") or "").strip() or None,
         priority=str(payload.get("priority") or "normal"),
+        company_id=_effective_company_scope(),
     )
     code = 200 if ok else 400
     return jsonify({"ok": ok, "message": msg}), code
@@ -3701,7 +4585,7 @@ def api_admin_tasks_status(task_id: int) -> Response:
 @login_required
 @role_required("Super Admin", "Manager")
 def api_admin_audit_logs() -> Response:
-    return jsonify({"ok": True, "audit_logs": list_audit_logs()})
+    return jsonify({"ok": True, "audit_logs": list_audit_logs(company_id=_effective_company_scope())})
 
 
 @app.route("/portal")
@@ -4198,6 +5082,8 @@ if __name__ == "__main__":
     # to expose the launcher to phones / other devices on the LAN).
     host = os.environ.get("DEXTER_HOST") or front.get("host", "127.0.0.1")
     port = int(os.environ.get("DEXTER_PORT") or front.get("port", 5080))
+    use_ssl = os.environ.get("DEXTER_SSL", "0") == "1"
+    scheme = "https" if use_ssl else "http"
     auto_open_browser = bool(front.get("auto_open_browser", True))
     open_path = str(front.get("open_path", "/")).strip() or "/"
     if not open_path.startswith("/"):
@@ -4210,18 +5096,23 @@ if __name__ == "__main__":
     MANAGER.start_watchdog()
 
     if auto_open_browser:
-        startup_url = f"http://{host}:{port}{open_path}"
+        startup_url = f"{scheme}://{host}:{port}{open_path}"
         threading.Timer(1.0, lambda: open_url_in_chrome(startup_url)).start()
 
     debug_mode = os.environ.get("PM_DEBUG", "0") == "1"
+    ssl_context = "adhoc" if use_ssl else None
     if debug_mode:
-        print(f"[dexter] Running in DEBUG mode on {host}:{port}", file=sys.stderr)
-        app.run(host=host, port=port, debug=True)
+        print(f"[dexter] Running in DEBUG mode on {scheme}://{host}:{port}", file=sys.stderr)
+        app.run(host=host, port=port, debug=True, ssl_context=ssl_context)
     else:
-        try:
-            from waitress import serve  # type: ignore[import]
-            print(f"[dexter] Running via waitress on {host}:{port} (threads=8)", file=sys.stderr)
-            serve(app, host=host, port=port, threads=8)
-        except ImportError:
-            print("[dexter] waitress not installed — falling back to Flask dev server.", file=sys.stderr)
-            app.run(host=host, port=port, debug=False)
+        if use_ssl:
+            print(f"[dexter] SSL enabled. Running Flask HTTPS server on {scheme}://{host}:{port}", file=sys.stderr)
+            app.run(host=host, port=port, debug=False, ssl_context=ssl_context)
+        else:
+            try:
+                from waitress import serve  # type: ignore[import]
+                print(f"[dexter] Running via waitress on {host}:{port} (threads=8)", file=sys.stderr)
+                serve(app, host=host, port=port, threads=8)
+            except ImportError:
+                print("[dexter] waitress not installed — falling back to Flask dev server.", file=sys.stderr)
+                app.run(host=host, port=port, debug=False)
