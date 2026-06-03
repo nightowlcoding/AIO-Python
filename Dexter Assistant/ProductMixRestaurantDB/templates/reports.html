@@ -21,6 +21,11 @@
         </a>
       </li>
       <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_analytics_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-graph-up-arrow me-1"></i>Analytics Dashboard
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link" href="{{ url_for('reports_production_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
           <i class="bi bi-diagram-3 me-1"></i>Production List Report
         </a>

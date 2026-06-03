@@ -3104,6 +3104,124 @@ def _get_recent_product_mix_uploads(restaurant=None, limit=12, search_text="", s
     return [dict(r) for r in rows]
 
 
+def _get_product_mix_period_trend_rows(restaurant=None, start_date=None, end_date=None):
+    if not restaurant:
+        return []
+
+    conn = get_db_connection()
+    where_clauses = ["u.restaurant_id = ?"]
+    params = [int(restaurant["id"])]
+
+    if start_date:
+        where_clauses.append("COALESCE(u.report_end_date, u.report_start_date, '') >= ?")
+        params.append(str(start_date))
+    if end_date:
+        where_clauses.append("COALESCE(u.report_start_date, u.report_end_date, '') <= ?")
+        params.append(str(end_date))
+
+    rows = conn.execute(
+        f"""
+        SELECT
+            COALESCE(substr(COALESCE(u.report_end_date, u.report_start_date), 1, 7), 'Unknown') AS period,
+            COUNT(DISTINCT u.id) AS uploads,
+            COALESCE(SUM(i.total), 0) AS total_units,
+            COALESCE(SUM(i.qty_sold), 0) AS total_qty_sold
+        FROM product_mix_uploads u
+        JOIN product_mix_items i ON i.upload_id = u.id
+        WHERE {' AND '.join(where_clauses)}
+        GROUP BY period
+        ORDER BY period ASC
+        """,
+        params,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def _get_product_mix_item_totals_rows(restaurant=None, start_date=None, end_date=None, search_text="", limit=10):
+    if not restaurant:
+        return []
+
+    conn = get_db_connection()
+    where_clauses = ["u.restaurant_id = ?"]
+    params = [int(restaurant["id"])]
+
+    cleaned_search = _clean_text(search_text, 120)
+    if cleaned_search:
+        where_clauses.append("(i.item_name LIKE ? OR i.category_name LIKE ?)")
+        like_value = f"%{cleaned_search}%"
+        params.extend([like_value, like_value])
+
+    if start_date:
+        where_clauses.append("COALESCE(u.report_end_date, u.report_start_date, '') >= ?")
+        params.append(str(start_date))
+    if end_date:
+        where_clauses.append("COALESCE(u.report_start_date, u.report_end_date, '') <= ?")
+        params.append(str(end_date))
+
+    query = f"""
+        SELECT
+            i.item_name,
+            COALESCE(NULLIF(TRIM(i.category_name), ''), 'Uncategorized') AS category_name,
+            COUNT(DISTINCT u.id) AS uploads,
+            COALESCE(SUM(i.qty_sold), 0) AS total_qty_sold,
+            COALESCE(SUM(i.total), 0) AS total_units,
+            MAX(u.report_end_date) AS last_report_end_date
+        FROM product_mix_items i
+        JOIN product_mix_uploads u ON u.id = i.upload_id
+        WHERE {' AND '.join(where_clauses)}
+        GROUP BY i.item_name, category_name
+        ORDER BY total_units DESC, total_qty_sold DESC, LOWER(i.item_name) ASC
+    """
+    if limit is None:
+        rows = conn.execute(query, params).fetchall()
+    else:
+        rows = conn.execute(f"{query}\nLIMIT ?", (*params, int(limit))).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def _get_product_mix_category_totals_rows(restaurant=None, start_date=None, end_date=None, search_text=""):
+    if not restaurant:
+        return []
+
+    conn = get_db_connection()
+    where_clauses = ["u.restaurant_id = ?"]
+    params = [int(restaurant["id"])]
+
+    cleaned_search = _clean_text(search_text, 120)
+    if cleaned_search:
+        where_clauses.append("(i.category_name LIKE ? OR i.item_name LIKE ?)")
+        like_value = f"%{cleaned_search}%"
+        params.extend([like_value, like_value])
+
+    if start_date:
+        where_clauses.append("COALESCE(u.report_end_date, u.report_start_date, '') >= ?")
+        params.append(str(start_date))
+    if end_date:
+        where_clauses.append("COALESCE(u.report_start_date, u.report_end_date, '') <= ?")
+        params.append(str(end_date))
+
+    rows = conn.execute(
+        f"""
+        SELECT
+            COALESCE(NULLIF(TRIM(i.category_name), ''), 'Uncategorized') AS category_name,
+            COUNT(DISTINCT i.item_name) AS item_count,
+            COUNT(DISTINCT u.id) AS uploads,
+            COALESCE(SUM(i.qty_sold), 0) AS total_qty_sold,
+            COALESCE(SUM(i.total), 0) AS total_units
+        FROM product_mix_items i
+        JOIN product_mix_uploads u ON u.id = i.upload_id
+        WHERE {' AND '.join(where_clauses)}
+        GROUP BY category_name
+        ORDER BY total_units DESC, total_qty_sold DESC, category_name ASC
+        """,
+        params,
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def _get_production_list_report_rows(restaurant=None, start_date=None, end_date=None, search_text=""):
     if not restaurant:
         return []
@@ -5122,6 +5240,74 @@ def reports_page():
     )
 
 
+@app.route("/reports/analytics")
+@login_required
+def reports_analytics_page():
+    restaurant = get_active_restaurant()
+    location_options = _get_accessible_restaurant_switch_options()
+    scoped_restaurant = _resolve_report_restaurant(request.args.get("location_id"), restaurant)
+    search_text = (request.args.get("search") or "").strip()
+    start_date = _normalize_report_date_filter(request.args.get("start_date"))
+    end_date = _normalize_report_date_filter(request.args.get("end_date"))
+
+    items_rows = _get_product_mix_item_totals_rows(
+        restaurant=scoped_restaurant,
+        start_date=start_date,
+        end_date=end_date,
+        search_text=search_text,
+        limit=10,
+    )
+    category_rows = _get_product_mix_category_totals_rows(
+        restaurant=scoped_restaurant,
+        start_date=start_date,
+        end_date=end_date,
+        search_text=search_text,
+    )
+    period_rows = _get_product_mix_period_trend_rows(
+        restaurant=scoped_restaurant,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    uploads_count = len(period_rows) and sum(int(row.get("uploads") or 0) for row in period_rows) or 0
+    total_units = sum(float(row.get("total_units") or 0) for row in items_rows)
+    total_qty_sold = sum(float(row.get("total_qty_sold") or 0) for row in items_rows)
+    top_item = items_rows[0] if items_rows else None
+    top_category = category_rows[0] if category_rows else None
+
+    weekly_projection = 0.0
+    if period_rows:
+        trend_values = [float(row.get("total_units") or 0) for row in period_rows]
+        weekly_projection = _compute_linear_projection(trend_values, horizon=1)
+
+    summary = {
+        "periods": len(period_rows),
+        "uploads": uploads_count,
+        "top_items": len(items_rows),
+        "categories": len(category_rows),
+        "projected_next_period_units": _format_numeric_for_response(weekly_projection),
+    }
+
+    return render_template(
+        "reports_analytics.html",
+        restaurant=scoped_restaurant,
+        summary=summary,
+        location_options=location_options,
+        upload_filters={
+            "search": search_text,
+            "start_date": start_date or "",
+            "end_date": end_date or "",
+            "location_id": str(scoped_restaurant["id"]) if scoped_restaurant else "",
+        },
+        period_rows=period_rows,
+        items_rows=items_rows,
+        category_rows=category_rows,
+        top_item=top_item,
+        top_category=top_category,
+        total_units=total_units,
+        total_qty_sold=total_qty_sold,
+    )
+
+
 @app.route("/reports/production")
 @login_required
 def reports_production_page():
@@ -5479,11 +5665,22 @@ def reports_weekly_usage_page():
             sum(float(group_row.get("average_cases") or 0) for group_row in rows_in_group) / len(rows_in_group)
         ) if rows_in_group else 0.0
 
+    top_weekly_items = sorted(
+        rows,
+        key=lambda item: (
+            -float(item.get("average_cases") or 0),
+            str(item.get("production_item_name") or "").lower(),
+        ),
+    )[:10]
+    top_weekly_item = top_weekly_items[0] if top_weekly_items else None
+
     return render_template(
         "reports_weekly_usage.html",
         restaurant=scoped_restaurant,
         summary=summary,
         weekly_rows=rows,
+        top_weekly_items=top_weekly_items,
+        top_weekly_item=top_weekly_item,
         order_groups=order_groups,
         location_options=location_options,
         is_admin_user=_is_admin_user(),

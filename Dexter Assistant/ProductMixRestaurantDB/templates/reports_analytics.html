@@ -1,0 +1,333 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card shadow-sm border-0 overflow-hidden">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: linear-gradient(135deg, #102a43, #1f6feb); color: #fff;">
+        <span><i class="bi bi-graph-up-arrow me-2"></i>Product Mix Analytics</span>
+        <span class="small opacity-75">Trend, top items, category mix, and projection</span>
+      </div>
+      <div class="card-body d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <p class="text-muted mb-0">A period-based view of what is moving, what is growing, and where the volume sits.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-table me-1"></i>Tracked Items Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_production_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-diagram-3 me-1"></i>Production List Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_categories_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-tags me-1"></i>Category Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_weekly_usage_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-calendar-week me-1"></i>Weekly Usage
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link active" aria-current="page" href="{{ url_for('reports_analytics_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-graph-up-arrow me-1"></i>Analytics Dashboard
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <div class="col-6 col-lg-2">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="section-eyebrow">Periods</div>
+        <div class="stat-value">{{ summary.periods }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="section-eyebrow">Uploads</div>
+        <div class="stat-value">{{ summary.uploads }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="section-eyebrow">Top Items</div>
+        <div class="stat-value">{{ summary.top_items }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="section-eyebrow">Categories</div>
+        <div class="stat-value">{{ summary.categories }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="section-eyebrow">Projected Next Period</div>
+        <div class="stat-value">{{ summary.projected_next_period_units }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="row g-3">
+      <div class="col-12 col-lg-4">
+        <div class="card shadow-sm h-100 border-0">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-award-fill me-2"></i>Top Item</span>
+            <span class="badge text-bg-primary">{{ top_item.category_name if top_item else 'N/A' }}</span>
+          </div>
+          <div class="card-body">
+            {% if top_item %}
+            <div class="display-6 fw-bold mb-2">{{ top_item.item_name }}</div>
+            <p class="text-muted mb-2">Leading item in the selected period.</p>
+            <div class="d-flex flex-column gap-2">
+              <div><strong>{{ "%.2f"|format(top_item.total_units or 0) }}</strong> total units</div>
+              <div><strong>{{ "%.2f"|format(top_item.total_qty_sold or 0) }}</strong> raw quantity sold</div>
+              <div><strong>{{ top_item.uploads }}</strong> uploads</div>
+            </div>
+            {% else %}
+            <div class="text-muted">No item data available for this selection.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-bar-chart-line-fill me-2"></i>Top Items by Period</span>
+            <span class="small text-muted">Top 10 items ranked by total units</span>
+          </div>
+          <div class="card-body">
+              {% if item_rows %}
+              <div style="height: 380px;">
+                <canvas id="analyticsTopItemsChart"></canvas>
+              </div>
+              {% else %}
+              <div class="analytics-empty-state" style="min-height: 380px;">
+                <div class="text-center text-muted px-4">
+                  <div class="display-6 mb-2">No data yet</div>
+                  <div>Add Product Mix uploads for this company to populate the chart.</div>
+                </div>
+              </div>
+              {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-activity me-2"></i>Period Trend</span>
+            <span class="small text-muted">Uploads and total units over time</span>
+          </div>
+          <div class="card-body">
+            {% if period_rows %}
+            <div style="height: 360px;">
+              <canvas id="analyticsTrendChart"></canvas>
+            </div>
+            {% else %}
+            <div class="analytics-empty-state" style="min-height: 360px;">
+              <div class="text-center text-muted px-4">
+                <div class="display-6 mb-2">No trend data</div>
+                <div>Once uploads exist, this chart will show period-to-period movement.</div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-pie-chart-fill me-2"></i>Category Mix</span>
+            <span class="small text-muted">Share by total units</span>
+          </div>
+          <div class="card-body">
+            {% if category_rows %}
+            <div style="height: 360px;">
+              <canvas id="analyticsCategoryChart"></canvas>
+            </div>
+            {% else %}
+            <div class="analytics-empty-state" style="min-height: 360px;">
+              <div class="text-center text-muted px-4">
+                <div class="display-6 mb-2">No category data</div>
+                <div>Category share will appear once Product Mix items are uploaded.</div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var periodRows = {{ period_rows | tojson }};
+  var itemRows = {{ items_rows | tojson }};
+  var categoryRows = {{ category_rows | tojson }};
+
+  function rgba(color, alpha) {
+    return color.replace('rgb', 'rgba').replace(')', ',' + alpha + ')');
+  }
+
+  var trendCanvas = document.getElementById('analyticsTrendChart');
+  if (trendCanvas && periodRows.length && typeof Chart !== 'undefined') {
+    var trendLabels = periodRows.map(function (row) { return row.period; });
+    var uploadValues = periodRows.map(function (row) { return Number(row.uploads || 0); });
+    var unitValues = periodRows.map(function (row) { return Number(row.total_units || 0); });
+
+    new Chart(trendCanvas.getContext('2d'), {
+      data: {
+        labels: trendLabels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Total Units',
+            data: unitValues,
+            borderColor: 'rgb(31, 111, 235)',
+            backgroundColor: rgba('rgb(31, 111, 235)', '0.14'),
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            yAxisID: 'yUnits',
+            pointRadius: trendLabels.length > 18 ? 1.5 : 3,
+          },
+          {
+            type: 'bar',
+            label: 'Uploads',
+            data: uploadValues,
+            backgroundColor: 'rgba(15, 118, 110, 0.28)',
+            borderColor: 'rgba(15, 118, 110, 0.9)',
+            borderWidth: 1,
+            borderRadius: 8,
+            yAxisID: 'yUploads',
+            maxBarThickness: 24,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' }
+        },
+        scales: {
+          yUnits: {
+            beginAtZero: true,
+            position: 'left',
+            grid: { color: 'rgba(15,23,42,0.08)' }
+          },
+          yUploads: {
+            beginAtZero: true,
+            position: 'right',
+            grid: { drawOnChartArea: false }
+          },
+          x: {
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  }
+
+  var topCanvas = document.getElementById('analyticsTopItemsChart');
+  if (topCanvas && itemRows.length && typeof Chart !== 'undefined') {
+    var topLabels = itemRows.map(function (row) { return row.item_name; });
+    var topValues = itemRows.map(function (row) { return Number(row.total_units || 0); });
+    var topColors = itemRows.map(function (_, idx) {
+      var palette = [
+        'rgba(31, 111, 235, 0.82)',
+        'rgba(15, 118, 110, 0.82)',
+        'rgba(245, 158, 11, 0.82)',
+        'rgba(239, 68, 68, 0.82)',
+        'rgba(124, 58, 237, 0.82)'
+      ];
+      return palette[idx % palette.length];
+    });
+
+    new Chart(topCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: topLabels,
+        datasets: [{
+          label: 'Total Units',
+          data: topValues,
+          backgroundColor: topColors,
+          borderRadius: 10,
+          maxBarThickness: 26,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: 'rgba(15,23,42,0.08)' } },
+          y: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  var categoryCanvas = document.getElementById('analyticsCategoryChart');
+  if (categoryCanvas && categoryRows.length && typeof Chart !== 'undefined') {
+    var categoryLabels = categoryRows.map(function (row) { return row.category_name; });
+    var categoryValues = categoryRows.map(function (row) { return Number(row.total_units || 0); });
+    var categoryColors = [
+      '#1f6feb', '#0f766e', '#f59e0b', '#ef4444', '#7c3aed', '#14b8a6', '#e11d48', '#6b7280'
+    ];
+
+    new Chart(categoryCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: categoryLabels,
+        datasets: [{
+          data: categoryValues,
+          backgroundColor: categoryLabels.map(function (_, idx) { return categoryColors[idx % categoryColors.length]; }),
+          borderWidth: 0,
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              usePointStyle: true,
+              boxWidth: 10,
+            }
+          }
+        }
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}
