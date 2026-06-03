@@ -16,6 +16,7 @@ import re
 import difflib
 import unicodedata
 import os
+import sys
 import time
 import uuid
 import logging
@@ -28,8 +29,17 @@ from datetime import datetime, timedelta
 from jinja2 import TemplateNotFound
 
 APP_DIR = Path(__file__).resolve().parent
+DEXTER_ASSISTANT_DIR = APP_DIR.parent
+if str(DEXTER_ASSISTANT_DIR) not in sys.path:
+    sys.path.insert(0, str(DEXTER_ASSISTANT_DIR))
+
+from tenant_scope import resolve_tenant_scope
+
 LOCAL_TEMPLATE_DIR = APP_DIR / "templates"
 WORKSPACE_TEMPLATE_DIR = APP_DIR.parent / "templates"
+COMPANY_LOGO_DIR = APP_DIR / "static" / "company_logos"
+COMPANY_LOGO_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_COMPANY_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 if (LOCAL_TEMPLATE_DIR / "index.html").exists():
     TEMPLATE_DIR = LOCAL_TEMPLATE_DIR
@@ -312,10 +322,13 @@ def _error_response(message, status_code, code):
 
 @app.context_processor
 def inject_csrf_token():
+    default_logo_url = url_for("static", filename="dexter-ui/brand/logo-256.png")
     payload = {
         "csrf_token": _get_or_create_csrf_token(),
         "location_switch_options": [],
         "location_switch_active_id": None,
+        "branding_company_name": "Product Mix",
+        "branding_logo_url": default_logo_url,
     }
 
     if FORMULA_MODE:
@@ -326,6 +339,22 @@ def inject_csrf_token():
         payload["location_switch_options"] = _get_accessible_restaurant_switch_options()
         payload["location_switch_active_id"] = int(current_user.restaurant_id) if current_user.restaurant_id else None
 
+    company_name = _clean_text(session.get("pm_selected_company", ""), 120).strip()
+    if not company_name:
+        active_restaurant = get_active_restaurant()
+        if active_restaurant:
+            company_name = _clean_text(active_restaurant.get("name", ""), 120).strip()
+
+    if company_name:
+        conn = get_db_connection()
+        company_profile = _load_company_profile(conn, company_name)
+        conn.close()
+
+        payload["branding_company_name"] = company_profile.get("name") or company_name
+        logo_path = _clean_text(company_profile.get("logo_path", ""), 220)
+        if logo_path and (APP_DIR / "static" / logo_path).exists():
+            payload["branding_logo_url"] = url_for("static", filename=logo_path)
+
     return payload
 
 
@@ -333,6 +362,104 @@ def inject_csrf_token():
 def before_request_security_and_timing():
     g.request_started_at = time.time()
     g.request_id = uuid.uuid4().hex[:12]
+
+    tenant_scope = resolve_tenant_scope(
+        request.headers,
+        session_data=session,
+        company_session_keys=("pm_selected_company", "selected_company_name", "company_name"),
+        app_name="productmix",
+        logger=logging.getLogger("productmix"),
+        request_path=request.path,
+        method=request.method,
+    )
+    dexter_company_name = _clean_text(tenant_scope.get("company_name", ""), 120).strip()
+    dexter_restaurant_raw = _clean_text(request.headers.get("X-Dexter-Restaurant-Id", ""), 40).strip().lower()
+    if dexter_restaurant_raw.startswith("pm_"):
+        dexter_restaurant_raw = dexter_restaurant_raw[3:]
+    dexter_restaurant_id = int(dexter_restaurant_raw) if dexter_restaurant_raw.isdigit() else None
+    session_company_name = _get_selected_company_name()
+    if dexter_company_name and dexter_company_name != session_company_name:
+        session["pm_selected_company"] = dexter_company_name
+
+        conn = get_db_connection()
+        try:
+            scoped_rows = conn.execute(
+                "SELECT id FROM restaurants WHERE name = ? ORDER BY id ASC",
+                (dexter_company_name,),
+            ).fetchall()
+
+            scoped_ids = [int(row["id"]) for row in scoped_rows]
+            if current_user.is_authenticated:
+                if scoped_ids:
+                    target_restaurant_id = scoped_ids[0]
+                    conn.execute("UPDATE users SET restaurant_id = ? WHERE id = ?", (target_restaurant_id, int(current_user.id)))
+                    current_user.restaurant_id = target_restaurant_id
+                else:
+                    conn.execute("UPDATE users SET restaurant_id = NULL WHERE id = ?", (int(current_user.id),))
+                    current_user.restaurant_id = None
+                conn.commit()
+            elif FORMULA_MODE:
+                if scoped_ids:
+                    set_active_restaurant(int(scoped_ids[0]))
+        finally:
+            conn.close()
+
+    if current_user.is_authenticated and dexter_restaurant_id is not None:
+        conn = get_db_connection()
+        try:
+            scoped_company_name = dexter_company_name or _get_selected_company_name()
+            if scoped_company_name:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? AND name = ? LIMIT 1",
+                    (int(dexter_restaurant_id), scoped_company_name),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? LIMIT 1",
+                    (int(dexter_restaurant_id),),
+                ).fetchone()
+
+            if row and _has_access_to_restaurant_id(int(dexter_restaurant_id)):
+                conn.execute("UPDATE users SET restaurant_id = ? WHERE id = ?", (int(dexter_restaurant_id), int(current_user.id)))
+                current_user.restaurant_id = int(dexter_restaurant_id)
+                conn.commit()
+        finally:
+            conn.close()
+    elif FORMULA_MODE and dexter_restaurant_id is not None:
+        conn = get_db_connection()
+        try:
+            scoped_company_name = dexter_company_name or _get_selected_company_name()
+            if scoped_company_name:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? AND name = ? LIMIT 1",
+                    (int(dexter_restaurant_id), scoped_company_name),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? LIMIT 1",
+                    (int(dexter_restaurant_id),),
+                ).fetchone()
+            if row:
+                set_active_restaurant(int(dexter_restaurant_id))
+        finally:
+            conn.close()
+
+    compact_nav_paths = {"/restaurant_setup", "/select_restaurant"}
+    if request.method == "GET" and request.path in compact_nav_paths:
+        full_nav_raw = (request.args.get("fullnav") or "").strip().lower()
+        new_nav_mode = None
+        if full_nav_raw in {"1", "true", "yes"}:
+            new_nav_mode = "full"
+        elif full_nav_raw in {"0", "false", "no"}:
+            new_nav_mode = "compact"
+
+        if new_nav_mode:
+            session["pm_nav_mode"] = new_nav_mode
+            if has_request_context() and current_user.is_authenticated:
+                existing_mode = getattr(current_user, "nav_mode", "compact") or "compact"
+                if existing_mode != new_nav_mode:
+                    _save_user_nav_mode_preference(int(current_user.id), new_nav_mode)
+                    current_user.nav_mode = new_nav_mode
 
     if request.method == "POST" and not FORMULA_MODE:
         csrf_token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
@@ -384,6 +511,7 @@ class User(UserMixin):
         self.full_name = row["full_name"] or ""
         self.restaurant_id = row["restaurant_id"]
         self.is_admin = bool(row["is_admin"])
+        self.nav_mode = row["nav_mode"] if "nav_mode" in row.keys() and row["nav_mode"] else "compact"
 
 
 def _is_admin_user():
@@ -396,6 +524,155 @@ def _current_restaurant_id():
     if not current_user.is_authenticated:
         return None
     return current_user.restaurant_id
+
+
+def _users_table_has_column(conn, column_name):
+    try:
+        rows = conn.execute("PRAGMA table_info(users)").fetchall()
+    except Exception:
+        return False
+    return any(str(row[1]) == column_name for row in rows)
+
+
+def _normalize_company_key(value):
+    raw = _clean_text(value or "", 120).strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
+    return normalized or "default"
+
+
+def _get_selected_company_name():
+    if not has_request_context():
+        return ""
+    return _clean_text(session.get("pm_selected_company", ""), 120).strip()
+
+
+def _get_company_scoped_restaurant_ids(conn=None):
+    company_name = _get_selected_company_name()
+    if not company_name:
+        return None
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_db_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id FROM restaurants WHERE name = ? ORDER BY id ASC",
+            (company_name,),
+        ).fetchall()
+        return [int(row["id"]) for row in rows]
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def _save_company_logo(uploaded_file, company_name):
+    if not uploaded_file:
+        return None
+
+    original_name = secure_filename(uploaded_file.filename or "")
+    if not original_name:
+        return None
+
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_COMPANY_LOGO_EXTENSIONS:
+        return None
+
+    company_key = _normalize_company_key(company_name)
+    target_name = f"{company_key}_{uuid.uuid4().hex[:10]}{extension}"
+    target_path = COMPANY_LOGO_DIR / target_name
+    uploaded_file.save(target_path)
+    return f"company_logos/{target_name}"
+
+
+def _load_company_profile(conn, company_name):
+    company = _clean_text(company_name or "", 120).strip()
+    profile = {
+        "name": company,
+        "address": "",
+        "city": "",
+        "state": "",
+        "zip_code": "",
+        "phone": "",
+        "logo_path": "",
+    }
+
+    if not company:
+        return profile
+
+    fallback_row = conn.execute(
+        """
+        SELECT address, city, state, zip_code, phone
+        FROM restaurants
+        WHERE name = ?
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (company,),
+    ).fetchone()
+    if fallback_row:
+        for key in ("address", "city", "state", "zip_code", "phone"):
+            profile[key] = fallback_row[key] or ""
+
+    setting_key = f"company_profile::{_normalize_company_key(company)}"
+    setting_row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = ?",
+        (setting_key,),
+    ).fetchone()
+    if setting_row and setting_row["value"]:
+        try:
+            data = json.loads(setting_row["value"])
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            profile["name"] = _clean_text(data.get("name") or company, 120).strip() or company
+            for key in ("address", "city", "state", "zip_code", "phone"):
+                profile[key] = _clean_text(data.get(key, profile[key]), 255 if key == "address" else 120 if key in {"city", "state"} else 20)
+            profile["logo_path"] = _clean_text(data.get("logo_path", ""), 220)
+
+    return profile
+
+
+def _save_company_profile(conn, old_company_name, new_company_name, profile):
+    old_company = _clean_text(old_company_name or "", 120).strip()
+    new_company = _clean_text(new_company_name or "", 120).strip()
+    if not new_company:
+        return
+
+    key_new = f"company_profile::{_normalize_company_key(new_company)}"
+    key_old = f"company_profile::{_normalize_company_key(old_company)}" if old_company else key_new
+
+    payload = {
+        "name": new_company,
+        "address": _clean_text(profile.get("address", ""), 255),
+        "city": _clean_text(profile.get("city", ""), 120),
+        "state": _clean_text(profile.get("state", ""), 120),
+        "zip_code": _clean_text(profile.get("zip_code", ""), 20),
+        "phone": _clean_text(profile.get("phone", ""), 20),
+        "logo_path": _clean_text(profile.get("logo_path", ""), 220),
+    }
+
+    conn.execute(
+        """
+        INSERT INTO app_settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key_new, json.dumps(payload, ensure_ascii=True)),
+    )
+
+    if key_old != key_new:
+        conn.execute("DELETE FROM app_settings WHERE key = ?", (key_old,))
+
+
+def _save_user_nav_mode_preference(user_id, nav_mode):
+    mode = "full" if str(nav_mode).lower() == "full" else "compact"
+    conn = get_db_connection()
+    try:
+        if _users_table_has_column(conn, "nav_mode"):
+            conn.execute("UPDATE users SET nav_mode = ? WHERE id = ?", (mode, int(user_id)))
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def _link_user_to_restaurant(conn, user_id, restaurant_id):
@@ -413,26 +690,44 @@ def _has_access_to_restaurant_id(restaurant_id):
         return True
     if not current_user.is_authenticated:
         return False
-    if _is_admin_user():
-        return True
+    restaurant_id = int(restaurant_id)
     conn = get_db_connection()
-    row = conn.execute(
-        """
-        SELECT 1
-        FROM user_restaurants
-        WHERE user_id = ? AND restaurant_id = ?
-        LIMIT 1
-        """,
-        (int(current_user.id), int(restaurant_id)),
-    ).fetchone()
-    conn.close()
-    return row is not None
+    try:
+        company_ids = _get_company_scoped_restaurant_ids(conn)
+        if company_ids is not None and restaurant_id not in company_ids:
+            return False
+
+        if _is_admin_user():
+            return True
+
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM user_restaurants
+            WHERE user_id = ? AND restaurant_id = ?
+            LIMIT 1
+            """,
+            (int(current_user.id), int(restaurant_id)),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
 
 
 def _get_accessible_restaurant_switch_options():
     if FORMULA_MODE:
         conn = get_db_connection()
-        rows = conn.execute("SELECT id, name, location FROM restaurants ORDER BY id ASC").fetchall()
+        company_ids = _get_company_scoped_restaurant_ids(conn)
+        if company_ids is None:
+            rows = conn.execute("SELECT id, name, location FROM restaurants ORDER BY id ASC").fetchall()
+        elif not company_ids:
+            rows = []
+        else:
+            placeholders = ",".join("?" for _ in company_ids)
+            rows = conn.execute(
+                f"SELECT id, name, location FROM restaurants WHERE id IN ({placeholders}) ORDER BY id ASC",
+                company_ids,
+            ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -453,14 +748,29 @@ def _get_accessible_restaurant_switch_options():
             """,
             (int(current_user.id),),
         ).fetchall()
+    options = [dict(r) for r in rows]
+    company_ids = _get_company_scoped_restaurant_ids(conn)
     conn.close()
-    return [dict(r) for r in rows]
+    if company_ids is None:
+        return options
+    allowed = set(company_ids)
+    return [opt for opt in options if int(opt.get("id") or 0) in allowed]
 
 
 def _get_accessible_restaurant_ids():
     if FORMULA_MODE:
         conn = get_db_connection()
-        rows = conn.execute("SELECT id FROM restaurants ORDER BY id ASC").fetchall()
+        company_ids = _get_company_scoped_restaurant_ids(conn)
+        if company_ids is None:
+            rows = conn.execute("SELECT id FROM restaurants ORDER BY id ASC").fetchall()
+        elif not company_ids:
+            rows = []
+        else:
+            placeholders = ",".join("?" for _ in company_ids)
+            rows = conn.execute(
+                f"SELECT id FROM restaurants WHERE id IN ({placeholders}) ORDER BY id ASC",
+                company_ids,
+            ).fetchall()
         conn.close()
         return [int(row["id"]) for row in rows]
 
@@ -480,8 +790,13 @@ def _get_accessible_restaurant_ids():
             """,
             (int(current_user.id),),
         ).fetchall()
+    restaurant_ids = [int(row["id"]) for row in rows]
+    company_ids = _get_company_scoped_restaurant_ids(conn)
     conn.close()
-    return [int(row["id"]) for row in rows]
+    if company_ids is None:
+        return restaurant_ids
+    allowed = set(company_ids)
+    return [restaurant_id for restaurant_id in restaurant_ids if restaurant_id in allowed]
 
 
 def _restaurant_sync_group_key(restaurant_name):
@@ -770,8 +1085,12 @@ def _sync_business_reference_data(conn, base_restaurant=None, restaurant_ids_ove
 
 def get_user_by_id(user_id):
     conn = get_db_connection()
+    has_nav_mode = _users_table_has_column(conn, "nav_mode")
+    select_columns = "id, email, full_name, restaurant_id, is_admin"
+    if has_nav_mode:
+        select_columns += ", nav_mode"
     row = conn.execute(
-        "SELECT id, email, full_name, restaurant_id, is_admin FROM users WHERE id = ?",
+        f"SELECT {select_columns} FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     conn.close()
@@ -782,8 +1101,12 @@ def get_user_by_id(user_id):
 
 def get_user_auth_row_by_email(email):
     conn = get_db_connection()
+    has_nav_mode = _users_table_has_column(conn, "nav_mode")
+    select_columns = "id, email, password_hash, full_name, restaurant_id, is_admin"
+    if has_nav_mode:
+        select_columns += ", nav_mode"
     row = conn.execute(
-        "SELECT id, email, password_hash, full_name, restaurant_id, is_admin FROM users WHERE email = ?",
+        f"SELECT {select_columns} FROM users WHERE email = ?",
         (email,),
     ).fetchone()
     conn.close()
@@ -1162,6 +1485,7 @@ def init_db():
             full_name TEXT,
             restaurant_id INTEGER,
             is_admin INTEGER NOT NULL DEFAULT 0,
+            nav_mode TEXT NOT NULL DEFAULT 'compact',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
         )
@@ -1262,6 +1586,10 @@ def init_db():
         )
         """
     )
+
+    users_cols = [r[1] for r in cursor.execute("PRAGMA table_info(users)").fetchall()]
+    if "nav_mode" not in users_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN nav_mode TEXT NOT NULL DEFAULT 'compact'")
 
     production_item_cols = [r[1] for r in cursor.execute("PRAGMA table_info(production_items)").fetchall()]
     if "master_item_id" not in production_item_cols:
@@ -1588,6 +1916,40 @@ def set_active_restaurant(restaurant_id):
 
 
 def get_active_restaurant():
+    if has_request_context():
+        tenant_scope = resolve_tenant_scope(
+            request.headers,
+            session_data=session,
+            company_session_keys=("pm_selected_company", "selected_company_name", "company_name"),
+            app_name="productmix",
+            logger=logging.getLogger("productmix"),
+            request_path=request.path,
+            method=request.method,
+        )
+        dexter_company_name = _clean_text(tenant_scope.get("company_name", ""), 120).strip()
+        if dexter_company_name:
+            conn = get_db_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM restaurants WHERE name = ? ORDER BY id ASC LIMIT 1",
+                    (dexter_company_name,),
+                ).fetchone()
+            finally:
+                conn.close()
+            return dict(row) if row else None
+
+        selected_company = _get_selected_company_name()
+        if selected_company:
+            conn = get_db_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM restaurants WHERE name = ? ORDER BY id ASC LIMIT 1",
+                    (selected_company,),
+                ).fetchone()
+            finally:
+                conn.close()
+            return dict(row) if row else None
+
     if (not FORMULA_MODE) and has_request_context() and current_user.is_authenticated:
         if not current_user.restaurant_id:
             return None
@@ -4503,6 +4865,7 @@ def login():
             return render_template("login.html", error="Invalid email or password.")
 
         login_user(User(auth_row), remember=False)
+        session["pm_nav_mode"] = auth_row["nav_mode"] if "nav_mode" in auth_row.keys() and auth_row["nav_mode"] in {"full", "compact"} else "compact"
 
         next_path = request.args.get("next")
         if next_path and next_path.startswith("/"):
@@ -4624,6 +4987,7 @@ def index():
 
 
 @app.get("/health")
+@limiter.exempt
 def health():
     try:
         conn = get_db_connection()
@@ -6552,9 +6916,87 @@ def undo_delete_production_item():
 @limiter.limit("60 per minute")
 def restaurant_setup():
     if request.method == "POST":
-        payload, payload_error = _validate_restaurant_payload(request.form)
+        form_type = (request.form.get("form_type") or "location_create").strip().lower()
+
+        if form_type == "company_profile":
+            old_company_name = _clean_text(request.form.get("old_company_name", ""), 120).strip()
+            new_company_name = _clean_text(request.form.get("company_name", ""), 120).strip()
+            if not new_company_name:
+                return redirect(url_for("restaurant_setup", error="Company+name+is+required"))
+
+            conn = get_db_connection()
+            if _is_admin_user():
+                target_rows = conn.execute(
+                    "SELECT id FROM restaurants WHERE name = ? ORDER BY id ASC",
+                    (old_company_name,),
+                ).fetchall() if old_company_name else []
+            else:
+                target_rows = conn.execute(
+                    """
+                    SELECT r.id
+                    FROM restaurants r
+                    JOIN user_restaurants ur ON ur.restaurant_id = r.id
+                    WHERE ur.user_id = ? AND r.name = ?
+                    ORDER BY r.id ASC
+                    """,
+                    (int(current_user.id), old_company_name),
+                ).fetchall() if old_company_name else []
+
+            if old_company_name and not target_rows:
+                conn.close()
+                return redirect(url_for("restaurant_setup", error="Company+not+found"))
+
+            if old_company_name and old_company_name != new_company_name:
+                if _is_admin_user():
+                    conn.execute(
+                        "UPDATE restaurants SET name = ? WHERE name = ?",
+                        (new_company_name, old_company_name),
+                    )
+                else:
+                    target_ids = [int(r["id"]) for r in target_rows]
+                    if target_ids:
+                        placeholders = ",".join("?" for _ in target_ids)
+                        conn.execute(
+                            f"UPDATE restaurants SET name = ? WHERE id IN ({placeholders})",
+                            (new_company_name, *target_ids),
+                        )
+
+            profile_payload = {
+                "address": _clean_text(request.form.get("address", ""), 255),
+                "city": _clean_text(request.form.get("city", ""), 120),
+                "state": _clean_text(request.form.get("state", ""), 120),
+                "zip_code": _clean_text(request.form.get("zip_code", ""), 20),
+                "phone": _clean_text(request.form.get("phone", ""), 20),
+            }
+
+            current_profile = _load_company_profile(conn, old_company_name or new_company_name)
+            profile_payload["logo_path"] = _clean_text(current_profile.get("logo_path", ""), 220)
+            logo_file = request.files.get("company_logo")
+            if logo_file and logo_file.filename:
+                saved_logo_path = _save_company_logo(logo_file, new_company_name)
+                if not saved_logo_path:
+                    conn.close()
+                    return redirect(url_for("restaurant_setup", company=new_company_name, error="Logo+must+be+PNG,+JPG,+or+WEBP"))
+                profile_payload["logo_path"] = saved_logo_path
+
+            _save_company_profile(conn, old_company_name or new_company_name, new_company_name, profile_payload)
+            conn.commit()
+            conn.close()
+
+            session["pm_selected_company"] = new_company_name
+            return redirect(url_for("restaurant_setup", company=new_company_name, success="Company+profile+saved"))
+
+        company_name = _clean_text(request.form.get("company_name", ""), 120).strip()
+        location_form = request.form.to_dict(flat=True)
+        if company_name and not _clean_text(location_form.get("name", ""), 120):
+            location_form["name"] = company_name
+
+        payload, payload_error = _validate_restaurant_payload(location_form)
+        if company_name:
+            payload["name"] = company_name
+
         if payload_error:
-            return redirect(url_for("restaurant_setup", error=payload_error.replace(" ", "+")))
+            return redirect(url_for("restaurant_setup", error=payload_error.replace(" ", "+"), company=payload.get("name", "")))
 
         conn = get_db_connection()
         cur = conn.execute(
@@ -6571,8 +7013,9 @@ def restaurant_setup():
         conn.close()
 
         set_active_restaurant(cur.lastrowid)
+        session["pm_selected_company"] = payload["name"]
 
-        return redirect(url_for("restaurant_setup", success="Location+saved"))
+        return redirect(url_for("restaurant_setup", company=payload["name"], success="Location+saved"))
 
     audit_location_filter = _clean_text(request.args.get("audit_location", ""), 120)
     audit_editor_filter = _clean_text(request.args.get("audit_editor", ""), 120)
@@ -6628,10 +7071,62 @@ def restaurant_setup():
         item["changes_summary"] = _format_audit_changes(item.get("changes_json"))
         audit_entries.append(item)
 
+    company_options = sorted(
+        {
+            _clean_text(r.get("name", ""), 120).strip()
+            for r in restaurants
+            if _clean_text(r.get("name", ""), 120).strip()
+        },
+        key=lambda name: name.lower(),
+    )
+
+    requested_company = _clean_text(request.args.get("company", ""), 120).strip()
+    session_company = _clean_text(session.get("pm_selected_company", ""), 120).strip()
+    selected_company = ""
+    if requested_company and requested_company in company_options:
+        selected_company = requested_company
+    elif session_company and session_company in company_options:
+        selected_company = session_company
+    elif company_options:
+        selected_company = company_options[0]
+
+    if selected_company:
+        session["pm_selected_company"] = selected_company
+        restaurants = [r for r in restaurants if _clean_text(r.get("name", ""), 120).strip() == selected_company]
+    else:
+        session.pop("pm_selected_company", None)
+
+    profile_conn = get_db_connection()
+    company_profile = _load_company_profile(profile_conn, selected_company) if selected_company else {
+        "name": "",
+        "address": "",
+        "city": "",
+        "state": "",
+        "zip_code": "",
+        "phone": "",
+    }
+    profile_conn.close()
+
     active_restaurant = get_active_restaurant()
+    if selected_company:
+        active_company_name = _clean_text(active_restaurant.get("name", ""), 120).strip() if active_restaurant else ""
+        if active_company_name != selected_company:
+            if restaurants:
+                switch_error = _switch_active_restaurant_or_error(int(restaurants[0]["id"]))
+                if not switch_error:
+                    active_restaurant = get_active_restaurant()
+                else:
+                    active_restaurant = restaurants[0]
+            else:
+                active_restaurant = None
+
     return render_template(
         "restaurant_setup.html",
         restaurants=restaurants,
+        company_options=company_options,
+        selected_company=selected_company,
+        company_profile=company_profile,
+        is_super_admin=_is_admin_user(),
         audit_entries=audit_entries,
         audit_location_filter=audit_location_filter,
         audit_editor_filter=audit_editor_filter,
@@ -7427,6 +7922,19 @@ def handle_rate_limit(error):
 if __name__ == "__main__":
     debug_mode = os.environ.get("PM_DEBUG", "1") == "1"
     should_open_browser = os.environ.get("PM_OPEN_BROWSER", "1") == "1"
+    host = os.environ.get("PM_HOST", "127.0.0.1")
+    port = int(os.environ.get("PM_PORT", "5050"))
     if should_open_browser and (not debug_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
-        webbrowser.open("http://localhost:5050", new=0, autoraise=True)
-    app.run(debug=debug_mode, port=5050)
+        webbrowser.open(f"http://{host}:{port}", new=0, autoraise=True)
+
+    if debug_mode:
+        app.run(debug=True, host=host, port=port)
+    else:
+        try:
+            from waitress import serve  # type: ignore[import]
+            waitress_threads = int(os.environ.get("PM_WAITRESS_THREADS", "8"))
+            print(f"[productmix] Running via waitress on {host}:{port} (threads={waitress_threads})")
+            serve(app, host=host, port=port, threads=waitress_threads)
+        except ImportError:
+            print("[productmix] waitress not installed — falling back to Flask dev server.")
+            app.run(debug=False, host=host, port=port)

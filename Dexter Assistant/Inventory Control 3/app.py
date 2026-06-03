@@ -2,13 +2,21 @@ from flask import jsonify, request
 from pathlib import Path
 import json
 import marshal
+import logging
 import os
 import re
+import sys
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from datetime import date, datetime, timedelta
 
 ROOT = Path(__file__).resolve().parent
+DEXTER_ASSISTANT_DIR = ROOT.parent
+if str(DEXTER_ASSISTANT_DIR) not in sys.path:
+    sys.path.insert(0, str(DEXTER_ASSISTANT_DIR))
+
+from tenant_scope import resolve_tenant_scope
+
 _IC3_DATA_DIR = os.environ.get("IC3_DATA_DIR")
 if _IC3_DATA_DIR:
     import shutil as _shutil
@@ -95,18 +103,24 @@ def _normalize_productmix_categories(payload: dict) -> dict:
     }
 
 
-def _sync_productmix_categories_from_remote(base_url: str, timeout_seconds: float = 12.0) -> dict:
+def _sync_productmix_categories_from_remote(base_url: str, timeout_seconds: float = 12.0, headers: dict | None = None) -> dict:
     base = (base_url or "").strip().rstrip("/")
     if not base:
         base = "http://127.0.0.1:5050"
     target_url = f"{base}/api/categories"
 
+    request_headers = {
+        "Accept": "application/json",
+        "User-Agent": "IC3-ProductMix-Sync/1.0",
+    }
+    for key, value in (headers or {}).items():
+        text = str(value or "").strip()
+        if text:
+            request_headers[key] = text
+
     req = urllib_request.Request(
         target_url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "IC3-ProductMix-Sync/1.0",
-        },
+        headers=request_headers,
         method="GET",
     )
 
@@ -324,6 +338,35 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
     let inFlight = false;
     let lastAppliedSignature = '';
 
+    function clearLocationInputsForNoCompanyData() {
+        window.__ic3ForceNoLocation = true;
+
+        for (const id of SELECT_IDS) {
+            const select = document.getElementById(id);
+            if (!select || select.tagName !== 'SELECT') continue;
+            select.innerHTML = '<option value="">No locations available</option>';
+            select.value = '';
+        }
+
+        Array.from(document.querySelectorAll('select')).forEach(function (sel) {
+            const marker = ((sel.id || '') + ' ' + (sel.name || '') + ' ' + (sel.className || '')).toLowerCase();
+            if (!marker.includes('location')) return;
+            sel.innerHTML = '<option value="">No locations available</option>';
+            sel.value = '';
+        });
+
+        const groups = Array.from(document.querySelectorAll('.location-selector'));
+        groups.forEach(function (group) {
+            group.innerHTML = '';
+            const note = document.createElement('div');
+            note.style.color = '#6b7280';
+            note.style.fontSize = '13px';
+            note.style.padding = '4px 0';
+            note.textContent = 'No locations available for selected company.';
+            group.appendChild(note);
+        });
+    }
+
     function buildLabel(row) {
         const name = String(row && row.name || '').trim();
         const location = String(row && row.location || '').trim();
@@ -436,10 +479,26 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
         if (inFlight) return;
         inFlight = true;
         try {
+            let dexterCompanyName = '';
+            try {
+                const ctxRes = await fetch('/api/dexter/context');
+                const ctx = await ctxRes.json();
+                dexterCompanyName = String((ctx && ctx.company_name) || '').trim();
+            } catch (_ctxErr) {
+                dexterCompanyName = '';
+            }
+
             const res = await fetch('/api/shared/restaurants');
             const payload = await res.json();
             const restaurants = Array.isArray(payload && payload.restaurants) ? payload.restaurants : [];
-            if (!restaurants.length) return;
+            if (!restaurants.length) {
+                if (dexterCompanyName) {
+                    clearLocationInputsForNoCompanyData();
+                }
+                return;
+            }
+
+            window.__ic3ForceNoLocation = false;
 
             const signature = computeSignature(restaurants);
             const hasAnySelect = SELECT_IDS.some(function (id) {
@@ -1023,8 +1082,8 @@ OVERRIDE_SCRIPT = r"""
                 }
             };
 
-            // Auto-detect web mode on tab load
-            fetch('/api/tools/select-folder', { method: 'POST' })
+            // Auto-detect whether local folder picking is available without opening the dialog.
+            fetch('/api/tools/select-folder?probe=1', { method: 'POST' })
                 .then(function (r) { return r.json(); })
                 .then(function (payload) {
                     if (!payload.success) {
@@ -1581,6 +1640,10 @@ PRODUCT_DETAIL_SCRIPT = r"""
     }
 
     function guessCurrentLocation() {
+        if (window.__ic3ForceNoLocation) {
+            return '';
+        }
+
         const selectedRadio = document.querySelector('input[name="location"][type="radio"]:checked');
         if (selectedRadio && typeof selectedRadio.value === 'string' && selectedRadio.value.trim()) {
             return selectedRadio.value.trim();
@@ -1607,7 +1670,7 @@ PRODUCT_DETAIL_SCRIPT = r"""
             return anyRadio.value.trim();
         }
 
-        return 'Kingsville';
+        return window.__ic3ForceNoLocation ? '' : 'Kingsville';
     }
 
     function effectiveLocationParam() {
@@ -2657,6 +2720,52 @@ def _runtime_default_location(fallback: str = "Kingsville") -> str:
     return fallback
 
 
+def _normalize_runtime_location_text(raw_value) -> str:
+    text = str(raw_value or "").strip()
+    if not text:
+        return ""
+    return text.lower()
+
+
+def _dexter_selected_location_from_headers() -> str:
+    location_text = str(request.headers.get("X-Dexter-Restaurant-Location") or "").strip()
+    if location_text:
+        return location_text
+    return str(request.headers.get("X-Dexter-Restaurant-Name") or "").strip()
+
+
+def _effective_runtime_location(fallback: str = "Kingsville") -> str:
+    dexter_location = _dexter_selected_location_from_headers()
+    if dexter_location:
+        return dexter_location
+    return _runtime_default_location(fallback)
+
+
+def _collect_requested_location_values() -> set[str]:
+    requested_values: set[str] = set()
+    for key in ("location", "location_id", "restaurant_id"):
+        for raw_value in request.args.getlist(key):
+            normalized = _normalize_runtime_location_text(raw_value)
+            if normalized:
+                requested_values.add(normalized)
+
+    for key in ("location", "location_id", "restaurant_id"):
+        for raw_value in request.form.getlist(key):
+            normalized = _normalize_runtime_location_text(raw_value)
+            if normalized:
+                requested_values.add(normalized)
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        payload = request.get_json(silent=True)
+        if isinstance(payload, dict):
+            for key in ("location", "location_id", "restaurant_id"):
+                normalized = _normalize_runtime_location_text(payload.get(key))
+                if normalized:
+                    requested_values.add(normalized)
+
+    return requested_values
+
+
 def _find_product_record_by_number(products_list_obj, product_number: str):
     target = _canonical_product_number(product_number)
     for product in (products_list_obj or []):
@@ -2681,7 +2790,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
 
     @flask_app.route("/api/products/<product_number>/detail", methods=["GET"])
     def get_product_detail_runtime(product_number):
-        requested_location = str(request.args.get("location") or _runtime_default_location()).strip() or _runtime_default_location()
+        requested_location = _effective_runtime_location()
         window_key = str(request.args.get("window") or "week").strip().lower()
 
         products_list_obj = globals().get("products_list") or []
@@ -2858,7 +2967,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
     @flask_app.route("/api/products/update-order-quantity", methods=["POST"])
     def update_order_quantity_runtime():
         payload = request.get_json(silent=True) or {}
-        location = str(payload.get("location") or _runtime_default_location()).strip() or _runtime_default_location()
+        location = _effective_runtime_location()
         date_str = str(payload.get("date") or "").strip()
         product_number = _canonical_product_number(payload.get("product_number"))
 
@@ -2919,7 +3028,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
     @flask_app.route("/api/products/update-inventory-quantity", methods=["POST"])
     def update_inventory_quantity_runtime():
         payload = request.get_json(silent=True) or {}
-        location = str(payload.get("location") or _runtime_default_location()).strip() or _runtime_default_location()
+        location = _effective_runtime_location()
         date_str = str(payload.get("date") or "").strip()
         product_number = _canonical_product_number(payload.get("product_number"))
 
@@ -2996,7 +3105,7 @@ def _register_order_csv_rename_endpoint(flask_app) -> None:
     def rename_order_csvs():
         payload = request.get_json(silent=True) or {}
         folder_path = str(payload.get("folder_path") or "").strip()
-        location = str(payload.get("location") or _runtime_default_location("Location")).strip() or _runtime_default_location("Location")
+        location = _effective_runtime_location("Location")
         apply_changes = bool(payload.get("apply"))
 
         if not folder_path:
@@ -3023,9 +3132,13 @@ def _register_order_csv_rename_endpoint(flask_app) -> None:
 
     @flask_app.post("/api/tools/select-folder")
     def select_folder_dialog():
+        probe_only = str(request.args.get("probe") or "").strip().lower() in {"1", "true", "yes"}
         try:
             import tkinter as tk
             from tkinter import filedialog
+
+            if probe_only:
+                return jsonify({"success": True, "probe": True, "picker_available": True, "folder_path": ""})
 
             root = tk.Tk()
             root.withdraw()
@@ -3048,7 +3161,7 @@ def _register_order_csv_rename_endpoint(flask_app) -> None:
         import zipfile as _zipfile
         from flask import send_file
 
-        location = str(request.form.get("location") or _runtime_default_location("Location")).strip() or _runtime_default_location("Location")
+        location = _effective_runtime_location("Location")
         mode = str(request.form.get("mode") or "preview").strip()
         uploaded_files = request.files.getlist("files")
 
@@ -3157,8 +3270,20 @@ def _register_productmix_sync_endpoints(flask_app) -> None:
         except (TypeError, ValueError):
             timeout_seconds = 12.0
 
+        dexter_headers = {
+            "X-Dexter-Auth": request.headers.get("X-Dexter-Auth", ""),
+            "X-Dexter-Company-Name": request.headers.get("X-Dexter-Company-Name", ""),
+            "X-Dexter-Restaurant-Id": request.headers.get("X-Dexter-Restaurant-Id", ""),
+            "X-Dexter-Restaurant-Location": request.headers.get("X-Dexter-Restaurant-Location", ""),
+            "X-Dexter-Restaurant-Name": request.headers.get("X-Dexter-Restaurant-Name", ""),
+        }
+
         try:
-            synced = _sync_productmix_categories_from_remote(base_url, timeout_seconds=timeout_seconds)
+            synced = _sync_productmix_categories_from_remote(
+                base_url,
+                timeout_seconds=timeout_seconds,
+                headers=dexter_headers,
+            )
         except urllib_error.HTTPError as exc:
             return jsonify({"success": False, "message": f"ProductMix HTTP error: {exc.code}", "source_url": base_url}), 502
         except urllib_error.URLError as exc:
@@ -3251,10 +3376,13 @@ def _register_compat_inventory_endpoints(flask_app) -> None:
         @flask_app.route("/api/inventory/list", methods=["GET"])
         def api_inventory_list_runtime():
             inventory_data_obj = globals().get("inventory_data") or {}
+            enforced_location = _normalize_runtime_location_text(_dexter_selected_location_from_headers())
             items = []
 
             if isinstance(inventory_data_obj, dict):
                 for location, by_date in inventory_data_obj.items():
+                    if enforced_location and _normalize_runtime_location_text(location) != enforced_location:
+                        continue
                     if not isinstance(by_date, dict):
                         continue
                     for date_key, day_map in by_date.items():
@@ -3269,6 +3397,51 @@ def _register_compat_inventory_endpoints(flask_app) -> None:
 
             items.sort(key=lambda row: (row.get("location", ""), row.get("date", "")), reverse=True)
             return jsonify(items)
+
+    if "/api/dexter/context" not in existing_rules:
+        @flask_app.route("/api/dexter/context", methods=["GET"])
+        def api_dexter_context_runtime():
+            tenant_scope = resolve_tenant_scope(
+                request.headers,
+                app_name="ic3",
+                logger=logging.getLogger("ic3"),
+                request_path=request.path,
+                method=request.method,
+            )
+            return jsonify(
+                {
+                    "success": True,
+                    "is_dexter_proxy": bool(tenant_scope.get("is_dexter_proxy")),
+                    "company_name": str(tenant_scope.get("company_name") or ""),
+                    "restaurant_name": str(tenant_scope.get("restaurant_name") or ""),
+                    "restaurant_location": str(tenant_scope.get("restaurant_location") or ""),
+                }
+            )
+
+
+def _install_dexter_location_guard_patch() -> None:
+    app = globals().get("app")
+    if app is None:
+        return
+    if getattr(app, "_ic3_dexter_location_guard_installed", False):
+        return
+
+    @app.before_request
+    def _enforce_dexter_selected_location_scope():
+        dexter_location = _normalize_runtime_location_text(_dexter_selected_location_from_headers())
+        if not dexter_location:
+            return None
+
+        requested_locations = _collect_requested_location_values()
+        if not requested_locations:
+            return None
+
+        for requested in requested_locations:
+            if requested != dexter_location:
+                return jsonify({"success": False, "message": "Forbidden location scope"}), 403
+        return None
+
+    app._ic3_dexter_location_guard_installed = True
 
 
 def _install_order_csv_rename_api_patch() -> None:
@@ -3593,6 +3766,7 @@ _restore_runtime_data_fallbacks()
 _register_compat_inventory_endpoints(globals().get("app"))
 _register_invoice_import_log_endpoint(globals().get("app"))
 _register_productmix_sync_endpoints(globals().get("app"))
+_install_dexter_location_guard_patch()
 _patch_favicon_endpoint()
 _patch_bulk_upload_limit_runtime()
 
@@ -3830,4 +4004,19 @@ _install_dexter_ui_patch()
 if __name__ == "__main__":
     runtime_app = globals().get("app")
     if runtime_app is not None:
-        runtime_app.run()
+        host = os.getenv("IC3_HOST", "127.0.0.1")
+        port = int(os.getenv("IC3_PORT", "5003"))
+        force_prod = os.getenv("IC3_FORCE_PROD", "1").strip().lower() not in {"0", "false", "no"}
+        use_waitress = os.getenv("IC3_USE_WAITRESS", "1").strip().lower() not in {"0", "false", "no"}
+
+        if force_prod and use_waitress:
+            try:
+                from waitress import serve  # type: ignore[import]
+                waitress_threads = int(os.getenv("IC3_WAITRESS_THREADS", "8"))
+                print(f"[ic3] Running via waitress on {host}:{port} (threads={waitress_threads})")
+                serve(runtime_app, host=host, port=port, threads=waitress_threads)
+            except ImportError:
+                print("[ic3] waitress not installed — falling back to Flask dev server.")
+                runtime_app.run(host=host, port=port, debug=False, use_reloader=False)
+        else:
+            runtime_app.run(host=host, port=port)
