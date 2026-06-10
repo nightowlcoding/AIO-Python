@@ -394,9 +394,6 @@ def before_request_security_and_timing():
                     target_restaurant_id = scoped_ids[0]
                     conn.execute("UPDATE users SET restaurant_id = ? WHERE id = ?", (target_restaurant_id, int(current_user.id)))
                     current_user.restaurant_id = target_restaurant_id
-                else:
-                    conn.execute("UPDATE users SET restaurant_id = NULL WHERE id = ?", (int(current_user.id),))
-                    current_user.restaurant_id = None
                 conn.commit()
             elif FORMULA_MODE:
                 if scoped_ids:
@@ -559,6 +556,10 @@ def _get_company_scoped_restaurant_ids(conn=None):
             "SELECT id FROM restaurants WHERE name = ? ORDER BY id ASC",
             (company_name,),
         ).fetchall()
+        # If the tenant/company label does not map to restaurant names,
+        # fall back to unscoped access instead of hiding all locations.
+        if not rows:
+            return None
         return [int(row["id"]) for row in rows]
     finally:
         if owns_conn:
@@ -1936,7 +1937,8 @@ def get_active_restaurant():
                 ).fetchone()
             finally:
                 conn.close()
-            return dict(row) if row else None
+            if row:
+                return dict(row)
 
         selected_company = _get_selected_company_name()
         if selected_company:
@@ -1948,7 +1950,8 @@ def get_active_restaurant():
                 ).fetchone()
             finally:
                 conn.close()
-            return dict(row) if row else None
+            if row:
+                return dict(row)
 
     if (not FORMULA_MODE) and has_request_context() and current_user.is_authenticated:
         if not current_user.restaurant_id:
