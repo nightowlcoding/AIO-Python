@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>User Management — Dexter Ops</title>
+  <style>
+    :root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}
+    h1{font-size:1.3rem;font-weight:700;margin:0 0 18px}
+    form.row{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+    input,select{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem;background:#fff;color:var(--ink)}
+    input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(234,88,12,.15)}
+    button[type=submit]{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff;transition:opacity .15s}
+    button[type=submit]:hover{opacity:.88}
+    .inline{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+    .inline button[type=submit]{padding:5px 11px;font-size:.82rem;border-radius:6px;border:1px solid var(--edge);background:#fff;color:var(--ink)}
+    .inline button[type=submit]:hover{background:var(--bg);opacity:1}
+    .inline select[multiple]{min-width:220px;min-height:88px}
+    .table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}
+    table{width:100%;border-collapse:collapse;font-size:.9rem}
+    th{text-align:left;padding:9px 12px;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}
+    td{padding:10px 12px;border-bottom:1px solid var(--edge);vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:600}
+    .pill-sa{background:#dbeafe;color:#1e40af}
+    .pill-mgr{background:#d1fae5;color:#065f46}
+    .pill-emp{background:#f3f4f6;color:#374151}
+    .pill-on{background:#dcfce7;color:#166534}
+    .pill-off{background:#fee2e2;color:#991b1b}
+    .pill-loc{background:#eef2ff;color:#4338ca}
+    .muted{color:var(--muted);font-size:.82rem}
+    .msg{padding:9px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid}
+    .ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+    .err{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+  </style>
+</head>
+<body>
+  <h1>User Management</h1>
+  {% if message %}<div class="msg ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+    {% if is_super_admin %}
+    <form method="post" action="/admin/company-scope" class="row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="next_path" value="/admin/users" />
+        <select name="company_id" required>
+            {% for c in companies %}
+            <option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Switch Company</button>
+    </form>
+    {% endif %}
+
+  <form method="post" action="/admin/users/create" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <input name="username" placeholder="Username" required />
+    <input name="password" placeholder="Password (min 8)" type="password" required />
+    <select name="role_name">
+      <option>Employee</option>
+      <option>Manager</option>
+      <option>Super Admin</option>
+    </select>
+        <select name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
+            {% for loc in available_locations %}
+            <option value="{{ loc.id }}">{{ loc.label }}</option>
+            {% endfor %}
+        </select>
+        <span class="muted">Optional. Leave blank for all company locations.</span>
+    <button type="submit">Create User</button>
+  </form>
+
+  <div class="table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Username</th><th>Role</th><th>Locations</th><th>Active</th><th>Last Login</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.id }}</td>
+        <td>{{ u.username }}</td>
+        <td>{% if u.role_name == 'Super Admin' %}<span class="pill pill-sa">Super Admin</span>{% elif u.role_name == 'Manager' %}<span class="pill pill-mgr">Manager</span>{% else %}<span class="pill pill-emp">Employee</span>{% endif %}</td>
+                <td>
+                    {% if u.role_name == 'Super Admin' %}
+                    <span class="muted">All companies</span>
+                    {% elif u.assigned_restaurant_labels %}
+                        {% for label in u.assigned_restaurant_labels %}
+                        <span class="pill pill-loc">{{ label }}</span>
+                        {% endfor %}
+                    {% else %}
+                    <span class="muted">All company locations</span>
+                    {% endif %}
+                </td>
+        <td>{% if u.is_active %}<span class="pill pill-on">Active</span>{% else %}<span class="pill pill-off">Inactive</span>{% endif %}</td>
+        <td>{{ u.last_login or '-' }}</td>
+        <td>
+          <form method="post" action="/admin/users/{{ u.id }}/role" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <select name="role_name">
+              <option {% if u.role_name == 'Employee' %}selected{% endif %}>Employee</option>
+              <option {% if u.role_name == 'Manager' %}selected{% endif %}>Manager</option>
+              <option {% if u.role_name == 'Super Admin' %}selected{% endif %}>Super Admin</option>
+            </select>
+            <button type="submit">Set Role</button>
+          </form>
+          <form method="post" action="/admin/users/{{ u.id }}/active" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <input type="hidden" name="is_active" value="{{ 0 if u.is_active else 1 }}" />
+            <button type="submit">{{ 'Deactivate' if u.is_active else 'Activate' }}</button>
+          </form>
+                    {% if u.role_name != 'Super Admin' %}
+                    <form method="post" action="/admin/users/{{ u.id }}/locations" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <select name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
+                            {% for loc in available_locations %}
+                            <option value="{{ loc.id }}" {% if loc.id in u.assigned_restaurant_ids %}selected{% endif %}>{{ loc.label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Set Locations</button>
+                    </form>
+                    {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</body>
+</html>

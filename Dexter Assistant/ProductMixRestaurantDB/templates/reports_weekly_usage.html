@@ -26,6 +26,11 @@
         </a>
       </li>
       <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_analytics_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-graph-up-arrow me-1"></i>Analytics Dashboard
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link" href="{{ url_for('reports_production_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
           <i class="bi bi-diagram-3 me-1"></i>Production List Report
         </a>
@@ -55,6 +60,45 @@
         </div>
       </div>
       {% endfor %}
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card shadow-sm border-0 overflow-hidden">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: linear-gradient(135deg, #102a43, #1f6feb); color: #fff;">
+        <span><i class="bi bi-trophy-fill me-2"></i>Top Selling Item</span>
+        <span class="small opacity-75">Ranked by average weekly cases</span>
+      </div>
+      <div class="card-body">
+        {% if top_weekly_item %}
+        <div class="row g-3 align-items-stretch">
+          <div class="col-12 col-lg-4">
+            <div class="rounded-4 p-4 h-100 text-white" style="background: linear-gradient(160deg, #0f766e, #14b8a6); box-shadow: 0 18px 40px rgba(15,118,110,.22);">
+              <div class="text-uppercase small opacity-75 mb-2">Top Performer</div>
+              <div class="display-6 fw-bold mb-2">{{ top_weekly_item.production_item_name }}</div>
+              <div class="d-flex flex-column gap-2">
+                <div><strong>{{ "%.2f"|format(top_weekly_item.average_cases or 0) }}</strong> avg cases</div>
+                <div><strong>{{ "%.2f"|format(top_weekly_item.total_cases or 0) }}</strong> total cases</div>
+                <div><strong>{{ top_weekly_item.windows_with_data }}</strong> windows with data</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-12 col-lg-8">
+            <div class="rounded-4 border p-3 bg-body h-100">
+              <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div class="fw-semibold"><i class="bi bi-bar-chart-fill me-2"></i>Top 10 Weekly Items</div>
+                <div class="small text-muted">Hover bars for exact weekly case totals</div>
+              </div>
+              <div style="height: 360px;">
+                <canvas id="weeklyTopItemsChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-muted">No weekly usage data is available for this location yet.</div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
@@ -209,4 +253,71 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if top_weekly_items %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var topItems = {{ top_weekly_items | tojson }};
+  var canvas = document.getElementById('weeklyTopItemsChart');
+  if (!canvas || !topItems.length || typeof Chart === 'undefined') {
+    return;
+  }
+
+  var labels = topItems.map(function (row) { return row.production_item_name; });
+  var values = topItems.map(function (row) { return Number(row.average_cases || 0); });
+  var totals = topItems.map(function (row) { return Number(row.total_cases || 0); });
+
+  new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Average Weekly Cases',
+        data: values,
+        backgroundColor: 'rgba(31, 111, 235, 0.78)',
+        borderColor: 'rgba(31, 111, 235, 1)',
+        borderWidth: 1,
+        borderRadius: 10,
+        barThickness: 18,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              var idx = ctx.dataIndex;
+              return ' Avg cases: ' + Number(values[idx] || 0).toFixed(2) + ' | Total cases: ' + Number(totals[idx] || 0).toFixed(2);
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: {
+            callback: function (value) { return Number(value).toFixed(0); }
+          },
+          grid: { color: 'rgba(15, 23, 42, 0.08)' }
+        },
+        y: {
+          ticks: {
+            autoSkip: false,
+            font: { size: 11 }
+          },
+          grid: { display: false }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

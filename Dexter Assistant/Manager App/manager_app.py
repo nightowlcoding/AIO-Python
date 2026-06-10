@@ -113,7 +113,11 @@ login_manager.login_message = 'Please log in to access this page.'
 db = database.Database()
 
 
-def _load_shared_restaurants_from_productmix() -> list[dict]:
+def _dexter_company_name_from_header() -> str:
+    return (request.headers.get('X-Dexter-Company-Name') or '').strip()
+
+
+def _load_shared_restaurants_from_productmix(company_name: str = "") -> list[dict]:
     """Return shared restaurant options from ProductMix Restaurant Setup."""
     pm_db_path = Path(__file__).resolve().parent.parent / 'ProductMixRestaurantDB' / 'product_mix.db'
     if not pm_db_path.exists():
@@ -122,13 +126,24 @@ def _load_shared_restaurants_from_productmix() -> list[dict]:
     conn = sqlite3.connect(pm_db_path)
     conn.row_factory = sqlite3.Row
     try:
-        rows = conn.execute(
-            """
-            SELECT id, name, location
-            FROM restaurants
-            ORDER BY id ASC
-            """
-        ).fetchall()
+        if company_name:
+            rows = conn.execute(
+                """
+                SELECT id, name, location
+                FROM restaurants
+                WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))
+                ORDER BY id ASC
+                """,
+                (company_name,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, name, location
+                FROM restaurants
+                ORDER BY id ASC
+                """
+            ).fetchall()
     except sqlite3.Error:
         return []
     finally:
@@ -147,7 +162,41 @@ def _load_shared_restaurants_from_productmix() -> list[dict]:
 
 def _effective_location_options(company_id):
     """Use ProductMix Restaurant Setup as the canonical location source."""
-    return _load_shared_restaurants_from_productmix()
+    return _load_shared_restaurants_from_productmix(_dexter_company_name_from_header())
+
+
+def _normalize_location_id(raw_value):
+    raw_text = str(raw_value or '').strip().lower()
+    if not raw_text:
+        return None
+    if raw_text.startswith('pm_') and raw_text[3:].isdigit():
+        return f"pm_{int(raw_text[3:])}"
+    if raw_text.isdigit():
+        return f"pm_{int(raw_text)}"
+    return raw_text
+
+
+def _dexter_selected_location_id_from_header():
+    return _normalize_location_id(request.headers.get('X-Dexter-Restaurant-Id'))
+
+
+def _resolve_effective_location_id(locations_list):
+    valid_location_ids = {str(row.get('id', '')) for row in locations_list}
+    dexter_location_id = _dexter_selected_location_id_from_header()
+
+    selected_location = dexter_location_id or _normalize_location_id(request.args.get('location_id')) or _normalize_location_id(session.get('selected_location_id'))
+    if selected_location and selected_location in valid_location_ids:
+        session['selected_location_id'] = selected_location
+        return selected_location
+
+    if locations_list:
+        fallback_location = str(locations_list[0].get('id', ''))
+        if fallback_location:
+            session['selected_location_id'] = fallback_location
+            return fallback_location
+
+    session.pop('selected_location_id', None)
+    return None
 
 
 def _find_active_user_for_dexter_bridge(username, email):
@@ -180,6 +229,61 @@ def _is_trusted_dexter_bridge_request():
         return False
     remote = (request.remote_addr or '').strip()
     return remote in ('127.0.0.1', '::1')
+
+
+def _get_or_provision_dexter_company(company_name: str, user) -> dict | None:
+    """Return the Manager App company dict for *company_name*.
+
+    Lookup order:
+    1. Already in user.companies (name match, case-insensitive).
+    2. Exists in DB (shared across users) — add user if not a member yet.
+    3. Create a new company and assign user as business_admin.
+
+    Returns a company dict like those from db.get_user_companies, or None on error.
+    """
+    name_lc = company_name.strip().lower()
+
+    # 1. Already in user.companies?
+    match = next(
+        (c for c in user.companies if str(c.get('name') or '').strip().lower() == name_lc),
+        None,
+    )
+    if match:
+        return match
+
+    # 2. Company exists in DB but user not assigned?
+    try:
+        conn = db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM companies WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND is_active = 1 LIMIT 1",
+                (company_name.strip(),),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+
+        if row:
+            existing = dict(row)
+            db.add_user_to_company(user.id, existing['id'], 'business_admin')
+            # Reload companies so the newly-assigned one appears
+            user.companies = db.get_user_companies(user.id)
+            return next(
+                (c for c in user.companies if c['id'] == existing['id']),
+                None,
+            )
+
+        # 3. Create brand-new company for this Dexter tenant
+        new_id = db.create_company(company_name.strip(), user.id)
+        if new_id:
+            user.companies = db.get_user_companies(user.id)
+            return next((c for c in user.companies if c['id'] == new_id), None)
+
+    except Exception:
+        pass  # Do not crash the request; just leave the company unchanged
+
+    return None
 
 
 def _provision_user_for_dexter_bridge(username, email, is_admin):
@@ -676,6 +780,7 @@ def bridge_dexter_session_into_manager_app():
     dexter_user = (request.headers.get('X-Dexter-User') or '').strip()
     dexter_email = (request.headers.get('X-Dexter-Email') or '').strip()
     dexter_is_admin = (request.headers.get('X-Dexter-Is-Admin') or '').strip() == '1'
+    dexter_company_name = _dexter_company_name_from_header()
     if not dexter_user and not dexter_email:
         return None
 
@@ -687,13 +792,60 @@ def bridge_dexter_session_into_manager_app():
 
     user = User(user_data)
     user.companies = db.get_user_companies(user.id)
-    if len(user.companies) == 1:
-        session['current_company_id'] = user.companies[0]['id']
-        user.current_company_id = user.companies[0]['id']
-        user.current_role = user.companies[0]['role']
+
+    selected_company = None
+    if dexter_company_name:
+        dexter_company_name_lc = dexter_company_name.lower()
+        selected_company = next(
+            (
+                c for c in user.companies
+                if str(c.get('name') or '').strip().lower() == dexter_company_name_lc
+            ),
+            None,
+        )
+
+    if not selected_company and len(user.companies) == 1:
+        selected_company = user.companies[0]
+
+    if selected_company:
+        session['current_company_id'] = selected_company['id']
+        user.current_company_id = selected_company['id']
+        user.current_role = selected_company['role']
 
     login_user(user, remember=False)
     session.permanent = True
+    return None
+
+
+@app.before_request
+def sync_location_scope_from_dexter():
+    """Keep Manager App context (company + location) pinned to Dexter selection."""
+    if not current_user.is_authenticated:
+        return None
+    if not _is_trusted_dexter_bridge_request():
+        return None
+
+    # --- location sync (unchanged) ---
+    dexter_location_id = _dexter_selected_location_id_from_header()
+    if dexter_location_id:
+        session['selected_location_id'] = dexter_location_id
+
+    # --- company sync: switch when Dexter sends a different company name ---
+    dexter_company_name = _dexter_company_name_from_header()
+    if dexter_company_name:
+        # Check whether the current company already matches
+        current_company = next(
+            (c for c in current_user.companies if c['id'] == current_user.current_company_id),
+            None,
+        )
+        current_name = str(current_company.get('name') or '') if current_company else ''
+        if current_name.strip().lower() != dexter_company_name.strip().lower():
+            target = _get_or_provision_dexter_company(dexter_company_name, current_user)
+            if target:
+                session['current_company_id'] = target['id']
+                current_user.current_company_id = target['id']
+                current_user.current_role = target.get('role')
+
     return None
 
 
@@ -1003,23 +1155,9 @@ def dashboard():
 def daily_log():
     """Daily operations log"""
     selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
-    selected_location = request.args.get('location_id') or session.get('selected_location_id')
-    
     # Use shared ProductMix restaurant setup for cross-app location consistency.
     locations_list = _effective_location_options(current_user.current_company_id)
-    selected_location = str(selected_location) if selected_location else selected_location
-    
-    # If no location selected and locations exist, select first one
-    if not selected_location and locations_list:
-        selected_location = str(locations_list[0]['id'])
-
-    valid_location_ids = {str(row.get('id', '')) for row in locations_list}
-    if selected_location and selected_location not in valid_location_ids and locations_list:
-        selected_location = str(locations_list[0]['id'])
-    
-    # Store selected location in session
-    if selected_location:
-        session['selected_location_id'] = selected_location
+    selected_location = _resolve_effective_location_id(locations_list)
     
     if request.method == 'POST':
         # Save daily log data
@@ -1089,7 +1227,7 @@ def daily_log():
 def api_daily_log_version():
     """Return a lightweight version marker for Daily Log live updates."""
     selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
-    selected_location = request.args.get('location_id') or session.get('selected_location_id')
+    selected_location = _resolve_effective_location_id(_effective_location_options(current_user.current_company_id))
 
     if selected_location:
         data_dir = f"company_data/{current_user.current_company_id}/locations/{selected_location}/daily_logs"
@@ -1198,21 +1336,8 @@ def cash_manager():
 @company_required
 def employees():
     """Employee management"""
-    selected_location = request.args.get('location_id') or session.get('selected_location_id')
-    
     locations_list = _effective_location_options(current_user.current_company_id)
-    selected_location = str(selected_location) if selected_location else selected_location
-    
-    # If no location selected and locations exist, select first one
-    if not selected_location and locations_list:
-        selected_location = str(locations_list[0]['id'])
-    valid_location_ids = {str(row.get('id', '')) for row in locations_list}
-    if selected_location and selected_location not in valid_location_ids and locations_list:
-        selected_location = str(locations_list[0]['id'])
-    
-    # Store selected location in session
-    if selected_location:
-        session['selected_location_id'] = selected_location
+    selected_location = _resolve_effective_location_id(locations_list)
 
     company = db.get_company(current_user.current_company_id) or {}
     settings_raw = company.get('settings') or {}
@@ -1234,21 +1359,8 @@ def employees():
 @company_required
 def reports():
     """Reports and analytics"""
-    selected_location = request.args.get('location_id') or session.get('selected_location_id')
-    
     locations_list = _effective_location_options(current_user.current_company_id)
-    selected_location = str(selected_location) if selected_location else selected_location
-    
-    # If no location selected and locations exist, select first one
-    if not selected_location and locations_list:
-        selected_location = str(locations_list[0]['id'])
-    valid_location_ids = {str(row.get('id', '')) for row in locations_list}
-    if selected_location and selected_location not in valid_location_ids and locations_list:
-        selected_location = str(locations_list[0]['id'])
-    
-    # Store selected location in session
-    if selected_location:
-        session['selected_location_id'] = selected_location
+    selected_location = _resolve_effective_location_id(locations_list)
     
     # Get available date range from daily logs for selected location
     if selected_location:
@@ -1285,7 +1397,7 @@ def api_daily_summary():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     shift_filter = request.args.get('shift_filter', 'Full')  # Default to Full (combined)
-    location_id = request.args.get('location_id') or session.get('selected_location_id')
+    location_id = _resolve_effective_location_id(_effective_location_options(current_user.current_company_id))
     
     if location_id:
         data_dir = f"company_data/{current_user.current_company_id}/locations/{location_id}/daily_logs"
@@ -1937,7 +2049,7 @@ def api_save_employees():
     try:
         import json
         company_id = current_user.current_company_id
-        location_id = request.json.get('location_id') or session.get('selected_location_id')
+        location_id = _resolve_effective_location_id(_effective_location_options(current_user.current_company_id))
         
         if location_id:
             data_dir = f"company_data/{company_id}/locations/{location_id}"

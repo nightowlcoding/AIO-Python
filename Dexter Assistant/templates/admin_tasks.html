@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Operational Tasks — Dexter Ops</title>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6;--ok:#166534;--warn:#854d0e}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 12px}form.row{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}input,select{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem;background:#fff;color:var(--ink)}input[type=date]{color-scheme:light}input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(234,88,12,.15)}button[type=submit]{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff;transition:opacity .15s}button[type=submit]:hover{opacity:.88}.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}.tab{padding:6px 14px;border-radius:8px;border:1px solid var(--edge);background:#fff;color:var(--ink);font-size:.85rem;font-weight:600;cursor:pointer;text-decoration:none}.tab:hover{background:#f1f5f9}.tab.active{background:var(--accent);color:#fff;border-color:#c2410c}.table-card{background:var(--panel);border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);overflow:hidden}table{width:100%;border-collapse:collapse;font-size:.9rem}th{text-align:left;padding:9px 12px;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid var(--edge)}td{padding:10px 12px;border-bottom:1px solid var(--edge);vertical-align:middle}tr:last-child td{border-bottom:none}.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:600}.pill-pend{background:#fef9c3;color:#854d0e}.pill-prog{background:#dbeafe;color:#1e40af}.pill-done{background:#dcfce7;color:#166534}.pill-canc{background:#f3f4f6;color:var(--muted)}.pri-urgent{background:#fee2e2;color:#991b1b}.pri-high{background:#ffedd5;color:#9a3412}.pri-normal{background:#f3f4f6;color:var(--muted)}.pri-low{background:#f0fdf4;color:#166534}.msg{padding:9px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid}.ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}.err{background:#fee2e2;color:#991b1b;border-color:#fecaca}</style>
+</head><body>
+<h1>Operational Tasks</h1>
+{% if message %}<div class="msg ok">{{ message }}</div>{% endif %}
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+{% if is_super_admin %}
+<form method="post" action="/admin/company-scope" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <input type="hidden" name="next_path" value="/admin/tasks" />
+    <select name="company_id" required><option value="">Select company</option>{% for c in companies %}<option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    <button type="submit">Switch Company</button>
+</form>
+{% endif %}
+<form method="post" action="/admin/tasks/create" class="row">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    {% if selected_company_id %}<input type="hidden" name="company_id" value="{{ selected_company_id }}" />{% endif %}
+  <input name="title" placeholder="Task title" required style="min-width:180px" />
+  <input name="description" placeholder="Description" style="min-width:160px" />
+  <select name="assigned_to"><option value="">Unassigned</option>{% for u in active_users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select>
+  <select name="priority"><option value="normal" selected>Normal</option><option value="urgent">Urgent</option><option value="high">High</option><option value="low">Low</option></select>
+  <input type="date" name="due_date" title="Due date" />
+  <button type="submit">Create Task</button>
+</form>
+<div class="tabs">
+    <a class="tab{% if not status_filter %} active{% endif %}" href="/admin/tasks">All</a>
+    <a class="tab{% if status_filter == 'pending' %} active{% endif %}" href="/admin/tasks?status=pending">Pending</a>
+    <a class="tab{% if status_filter == 'in-progress' %} active{% endif %}" href="/admin/tasks?status=in-progress">In Progress</a>
+    <a class="tab{% if status_filter == 'completed' %} active{% endif %}" href="/admin/tasks?status=completed">Completed</a>
+</div>
+<div class="table-card"><table><thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assigned To</th><th>Due</th><th>Created</th></tr></thead>
+<tbody>{% for t in tasks %}<tr>
+  <td style="color:var(--muted);font-size:.82rem">{{ t.id }}</td>
+  <td><strong>{{ t.title }}</strong>{% if t.description %}<br><small style="color:var(--muted)">{{ t.description }}</small>{% endif %}</td>
+  <td>{% if t.priority == 'urgent' %}<span class="pill pri-urgent">Urgent</span>{% elif t.priority == 'high' %}<span class="pill pri-high">High</span>{% elif t.priority == 'low' %}<span class="pill pri-low">Low</span>{% else %}<span class="pill pri-normal">Normal</span>{% endif %}</td>
+  <td>{% if t.status == 'completed' %}<span class="pill pill-done">Completed</span>{% elif t.status == 'in-progress' %}<span class="pill pill-prog">In Progress</span>{% elif t.status == 'cancelled' %}<span class="pill pill-canc">Cancelled</span>{% else %}<span class="pill pill-pend">Pending</span>{% endif %}</td>
+  <td>{{ t.assigned_to_username or '—' }}</td>
+  <td style="color:var(--muted);font-size:.82rem;white-space:nowrap">{{ t.due_date or '—' }}</td>
+  <td style="color:var(--muted);font-size:.82rem">{{ t.created_at[:10] if t.created_at else '—' }}</td>
+</tr>{% endfor %}</tbody></table></div>
+</body></html>
+
+

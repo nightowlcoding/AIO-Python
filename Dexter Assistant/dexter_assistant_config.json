@@ -13,6 +13,7 @@
       "cwd": "ProductMixRestaurantDB",
       "entrypoint": "app.py",
       "base_url": "http://127.0.0.1:5050",
+      "auto_port": true,
       "health_path": "/health",
       "env": {
         "PM_DEBUG": "0",
@@ -24,6 +25,7 @@
       "cwd": "Inventory Control 3",
       "entrypoint": "app.py",
       "base_url": "http://127.0.0.1:5003",
+      "auto_port": true,
       "health_path": "/",
       "env": {
         "IC3_FORCE_PROD": "1",
@@ -35,6 +37,7 @@
       "cwd": "Manager App",
       "entrypoint": "manager_app.py",
       "base_url": "http://127.0.0.1:8000",
+      "auto_port": true,
       "health_path": "/",
       "env": {}
     }

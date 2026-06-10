@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dexter Ops &mdash; Create Account</title>
+    <style>
+        :root {
+            --accent:#ea580c;
+            --accent-dark:#c2410c;
+            --accent2:#0f766e;
+            --ink:#1f2937;
+            --muted:#6b7280;
+            --edge:#d1d5db;
+            --panel:#ffffff;
+            --danger:#991b1b;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; color: var(--ink); }
+        .wrap {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px 8px;
+            background: linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#fff7ed 100%);
+        }
+        .card {
+            width: 100%;
+            max-width: 460px;
+            background: var(--panel);
+            border: 1.5px solid var(--edge);
+            border-radius: 18px;
+            padding: 28px 26px 22px;
+            box-shadow: 0 12px 40px rgba(15,23,42,0.10);
+        }
+        .brand-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .brand-logo { width: 34px; height: 34px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        h1 { margin: 0; font-size: 1.7rem; font-weight: 800; color: #0f172a; }
+        p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+        label { display: block; margin: 10px 0 5px; font-size: 13px; font-weight: 600; color: #374151; }
+        input[type=text], input[type=password] {
+            width: 100%;
+            padding: 11px 13px;
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(234,88,12,0.12); }
+        .row { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        .check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; }
+        .check input { width: auto; margin: 0; cursor: pointer; }
+        button[type=submit] {
+            margin-top: 18px;
+            width: 100%;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 0;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        button[type=submit]:hover { background: var(--accent-dark); }
+        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; font-weight: 600; }
+        .links { margin-top: 14px; font-size: 13px; color: var(--muted); }
+        .links a { color: var(--accent); text-decoration: underline; font-weight: 600; }
+        @media (max-width: 520px) {
+            .wrap { padding: 10px 4px; }
+            .card { padding: 20px 12px 16px; border-radius: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <form class="card" method="post" action="{{ action_url }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <div class="brand-head">
+                <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+                <h1>Create Account</h1>
+            </div>
+            <p>Create your Dexter Ops account.</p>
+            <label>Username</label>
+            <input type="text" name="username" required minlength="3" autofocus autocomplete="username" />
+            <label>Password</label>
+            <input id="register-password" type="password" name="password" required minlength="8" autocomplete="new-password" />
+            <label>Confirm Password</label>
+            <input id="register-confirm-password" type="password" name="confirm_password" required minlength="8" autocomplete="new-password" />
+            <div class="row">
+                <label class="check"><input id="register-show-password" type="checkbox" /> Show password</label>
+            </div>
+            <button type="submit">Create Account</button>
+            {% if error %}<div class="error">{{ error }}</div>{% endif %}
+            <div class="links">Already have an account? <a href="{{ login_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Sign in</a></div>
+        </form>
+    </div>
+    <script>
+        (function () {
+            var showPassword = document.getElementById('register-show-password');
+            var passwordInput = document.getElementById('register-password');
+            var confirmInput = document.getElementById('register-confirm-password');
+            showPassword.addEventListener('change', function() {
+                var t = showPassword.checked ? 'text' : 'password';
+                passwordInput.type = t;
+                confirmInput.type = t;
+            });
+        })();
+    </script>
+</body>
+</html>

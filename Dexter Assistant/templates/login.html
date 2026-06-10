@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0" />
+    <title>Dexter Ops &mdash; Sign In</title>
+    <style>
+        :root {
+            --accent:#ea580c;
+            --accent-dark:#c2410c;
+            --accent2:#0f766e;
+            --ink:#1f2937;
+            --muted:#6b7280;
+            --edge:#d1d5db;
+            --panel:#ffffff;
+            --danger:#991b1b;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Segoe UI', 'Trebuchet MS', sans-serif; color: var(--ink); }
+        .wrap {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 8px;
+            background: linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#fff7ed 100%);
+        }
+        .container {
+            display: flex;
+            flex-direction: row;
+            gap: 40px;
+            width: 100%;
+            max-width: 900px;
+            align-items: center;
+            justify-content: center;
+        }
+        .marketing {
+            flex: 1 1 0;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 32px 0;
+        }
+        .logo {
+            width: 130px;
+            height: 130px;
+            margin-bottom: 18px;
+            object-fit: contain;
+            border-radius: 20px;
+            border: 1px solid var(--edge);
+            background: #fff;
+            padding: 5px;
+        }
+        .hero-title {
+            font-size: 2.3rem;
+            font-weight: 900;
+            margin: 0 0 10px;
+            color: #0f172a;
+            letter-spacing: 0.3px;
+        }
+        .hero-accent { color: var(--accent); }
+        .hero-tagline {
+            font-size: 1.1rem;
+            color: var(--muted);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .features { list-style: none; padding: 0; margin: 0 0 20px; }
+        .features li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.97rem;
+            margin-bottom: 10px;
+            color: var(--ink);
+        }
+        .features svg { width: 20px; height: 20px; color: var(--accent); flex-shrink: 0; }
+        .contact-link { font-size: 0.9rem; color: var(--accent2); text-decoration: underline; }
+        .card {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: 400px;
+            background: var(--panel);
+            border: 1.5px solid var(--edge);
+            border-radius: 18px;
+            padding: 30px 26px 24px;
+            box-shadow: 0 12px 40px rgba(15,23,42,0.10);
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .card h2 { margin: 0 0 6px; font-size: 1.65rem; font-weight: 800; color: #0f172a; }
+        .card p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+        label { display: block; margin: 10px 0 5px; font-size: 13px; font-weight: 600; color: #374151; }
+        input[type=text], input[type=password] {
+            width: 100%;
+            padding: 11px 13px;
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(234,88,12,0.12); }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+        .check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; }
+        .check input { width: auto; margin: 0; cursor: pointer; }
+        button[type=submit] {
+            margin-top: 18px;
+            width: 100%;
+            border: none;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 0;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s;
+            letter-spacing: 0.2px;
+        }
+        button[type=submit]:hover { background: var(--accent-dark); }
+        .error { margin: 10px 0 0; color: var(--danger); font-size: 13px; font-weight: 600; }
+        .links { margin-top: 14px; font-size: 13px; color: var(--muted); text-align: center; }
+        .links a { color: var(--accent); text-decoration: underline; font-weight: 600; }
+        @media (max-width: 860px) {
+            .container { flex-direction: column; gap: 20px; align-items: stretch; }
+            .marketing, .card { max-width: 100%; }
+        }
+        @media (max-width: 520px) {
+            .wrap { padding: 10px 4px; }
+            .hero-title { font-size: 1.5rem; }
+            .card { padding: 20px 12px 16px; border-radius: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="container">
+            <div class="marketing">
+                <img class="logo" src="/branding/logo" alt="Dexter Ops logo" />
+                <div class="hero-title">Dexter <span class="hero-accent">Assistant</span></div>
+                <div class="hero-tagline">The all-in-one operations platform<br>built for restaurant teams.</div>
+                <ul class="features">
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Inventory Control — track invoices, orders &amp; stock levels in real time</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Product Mix &amp; Production Reports — upload sales data and plan production by location</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Daily Log — log cash, labor and shift notes from any device</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Live dashboard — top sellers, open tasks and app health at a glance</li>
+                    <li><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M8 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> Role-based access for owners, managers &amp; employees — works on any device</li>
+                </ul>
+                <a class="contact-link" href="mailto:info@dexterassist.com">Contact us / Learn more</a>
+            </div>
+            <form class="card" method="post" action="{{ action_url }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <h2>Sign In</h2>
+                <p>Access your dashboard and manage your apps.</p>
+                <label>Username</label>
+                <input id="login-username" type="text" name="username" required autofocus autocomplete="username" />
+                <label>Password</label>
+                <input id="login-password" type="password" name="password" required autocomplete="current-password" />
+                <div class="row">
+                    <label class="check"><input id="show-password" type="checkbox" /> Show password</label>
+                    <label class="check"><input id="save-password" type="checkbox" /> Remember username</label>
+                </div>
+                <button type="submit">Sign In</button>
+                {% if error %}<div class="error">{{ error }}</div>{% endif %}
+                <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a> &bull; <a href="/auth/forgot-password">Forgot password?</a></div>
+            </form>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var usernameInput = document.getElementById('login-username');
+            var passwordInput = document.getElementById('login-password');
+            var showPassword = document.getElementById('show-password');
+            var savePassword = document.getElementById('save-password');
+            var storageKey = 'dexterAssistantLogin';
+            try {
+                var saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+                if (saved && typeof saved === 'object') {
+                    if (typeof saved.username === 'string') usernameInput.value = saved.username;
+                    showPassword.checked = !!saved.showPassword;
+                    savePassword.checked = !!saved.savePassword;
+                    if (showPassword.checked) passwordInput.type = 'text';
+                }
+            } catch (e) {}
+            showPassword.addEventListener('change', function() {
+                passwordInput.type = showPassword.checked ? 'text' : 'password';
+            });
+            document.querySelector('form.card').addEventListener('submit', function() {
+                if (savePassword.checked) {
+                    localStorage.setItem(storageKey, JSON.stringify({
+                        username: usernameInput.value,
+                        showPassword: showPassword.checked,
+                        savePassword: true
+                    }));
+                } else {
+                    localStorage.removeItem(storageKey);
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

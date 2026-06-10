@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Dexter Ops Portal</title>
+    <style>
+        :root {
+            --accent:#ea580c;
+            --accent2:#0f766e;
+            --ink:#1f2937;
+            --muted:#6b7280;
+            --bg:linear-gradient(145deg,#f8fafc 0%,#f9fafb 45%,#eef2ff 100%);
+            --panel:#ffffff;
+            --edge:#d1d5db;
+            --ok:#166534;
+            --bad:#991b1b;
+            --radius:10px;
+        }
+        * { box-sizing: border-box; }
+        html, body { -webkit-text-size-adjust: 100%; overflow-x: hidden; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
+            color: var(--ink);
+            background: var(--bg);
+            min-height: 100vh;
+            min-height: 100dvh;
+            -webkit-overflow-scrolling: touch;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 9px 12px;
+            border-bottom: 1px solid var(--edge);
+            background: #ffffff;
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            box-shadow: 0 1px 4px rgba(15,23,42,0.06);
+        }
+        .brand { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: 0.2px; }
+        .brand-wrap { display: flex; align-items: center; gap: 10px; }
+        .brand-logo { width: 26px; height: 26px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+        .nav a, .nav button {
+            border: 1px solid var(--edge);
+            background: #fff;
+            color: var(--ink);
+            border-radius: var(--radius);
+            padding: 6px 10px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mini-ico {
+            width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .nav-short { display: none; }
+        .nav a:hover, .nav button:hover { background: #f1f5f9; }
+        .nav .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
+        .nav .primary:hover { background: #c2410c; }
+        .nav .danger { background: var(--bad); color: #fff; border-color: #7f1d1d; }
+        .nav .danger:hover { background: #7f1d1d; }
+        .nav button:disabled { opacity: 0.55; cursor: not-allowed; }
+        .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 12px 24px; }
+        h1 { margin: 0 0 4px; font-size: 27px; font-weight: 800; color: #111827; }
+        .subtitle { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+        .banner {
+            border: 1px solid #fed7aa;
+            background: #fff7ed;
+            border-radius: var(--radius);
+            padding: 8px 10px;
+            color: #9a3412;
+            margin-bottom: 12px;
+            font-size: 12px;
+        }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--edge);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 8px 24px rgba(15,23,42,0.07);
+        }
+        .card h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; color: #0f172a; }
+        .card p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+        .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .actions a {
+            border: 1px solid var(--edge);
+            background: #fff;
+            color: var(--ink);
+            border-radius: var(--radius);
+            padding: 6px 10px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .actions a:hover { background: #f1f5f9; }
+        .actions a.primary { background: var(--accent); color: #fff; border-color: #c2410c; }
+        .actions a.primary:hover { background: #c2410c; }
+        .actions a.secondary { background: var(--accent2); color: #fff; border-color: #0c5b55; }
+        .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+        .toast-wrap { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:9999; pointer-events:none; }
+        .toast { background:#1f2937; color:#fff; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:600; opacity:0; transform:translateY(10px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; max-width:320px; }
+        .toast.show { opacity:1; transform:translateY(0); }
+        .toast.error { background:#991b1b; }
+        .toast.ok { background:#166534; }
+        @media (max-width: 700px) {
+            .wrap { padding: 12px 10px 18px; }
+            h1 { font-size: 1.5rem; }
+            .cards { gap: 10px; }
+            .card { padding: 12px; }
+            .topbar { flex-wrap: wrap; gap: 8px; }
+            .nav-label { display: none; }
+            .nav-short { display: inline; }
+            .nav a, .nav button { padding: 5px 8px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="brand-wrap">
+            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+            <div class="brand">Dexter Ops Portal</div>
+        </div>
+        <div class="nav">
+            <a href="/"><span class="mini-ico">H</span><span class="nav-label">Home</span><span class="nav-short">HM</span></a>
+            <a href="/portal/productmix"><span class="mini-ico">P</span><span class="nav-label">ProductMix</span><span class="nav-short">PM</span></a>
+            <a href="/portal/ic3"><span class="mini-ico">I</span><span class="nav-label">Inventory Control 3</span><span class="nav-short">IC3</span></a>
+            <a href="/portal/managerapp"><span class="mini-ico">D</span><span class="nav-label">Daily Log</span><span class="nav-short">DL</span></a>
+            <button class="primary" id="btnStartAll" onclick="act('/api/start-all', this)">Start All</button>
+            <button class="danger" id="btnStopAll" onclick="act('/api/stop-all', this)">Stop All</button>
+            <a href="/auth/logout"><span class="mini-ico">L</span><span class="nav-label">Logout</span><span class="nav-short">Out</span></a>
+        </div>
+    </div>
+    <div class="toast-wrap" id="toastWrap"></div>
+    <div class="wrap">
+        <h1>Restaurant Management</h1>
+        <p class="subtitle">Run both systems under one portal and switch between them from shared navigation.</p>
+        <div class="banner">Both copied apps are hosted behind this portal. Original source folders remain untouched.</div>
+        <div class="cards">
+            <div class="card">
+                <h2>ProductMixRestaurantDB</h2>
+                <p>Upload and analyze product mixes, production lists, and report views.</p>
+                <div class="actions">
+                    <a class="primary" href="/portal/productmix">Open ProductMix</a>
+                    <a class="secondary" href="/app/productmix/" target="_blank" rel="noopener">Open Raw</a>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Inventory Control 3</h2>
+                <p>Inventory tracking, invoice imports, and usage analytics for locations.</p>
+                <div class="actions">
+                    <a class="primary" href="/portal/ic3">Open IC3</a>
+                    <a class="secondary" href="/app/ic3/" target="_blank" rel="noopener">Open Raw</a>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Daily Log</h2>
+                <p>Manager workflows for daily logs, employees, and operational reports.</p>
+                <div class="actions">
+                    <a class="primary" href="/portal/managerapp">Open Daily Log</a>
+                    <a class="secondary" href="/app/managerapp/" target="_blank" rel="noopener">Open Raw</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer">Front door: {{ host }}:{{ port }}</div>
+    </div>
+    <script>
+        function showToast(msg, type) {
+            var wrap = document.getElementById('toastWrap');
+            var t = document.createElement('div');
+            t.className = 'toast' + (type ? ' ' + type : '');
+            t.textContent = msg;
+            wrap.appendChild(t);
+            requestAnimationFrame(function() { t.classList.add('show'); });
+            setTimeout(function() {
+                t.classList.remove('show');
+                setTimeout(function() { t.remove(); }, 300);
+            }, 3200);
+        }
+        async function act(url, btn) {
+            if (btn) { btn.disabled = true; var orig = btn.textContent; btn.textContent = '...'; }
+            try {
+                var res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+                if (!res.ok) {
+                    var txt = await res.text();
+                    showToast('Action failed: ' + txt, 'error');
+                } else {
+                    showToast('Done.', 'ok');
+                }
+            } catch (e) {
+                showToast('Request failed: ' + e.message, 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = orig; }
+            }
+        }
+    </script>
+</body>
+</html>

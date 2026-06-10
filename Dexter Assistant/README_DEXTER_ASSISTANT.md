@@ -23,3 +23,15 @@ Dexter Assistant is a front-door launcher/proxy around exact copies of:
 - IC3 is started as copied via `Inventory Control 3/app.py`.
 - Logs are written to `runtime_logs/`.
 - Dexter Assistant auto-starts both apps at launch (with preflight checks).
+
+## Recommended security environment variables
+Use these in production or any HTTPS-backed deployment:
+- `DEXTER_SECRET_KEY` - required; set a stable secret for session signing.
+- `DEXTER_SESSION_COOKIE_SECURE=1` - marks the session cookie `Secure` when served over HTTPS.
+- `DEXTER_SESSION_COOKIE_NAME=dexter_session` - optional custom session cookie name.
+- `DEXTER_ENABLE_HSTS=1` - enables `Strict-Transport-Security` on secure requests.
+- `DEXTER_ADMIN_USER` / `DEXTER_ADMIN_PASS` - optional bootstrap Super Admin credentials.
+
+Suggested defaults:
+- Development over HTTP: leave `DEXTER_SESSION_COOKIE_SECURE` and `DEXTER_ENABLE_HSTS` unset.
+- Production behind HTTPS: set `DEXTER_SESSION_COOKIE_SECURE=1` and `DEXTER_ENABLE_HSTS=1`.

@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+        <title>Dexter Ops</title>
+        <style>
+                :root {
+                    --bg:#f3f4f6;
+                    --panel:#ffffff;
+                    --ink:#1f2937;
+                    --muted:#6b7280;
+                    --ok:#166534;
+                    --bad:#991b1b;
+                    --accent:#ea580c;
+                    --accent2:#0f766e;
+                    --edge:#d1d5db;
+                    --left:#f8fafc;
+                    --left2:#f3f4f6;
+                    --radius:12px;
+                }
+                * { box-sizing: border-box; }
+                html, body { -webkit-text-size-adjust: 100%; }
+                body {
+                        margin: 0;
+                        font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
+                        color: var(--ink);
+                            display: flex;
+                            flex-direction: column;
+                            min-height: 0;
+                    background: linear-gradient(145deg, #f8fafc 0%, #f9fafb 45%, #eef2ff 100%);
+                        min-height: 100vh;
+                        min-height: 100dvh;
+                        -webkit-overflow-scrolling: touch;
+                        overflow-x: hidden;
+                }
+                .shell {
+                        display: grid;
+                    grid-template-columns: 204px 204px minmax(0, 1fr);
+                        height: 100dvh;
+                }
+                .left-primary,
+                .left-sub {
+                    border-right: 1px solid var(--edge);
+                    overflow: auto;
+                }
+                .left-primary {
+                    background: var(--left);
+                    padding: 10px 9px;
+                }
+                .left-sub {
+                    background: var(--left2);
+                    padding: 0;
+                    width: 0;
+                    overflow: hidden;
+                    opacity: 0;
+                    pointer-events: none;
+                }
+                .brand-row {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 14px;
+                    gap: 8px;
+                }
+                .brand {
+                    font-size: 20px;
+                    font-weight: 800;
+                    color: #0f172a;
+                }
+                .brand-mark {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    min-width: 0;
+                }
+                .brand-logo {
+                    width: 34px;
+                    height: 34px;
+                    object-fit: contain;
+                    border-radius: 8px;
+                    background: #fff;
+                    padding: 2px;
+                    flex-shrink: 0;
+                }
+                .menu-btn {
+                    border: 1px solid var(--edge);
+                    background: #fff;
+                    color: #334155;
+                    border-radius: 8px;
+                    width: 32px;
+                    height: 32px;
+                    cursor: pointer;
+                }
+                .primary-menu,
+                .sub-menu {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+                .primary-menu button,
+                .sub-menu button {
+                    border: 1px solid transparent;
+                    background: transparent;
+                    text-align: left;
+                    color: #1f2937;
+                    border-radius: 8px;
+                    padding: 8px 9px;
+                    cursor: pointer;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+                .primary-menu button:hover,
+                .sub-menu button:hover {
+                    background: #e5e7eb;
+                }
+                .primary-menu button.active,
+                .sub-menu button.active {
+                    background: var(--accent);
+                    border-color: var(--accent2);
+                    color: #fff;
+                }
+                .sub-head {
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    color: #64748b;
+                    margin: 4px 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                }
+                .sub-toggle-btn {
+                    border: 1px solid var(--edge)!important;
+                    background: #fff!important;
+                    color: #64748b!important;
+                    border-radius: 6px!important;
+                    width: 22px!important; height: 22px!important;
+                    min-width: 0!important;
+                    padding: 0!important;
+                    font-size: 11px!important;
+                    cursor: pointer!important;
+                    flex-shrink: 0;
+                }
+                .sub-show-btn {
+                    display: none;
+                    border: 1px solid var(--edge);
+                    background: #fff;
+                    color: #64748b;
+                    border-radius: 6px;
+                    width: 26px; height: 26px;
+                    min-width: 0;
+                    padding: 0;
+                    font-size: 12px;
+                    cursor: pointer;
+                    margin-top: 6px;
+                    align-self: center;
+                    width: 100%;
+                }
+                body.sub-hidden .sub-show-btn { display: flex; align-items:center; justify-content:center; }
+                .shell.group-open {
+                    grid-template-columns: 204px 204px minmax(0, 1fr);
+                }
+                body.collapsed .shell.group-open {
+                    grid-template-columns: 68px 204px minmax(0, 1fr);
+                }
+                body.sub-hidden .shell.group-open {
+                    grid-template-columns: 204px 0 minmax(0, 1fr);
+                }
+                body.collapsed.sub-hidden .shell.group-open {
+                    grid-template-columns: 72px 0 minmax(0, 1fr);
+                }
+                body.sub-hidden .left-sub {
+                    width: 0!important; padding:0!important; border:0!important;
+                    overflow:hidden!important; opacity:0!important; pointer-events:none!important;
+                }
+                .shell.group-open .left-sub {
+                    width: auto;
+                    padding: 14px 10px;
+                    border-left: 1px solid var(--edge);
+                    overflow: auto;
+                    opacity: 1;
+                    pointer-events: auto;
+                }
+                .primary-menu button,
+                .sub-menu button {
+                        border: 1px solid transparent;
+                        background: transparent;
+                        text-align: left;
+                        color: #1f2937;
+                        border-radius: 10px;
+                        padding: 9px 10px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        font-weight: 600;
+                }
+                .primary-menu button:hover,
+                .sub-menu button:hover {
+                        background: #e5e7eb;
+                }
+                .primary-menu button.active,
+                .sub-menu button.active {
+                    background: var(--accent);
+                    border-color: var(--accent2);
+                    color: #fff;
+                }
+                .sub-head {
+                        font-size: 11px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.08em;
+                        color: #64748b;
+                        margin: 4px 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                }
+                body.collapsed .shell {
+                    grid-template-columns: 68px 0 minmax(0, 1fr);
+                }
+                body.collapsed .brand {
+                        display: none;
+                }
+                body.collapsed .brand-logo {
+                    width: 28px;
+                    height: 28px;
+                }
+                body.collapsed .left-sub {
+                    width: 0;
+                    padding: 0;
+                    border-right: 0;
+                    border-left: 0;
+                    overflow: hidden;
+                    opacity: 0;
+                    pointer-events: none;
+                }
+                body.collapsed .primary-menu button {
+                        font-size: 0;
+                        min-height: 38px;
+                        position: relative;
+                }
+                body.collapsed .primary-menu button::before {
+                        content: attr(data-short);
+                        font-size: 13px;
+                        font-weight: 700;
+                        color: #334155;
+                }
+                .mobile-top {
+                        display: none;
+                        padding: 10px 10px 0;
+                }
+                .main {
+                        min-width: 0;
+                        padding: 14px;
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 0;
+                    overflow-y: auto;
+                }
+                .viewer-pane {
+                    display: flex;
+                    flex: 1;
+                    min-height: 0;
+                    padding: 0;
+                    overflow: hidden;
+                }
+                .app-frame {
+                    width: 100%;
+                    height: 100%;
+                    border: 0;
+                    display: block;
+                    flex: 1;
+                    min-height: 0;
+                    background: #fff;
+                    border-radius: 16px;
+                }
+                .topbar {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 12px;
+                        flex-wrap: wrap;
+                    margin-bottom: 10px;
+                }
+                body.viewer-active .topbar {
+                    display: none;
+                }
+                body.viewer-active .main {
+                    padding: 8px 10px 10px;
+                }
+                body.viewer-active #pane-viewer {
+                    border: 0;
+                    box-shadow: none;
+                    background: transparent;
+                    padding: 0;
+                }
+                .sub-head-actions {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                .sub-logout {
+                    border: 1px solid #fecaca;
+                    background: #fff5f5;
+                    color: #991b1b;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    text-decoration: none;
+                    text-transform: none;
+                    letter-spacing: normal;
+                }
+                .title {
+                        margin: 0;
+                    font-size: 28px;
+                        font-weight: 800;
+                        color: #111827;
+                }
+                .subtitle {
+                        margin: 6px 0 0;
+                        color: var(--muted);
+                }
+                .company-context {
+                    margin-top: 10px;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                }
+                .company-label {
+                    color: #475569;
+                    font-size: 12px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                }
+                .company-chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    border: 1px solid #cbd5e1;
+                    background: #ffffff;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    color: #1e293b;
+                }
+                .role-chip {
+                    border: 1px solid #fed7aa;
+                    background: #fff7ed;
+                    color: #9a3412;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+                .location-switch-form {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    flex-wrap: wrap;
+                }
+                .location-switch-form select {
+                    border: 1px solid #cbd5e1;
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    background: #ffffff;
+                    color: #0f172a;
+                }
+                .location-switch-form button {
+                    border-radius: 999px;
+                    padding: 4px 10px;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+                .actions {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                }
+                button,
+                a.btn {
+                        border: 1px solid #cbd5e1;
+                        background: #fff;
+                        color: #1f2937;
+                        border-radius: 10px;
+                        padding: 8px 12px;
+                        font-size: 13px;
+                        cursor: pointer;
+                        text-decoration: none;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        min-width: 88px;
+                        font-weight: 600;
+                }
+                .primary { background: var(--accent); color: #fff; border-color: var(--accent2); }
+                .warning { background: #7c3aed; color: #fff; border-color: #6d28d9; }
+                .secondary { background: var(--accent2); color: #fff; border-color: #122443; }
+                button:disabled { opacity: 0.55; cursor: not-allowed; }
+                .pane {
+                        display: none;
+                        background: var(--panel);
+                        border: 1px solid var(--edge);
+                    border-radius: var(--radius);
+                        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+                    padding: 12px;
+                }
+                .pane.active { display: block; }
+                    .viewer-pane {
+                        display: flex;
+                        flex: 1;
+                        min-height: 0;
+                        padding: 0;
+                        overflow: hidden;
+                    }
+                    .app-frame {
+                        width: 100%;
+                        height: 100%;
+                        border: 0;
+                        display: block;
+                        flex: 1;
+                        min-height: 0;
+                        background: #fff;
+                        border-radius: 16px;
+                    }
+                .banner {
+                    border: 1px solid #bfdbfe;
+                    background: #eff6ff;
+                    color: #1d4ed8;
+                        border-radius: 12px;
+                        padding: 10px 12px;
+                        margin-bottom: 14px;
+                }
+                .stats {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                        gap: 10px;
+                        margin-bottom: 14px;
+                }
+                .stat {
+                        border: 1px solid var(--edge);
+                    border-radius: 10px;
+                    padding: 10px;
+                        background: #f9fafb;
+                }
+                .stat .label {
+                        color: #64748b;
+                        font-size: 12px;
+                        margin-bottom: 6px;
+                }
+                .stat .value {
+                    font-size: 21px;
+                        font-weight: 800;
+                        color: #0f172a;
+                }
+                .grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                        gap: 12px;
+                }
+                .card {
+                        border: 1px solid var(--edge);
+                    border-radius: 12px;
+                    padding: 12px;
+                        background: var(--panel);
+                        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+                }
+                .row {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 8px;
+                }
+                .name {
+                    font-size: 17px;
+                        font-weight: 700;
+                        color: #0f172a;
+                }
+                .pill {
+                        border-radius: 999px;
+                        padding: 4px 10px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        border: 1px solid transparent;
+                }
+                .running { color: var(--ok); background: #dcfce7; border-color: #86efac; }
+                .stopped { color: #78350f; background: #ffedd5; border-color: #fed7aa; }
+                .error { color: var(--bad); background: #fee2e2; border-color: #fecaca; }
+                .meta {
+                        color: var(--muted);
+                    font-size: 12px;
+                    margin: 6px 0 8px;
+                        word-break: break-word;
+                }
+                .btns {
+                        display: flex;
+                        gap: 8px;
+                        flex-wrap: wrap;
+                }
+                .list {
+                        border: 1px solid var(--edge);
+                    border-radius: 10px;
+                        overflow: hidden;
+                }
+                .list-row {
+                        display: grid;
+                        grid-template-columns: 1.3fr 0.8fr 1fr;
+                        gap: 8px;
+                    padding: 8px 10px;
+                        border-bottom: 1px solid #e5e7eb;
+                        align-items: center;
+                    font-size: 12px;
+                }
+                .list-row:last-child { border-bottom: 0; }
+                .list-head {
+                    background: #e8eef5;
+                        font-weight: 700;
+                    color: #22427A;
+                }
+                .footer {
+                        margin-top: 14px;
+                        color: var(--muted);
+                        font-size: 12px;
+                }
+                pre {
+                        margin-top: 12px;
+                        border-radius: 10px;
+                        border: 1px solid #334155;
+                        background: #1e293b;
+                        color: #e2e8f0;
+                        padding: 10px 12px;
+                        max-height: 300px;
+                        overflow: auto;
+                        font-size: 11.5px;
+                        font-family: 'Cascadia Code', 'Consolas', monospace;
+                        line-height: 1.5;
+                        white-space: pre-wrap;
+                        word-break: break-all;
+                }
+                .stat.ok-stat { border-left: 4px solid #86efac; }
+                .stat.bad-stat { border-left: 4px solid #fca5a5; }
+                .stat.warn-stat { border-left: 4px solid #fcd34d; }
+                .toast-wrap { position:fixed; bottom:22px; right:22px; display:flex; flex-direction:column; gap:8px; z-index:9999; pointer-events:none; }
+                .toast { background:#1f2937; color:#fff; border-radius:10px; padding:11px 18px; font-size:13px; font-weight:600; opacity:0; transform:translateY(10px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; max-width:340px; box-shadow:0 4px 16px rgba(0,0,0,0.18); }
+                .toast.show { opacity:1; transform:translateY(0); }
+                .toast.error { background:#991b1b; }
+                .toast.ok { background:#166534; }
+                .status-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--edge); margin-left:5px; vertical-align:middle; transition:background .3s; }
+                .status-dot.dot-ok { background:#86efac; }
+                .status-dot.dot-warn { background:#fcd34d; }
+                .status-dot.dot-bad { background:#fca5a5; }
+                @media (max-width: 980px) {
+                        html, body { overflow-x: hidden; }
+                        body { min-height: 100vh; min-height: 100dvh; }
+                        .shell {
+                                grid-template-columns: minmax(0, 1fr);
+                                min-height: auto;
+                        }
+                        .left-primary,
+                        .left-sub {
+                                position: fixed;
+                                top: 0;
+                                bottom: 0;
+                                z-index: 20;
+                                transform: translateX(-100%);
+                                transition: transform 0.2s ease;
+                                -webkit-overflow-scrolling: touch;
+                        }
+                        .left-primary {
+                                width: 230px;
+                                left: 0;
+                        }
+                        .left-sub {
+                                width: 220px;
+                                left: 230px;
+                                border-left: 1px solid var(--edge);
+                        }
+                        .shell.menu-open .left-primary {
+                                transform: translateX(0);
+                        }
+                        .shell.menu-open.group-open .left-sub {
+                                transform: translateX(0);
+                        }
+                        .mobile-top { display: flex; position: sticky; top: 0; z-index: 10; background: rgba(248,250,252,0.92); backdrop-filter: blur(6px); }
+                        .main { padding: 12px; min-height: auto; }
+                        .title { font-size: 28px; }
+                        .list-row { grid-template-columns: 1fr; gap: 2px; }
+                        /* iOS-safe scroll wrapper: pane-viewer is the scroll surface, iframe grows to content. */
+                        .viewer-pane,
+                        #pane-viewer.active {
+                                display: block !important;
+                                overflow-y: auto !important;
+                                overflow-x: hidden !important;
+                                -webkit-overflow-scrolling: touch !important;
+                                height: calc(100vh - 56px) !important;
+                                height: calc(100dvh - 56px) !important;
+                                max-height: calc(100dvh - 56px) !important;
+                                min-height: 0 !important;
+                                padding: 0 !important;
+                                position: relative !important;
+                                overscroll-behavior: contain;
+                                touch-action: pan-y;
+                        }
+                        .app-frame {
+                                width: 100% !important;
+                                height: auto !important;
+                                min-height: 100% !important;
+                                display: block !important;
+                                border: 0 !important;
+                        }
+                }
+                #pane-home { display: none; }
+                #pane-home.active { display: block; }
+                #pane-viewer { display: none; }
+                #pane-viewer.active { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
+        </style>
+</head>
+<body>
+        <div class="mobile-top">
+                <button class="menu-btn" onclick="toggleMobileMenu()">Menu</button>
+        </div>
+
+        <div id="shell" class="shell">
+        <div class="toast-wrap" id="toastWrap"></div>
+                <aside class="left-primary">
+                        <div class="brand-row">
+                        <div class="brand-mark">
+                            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+                            <div class="brand">Dexter Ops</div>
+                        </div>
+                                <button class="menu-btn" onclick="toggleCollapsed()" title="Collapse sidebar">||</button>
+                        </div>
+                        <nav id="primaryNav" class="primary-menu">
+                        <button data-short="HM" data-section="home" class="active" onclick="openHome()">Home</button>
+                        <button data-short="IC" data-section="inventory" onclick="setSection('inventory')">Inventory Control <span class="status-dot" id="dot-ic3"></span></button>
+                        <button data-short="PM" data-section="productmix" onclick="setSection('productmix')">Product Mix <span class="status-dot" id="dot-productmix"></span></button>
+                        <button data-short="MG" data-section="managerapp" onclick="setSection('managerapp')">Daily Log <span class="status-dot" id="dot-managerapp"></span></button>
+                        <button data-short="AD" data-section="admin" onclick="setSection('admin')">Admin</button>
+                        </nav>
+                </aside>
+
+                <aside class="left-sub">
+                    <div class="sub-head" id="subHead"><span id="subHeadLabel">Sub Menu</span><div class="sub-head-actions"><a class="sub-logout" href="/auth/logout">Logout</a><button class="sub-toggle-btn" onclick="toggleSubSidebar()" title="Hide panel">&#8249;</button></div></div>
+                        <nav id="subNav" class="sub-menu"></nav>
+                </aside>
+
+                <main class="main">
+                        <div class="topbar">
+                                <div>
+                            <h1 id="pageTitle" class="title">Home</h1>
+                            <p id="pageSubtitle" class="subtitle">Overview of all operations.</p>
+                            <div class="company-context">
+                                <span class="company-label">Company</span>
+                                <span class="company-chip">{{ current_company_name or 'Not Assigned' }}</span>
+                                <span class="company-label">Location</span>
+                                <span class="company-chip">{{ current_location_name or 'Not Assigned' }}</span>
+                                {% if location_switch_options %}
+                                <form method="post" action="/admin/location-scope" class="location-switch-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="next_path" value="{{ request.path }}" />
+                                    <select name="restaurant_id" required>
+                                        {% for location_option in location_switch_options %}
+                                        <option value="{{ location_option.id }}" {% if selected_location_id == location_option.id %}selected{% endif %}>{{ location_option.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit">Switch</button>
+                                </form>
+                                {% endif %}
+                                <span class="role-chip">{{ current_role_name }}</span>
+                            </div>
+                                </div>
+                        </div>
+
+                        <section id="pane-home" class="pane active">
+                            <div class="stats">
+                                <div class="stat" id="statOpenTasks"><div class="label">Open Tasks</div><div class="value" style="font-size:28px">—</div></div>
+                                <div class="stat" id="statAppsRunning"><div class="label">Apps Running</div><div class="value" style="font-size:28px">—</div></div>
+                                <div class="stat" id="statTopSeller"><div class="label">Top Seller</div><div class="value" style="font-size:18px;line-height:1.2">—</div></div>
+                            </div>
+                            <div class="grid" id="homeAppCards" style="margin-bottom:14px;"></div>
+                            <div style="margin-bottom:14px;">
+                                <div class="sub-head" style="margin-bottom:8px;">Quick Actions</div>
+                                <div class="btns">
+                                    <button class="primary" onclick="openAppById('ic3-home')">Inventory Control</button>
+                                    <button class="secondary" onclick="openAppById('mgr-daily-log')">Daily Log</button>
+                                    <button onclick="openAppById('pm-production')">Production Report</button>
+                                    <button onclick="openAppById('mgr-employees')">Employees</button>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="sub-head" style="margin-bottom:8px;">Top Sellers (latest period)</div>
+                                <div class="list" id="homeTopSellers">
+                                    <div class="list-row list-head"><span>Item</span><span>Qty Sold</span></div>
+                                    <div class="list-row" style="color:var(--muted)"><span>Loading...</span><span></span></div>
+                                </div>
+                            </div>
+                        </section>
+                        <section id="pane-viewer" class="pane viewer-pane">
+                                <iframe id="appFrame" class="app-frame" src="about:blank"></iframe>
+                        </section>
+                </main>
+        </div>
+
+        <script>
+            const menuGroups = {
+                inventory: {
+                    title: 'Inventory Control',
+                    subtitle: 'Inventory apps and operational tools for the inventory workflow.',
+                    items: [
+                        { id: 'ic3-home', label: 'Inventory Control 3', url: '/app/ic3/' },
+                        { id: 'ic3-enter', label: 'Enter Inventory', url: '/app/ic3/', ic3TabText: 'Enter Inventory' },
+                        { id: 'ic3-saved', label: 'Saved Inventories', url: '/app/ic3/', ic3TabText: 'Saved Inventories' },
+                        { id: 'ic3-est-vs-act', label: 'Estimated vs Actual', url: '/app/ic3/', ic3TabText: 'Estimated vs Actual' },
+                        { id: 'ic3-orders', label: 'Orders', url: '/app/ic3/', ic3TabText: 'Orders' },
+                        { id: 'ic3-manage', label: 'Manage Products', url: '/app/ic3/', ic3TabText: 'Manage Products' },
+                        { id: 'ic3-forecast', label: 'Forecast', url: '/app/ic3/', ic3TabText: 'Forecast' },
+                        { id: 'ic3-reports', label: 'Reports', url: '/app/ic3/', ic3TabText: 'Reports' },
+                        { id: 'ic3-analytics', label: 'Analytics', url: '/app/ic3/', ic3TabText: 'Analytics' },
+                        { id: 'ic3-usage', label: 'Usage History', url: '/app/ic3/', ic3TabText: 'Usage History' }
+                    ]
+                },
+                productmix: {
+                    title: 'Product Mix',
+                    subtitle: 'Product mix reporting and production planning tools.',
+                    items: [
+                        { id: 'pm-home', label: 'Product Mix Home', url: '/app/productmix/product-mix' },
+                        { id: 'pm-reports', label: 'Reports Overview', url: '/app/productmix/reports' },
+                        { id: 'pm-production', label: 'Production Report', url: '/app/productmix/reports/production' },
+                        { id: 'pm-categories', label: 'Categories', url: '/app/productmix/categories' },
+                        { id: 'pm-production-list', label: 'Production List', url: '/app/productmix/production-list' }
+                    ]
+                },
+                managerapp: {
+                    title: 'Daily Log',
+                    subtitle: 'Restaurant manager dashboard and operations workspace.',
+                    items: [
+                        { id: 'mgr-home', label: 'Home', url: '/app/managerapp/dashboard' },
+                        { id: 'mgr-daily-log', label: 'Daily Log', url: '/app/managerapp/daily-log' },
+                        { id: 'mgr-cash-manager', label: 'Cash Manager', url: '/app/managerapp/cash-manager' },
+                        { id: 'mgr-employees', label: 'Employees', url: '/app/managerapp/employees' },
+                        { id: 'mgr-reports', label: 'Reports', url: '/app/managerapp/reports' }
+                    ]
+                },
+                admin: {
+                    title: 'Admin',
+                    subtitle: 'Company administration, user roles, task controls, and audit records.',
+                    items: [
+                        { id: 'admin-companies', label: 'Companies', url: '/admin/companies' },
+                        { id: 'admin-company-health', label: 'Company Health', url: '/admin/company-health' },
+                        { id: 'admin-users', label: 'User Management', url: '/admin/users' },
+                        { id: 'admin-tasks', label: 'Operational Tasks', url: '/admin/tasks' },
+                        { id: 'admin-audit', label: 'Audit Logs', url: '/admin/audit-logs' },
+                        { id: 'admin-location-management', label: 'Location Management', url: '/app/productmix/restaurant-setup' },
+                        { id: 'admin-productmix-dashboard', label: 'ProductMix Admin Dashboard', url: '/app/productmix/admin' }
+                    ]
+                }
+            };
+
+            let activeGroup = 'managerapp';
+            let activeApp = 'mgr-home';
+
+            function normalizeLabel(value) {
+                return String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+            }
+
+            function activateIc3Tab(item, attemptsLeft) {
+                var frame = document.getElementById('appFrame');
+                if (!frame || !item || !item.ic3TabText) return;
+                if (typeof attemptsLeft !== 'number') attemptsLeft = 12;
+
+                try {
+                    var win = frame.contentWindow;
+                    var doc = win ? win.document : null;
+                    if (!doc || !doc.body) throw new Error('Frame not ready');
+
+                    var target = normalizeLabel(item.ic3TabText);
+                    var candidates = Array.prototype.slice.call(
+                        doc.querySelectorAll('.tab, button, [role="tab"], .nav-link, a')
+                    );
+                    var btn = candidates.find(function(el) {
+                        return normalizeLabel(el.textContent).indexOf(target) !== -1;
+                    });
+
+                    if (btn) {
+                        btn.click();
+                        return;
+                    }
+                } catch (e) {
+                    // Frame still loading; retry below.
+                }
+
+                if (attemptsLeft > 0) {
+                    setTimeout(function() {
+                        activateIc3Tab(item, attemptsLeft - 1);
+                    }, 180);
+                }
+            }
+
+            function htmlEscape(value) {
+                return String(value || '').replace(/[<>&]/g, function(m) {
+                    if (m === '<') return '&lt;';
+                    if (m === '>') return '&gt;';
+                    return '&amp;';
+                });
+            }
+
+            function showToast(msg, type) {
+                var wrap = document.getElementById('toastWrap');
+                var t = document.createElement('div');
+                t.className = 'toast' + (type ? ' ' + type : '');
+                t.textContent = msg;
+                wrap.appendChild(t);
+                requestAnimationFrame(function() { t.classList.add('show'); });
+                setTimeout(function() {
+                    t.classList.remove('show');
+                    setTimeout(function() { t.remove(); }, 300);
+                }, 3200);
+            }
+
+            async function act(url, body, btn) {
+                if (btn) { btn.disabled = true; var origText = btn.textContent; btn.textContent = '...'; }
+                try {
+                    var res = await fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: body ? JSON.stringify(body) : '{}'
+                    });
+                    if (!res.ok) {
+                        var txt = await res.text();
+                        showToast('Action failed: ' + txt, 'error');
+                    } else {
+                        showToast('Done.', 'ok');
+                    }
+                } catch (e) {
+                    showToast('Request failed: ' + e.message, 'error');
+                } finally {
+                    if (btn) { btn.disabled = false; btn.textContent = origText; }
+                }
+                await refreshState();
+            }
+
+            function badgeClass(state) {
+                if (state.running && state.healthy) return 'pill running';
+                if (state.running && !state.healthy) return 'pill error';
+                return 'pill stopped';
+            }
+
+            function badgeText(state) {
+                if (state.running && state.healthy) return 'Running';
+                if (state.running && !state.healthy) return 'Running (unhealthy)';
+                return 'Stopped';
+            }
+
+            function toggleCollapsed() {
+                document.body.classList.toggle('collapsed');
+                try { localStorage.setItem('dexterSidebarCollapsed', document.body.classList.contains('collapsed') ? '1' : '0'); } catch(e) {}
+            }
+
+            function toggleSubSidebar() {
+                document.body.classList.toggle('sub-hidden');
+                var hidden = document.body.classList.contains('sub-hidden');
+                try { localStorage.setItem('dexterSubHidden', hidden ? '1' : '0'); } catch(e) {}
+                var btn = document.querySelector('.sub-toggle-btn');
+                if (btn) btn.textContent = hidden ? '\u203a' : '\u2039';
+            }
+
+            (function() {
+                try {
+                    if (localStorage.getItem('dexterSidebarCollapsed') === '1') document.body.classList.add('collapsed');
+                    if (localStorage.getItem('dexterSubHidden') === '1') {
+                        document.body.classList.add('sub-hidden');
+                        var btn = document.querySelector('.sub-toggle-btn');
+                        if (btn) btn.textContent = '\u203a';
+                    }
+                } catch(e) {}
+            })();
+
+            function toggleMobileMenu() {
+                document.getElementById('shell').classList.toggle('menu-open');
+            }
+
+            function setSection(section) {
+                if (!menuGroups[section]) return;
+                activeGroup = section;
+                document.querySelectorAll('#primaryNav button').forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.section === section);
+                });
+
+                const title = document.getElementById('pageTitle');
+                const subtitle = document.getElementById('pageSubtitle');
+                title.textContent = menuGroups[section].title;
+                subtitle.textContent = section === 'home' ? menuGroups[section].subtitle : '';
+                document.getElementById('shell').classList.add('group-open');
+                document.body.classList.add('viewer-active');
+                renderSubmenu(section);
+                openApp(menuGroups[section].items[0]);
+            }
+
+            function openApp(item) {
+                if (!item) return;
+                activeApp = item.id;
+                try { localStorage.setItem('dexterNav', JSON.stringify({group: activeGroup, app: activeApp})); } catch(e) {}
+                switchToViewerPane();
+                var frame = document.getElementById('appFrame');
+                var nextUrl = item.url || '/app/ic3/';
+                var currentUrl = frame.getAttribute('src') || '';
+                var isIc3Loaded = currentUrl.indexOf('/app/ic3/') !== -1;
+
+                if (item.ic3TabText) {
+                    if (!isIc3Loaded) {
+                        frame.onload = function() {
+                            activateIc3Tab(item, 12);
+                        };
+                        frame.src = '/app/ic3/';
+                    } else {
+                        frame.onload = null;
+                        activateIc3Tab(item, 12);
+                    }
+                } else {
+                    frame.onload = null;
+                    if (currentUrl !== nextUrl) {
+                        frame.src = nextUrl;
+                    }
+                }
+
+                document.querySelectorAll('#subNav button').forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.app === item.id);
+                });
+                if (window.innerWidth <= 980) {
+                    document.getElementById('shell').classList.remove('menu-open');
+                    document.getElementById('shell').classList.remove('group-open');
+                }
+            }
+
+            function renderSubmenu(section) {
+                const nav = document.getElementById('subNav');
+                const headLabel = document.getElementById('subHeadLabel');
+                nav.innerHTML = '';
+                if (headLabel) {
+                    headLabel.textContent = menuGroups[section].title;
+                }
+                (menuGroups[section].items || []).forEach(function(item) {
+                    const btn = document.createElement('button');
+                    btn.textContent = item.label;
+                    btn.dataset.app = item.id;
+                    btn.classList.toggle('active', item.id === activeApp);
+                    btn.onclick = function() { openApp(item); };
+                    nav.appendChild(btn);
+                });
+
+            }
+
+            var _pollTimer = null;
+            function startPoll() {
+                if (_pollTimer) return;
+                _pollTimer = setInterval(refreshState, 2500);
+            }
+            function stopPoll() {
+                if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+            }
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden) { stopPoll(); } else { refreshState(); startPoll(); }
+            });
+
+            async function refreshState() {
+                try {
+                    var res = await fetch('/api/status');
+                    if (!res.ok) return;
+                    var data = await res.json();
+                    updateStatusDots(data.apps || {});
+                } catch (e) { /* network hiccup — skip silently */ }
+            }
+
+            function updateStatusDots(apps) {
+                var dotMap = {ic3: 'ic3', productmix: 'productmix', managerapp: 'managerapp'};
+                Object.keys(dotMap).forEach(function(key) {
+                    var dot = document.getElementById('dot-' + dotMap[key]);
+                    if (!dot) return;
+                    var s = apps[key] || {};
+                    dot.className = 'status-dot';
+                    if (s.running && s.healthy) dot.className += ' dot-ok';
+                    else if (s.running) dot.className += ' dot-warn';
+                    else dot.className += ' dot-bad';
+                });
+            }
+
+            var _dashPollTimer = null;
+            function openHome() {
+                try { localStorage.setItem('dexterNav', JSON.stringify({home: true})); } catch(e) {}
+                if (_dashPollTimer) { clearInterval(_dashPollTimer); _dashPollTimer = null; }
+                document.body.classList.remove('viewer-active');
+                document.getElementById('pane-viewer').classList.remove('active');
+                document.getElementById('pane-home').classList.add('active');
+                document.querySelectorAll('#primaryNav button').forEach(function(b) {
+                    b.classList.toggle('active', b.dataset.section === 'home');
+                });
+                document.getElementById('shell').classList.remove('group-open');
+                document.getElementById('pageTitle').textContent = 'Home';
+                document.getElementById('pageSubtitle').textContent = 'Overview of all operations.';
+                loadHomeDashboard();
+                _dashPollTimer = setInterval(loadHomeDashboard, 30000);
+            }
+
+            function switchToViewerPane() {
+                if (_dashPollTimer) { clearInterval(_dashPollTimer); _dashPollTimer = null; }
+                document.body.classList.add('viewer-active');
+                document.getElementById('pane-home').classList.remove('active');
+                document.getElementById('pane-viewer').classList.add('active');
+            }
+
+            function openAppById(appId) {
+                for (var g in menuGroups) {
+                    var items = menuGroups[g].items || [];
+                    for (var i = 0; i < items.length; i++) {
+                        if (items[i].id === appId) { setSection(g); openApp(items[i]); return; }
+                    }
+                }
+            }
+
+            async function loadHomeDashboard() {
+                try {
+                    var res = await fetch('/api/dashboard');
+                    if (!res.ok) return;
+                    var data = await res.json();
+                    renderHomeDashboard(data);
+                } catch(e) {}
+            }
+
+            function renderHomeDashboard(data) {
+                var statOT = document.getElementById('statOpenTasks');
+                var statAR = document.getElementById('statAppsRunning');
+                var statTS = document.getElementById('statTopSeller');
+                if (statOT) {
+                    statOT.querySelector('.value').textContent = data.open_tasks != null ? data.open_tasks : '—';
+                    statOT.className = 'stat' + (data.open_tasks > 0 ? ' warn-stat' : ' ok-stat');
+                }
+                if (statAR) {
+                    var running = data.apps_running != null ? data.apps_running : '?';
+                    var total = data.total_apps != null ? data.total_apps : '?';
+                    statAR.querySelector('.value').textContent = running + ' / ' + total;
+                    statAR.className = 'stat' + (data.apps_running === data.total_apps ? ' ok-stat' : ' warn-stat');
+                }
+                var sellers = data.top_sellers || [];
+                if (statTS) {
+                    statTS.querySelector('.value').textContent = sellers.length > 0 ? sellers[0].name : '—';
+                    statTS.className = 'stat';
+                }
+                var cardsEl = document.getElementById('homeAppCards');
+                if (cardsEl && data.app_status) {
+                    var appLabels = {ic3: 'Inventory Control', productmix: 'ProductMix', managerapp: 'Daily Log'};
+                    cardsEl.innerHTML = Object.keys(appLabels).map(function(key) {
+                        var s = (data.app_status || {})[key] || {};
+                        var cls = s.running && s.healthy ? 'pill running' : s.running ? 'pill error' : 'pill stopped';
+                        var txt = s.running && s.healthy ? 'Running' : s.running ? 'Unhealthy' : 'Stopped';
+                        var url = s.url || '';
+                        return '<div class="card"><div class="row"><span class="name" style="font-size:15px;">' + htmlEscape(appLabels[key]) + '</span><span class="' + cls + '">' + txt + '</span></div>' + (url ? '<div class="meta">' + htmlEscape(url) + '</div>' : '') + '</div>';
+                    }).join('');
+                }
+                var listEl = document.getElementById('homeTopSellers');
+                if (listEl) {
+                    listEl.innerHTML = '<div class="list-row list-head"><span>Item</span><span>Qty Sold</span></div>' +
+                        (sellers.length === 0
+                            ? '<div class="list-row" style="color:var(--muted)"><span>No data available</span><span></span></div>'
+                            : sellers.map(function(s, i) {
+                                return '<div class="list-row"><span>' + (i+1) + '. ' + htmlEscape(s.name) + '</span><span>' + (Math.round(s.qty * 10) / 10) + '</span></div>';
+                            }).join(''));
+                }
+            }
+
+            (function() {
+                var saved = null;
+                try { saved = JSON.parse(localStorage.getItem('dexterNav') || 'null'); } catch(e) {}
+                if (saved && saved.home) {
+                    openHome();
+                } else if (saved && menuGroups[saved.group]) {
+                    setSection(saved.group);
+                    if (saved.app) {
+                        var items = menuGroups[saved.group].items || [];
+                        for (var i = 0; i < items.length; i++) {
+                            if (items[i].id === saved.app) { openApp(items[i]); break; }
+                        }
+                    }
+                } else {
+                    openHome();
+                }
+                refreshState();
+                startPoll();
+            })();
+
+            // ---- Mobile iframe height sizing so pane-viewer scrolls (fixes iOS bounce) ----
+            // KEY RULE: NEVER set frame height on a recurring interval — that causes mid-scroll
+            // layout reflow which snaps iOS Safari back to the top.
+            (function() {
+                var frame = document.getElementById('appFrame');
+                if (!frame) return;
+                var _resizeTimer = null;
+                function resizeFrameToContent() {
+                    if (window.innerWidth > 980) {
+                        // Desktop: fixed-pane layout — let CSS control height
+                        frame.style.height = '';
+                        frame.style.minHeight = '';
+                        return;
+                    }
+                    // Mobile: measure content and set height ONCE so pane-viewer can scroll.
+                    // scrolling=no is set as HTML attribute so iOS never creates inner scroll surface.
+                    try {
+                        var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                        if (!doc || !doc.body) return;
+                        var h = Math.max(
+                            doc.body.scrollHeight,
+                            doc.documentElement ? doc.documentElement.scrollHeight : 0
+                        );
+                        if (h && h > 80) {
+                            frame.style.height = h + 'px';
+                        }
+                    } catch (e) { /* cross-origin */ }
+                }
+                function scheduleResize(delay) {
+                    clearTimeout(_resizeTimer);
+                    _resizeTimer = setTimeout(resizeFrameToContent, delay || 0);
+                }
+                frame.addEventListener('load', function() {
+                    scheduleResize(100);
+                    scheduleResize(600);
+                    scheduleResize(1500);
+                    try {
+                        var doc = frame.contentDocument;
+                        // ResizeObserver: debounced so rapid changes don't keep reflowing during scroll
+                        if (doc && window.ResizeObserver) {
+                            var ro = new ResizeObserver(function() { scheduleResize(400); });
+                            ro.observe(doc.documentElement);
+                            if (doc.body) ro.observe(doc.body);
+                        }
+                        // Re-measure after user taps a tab inside the app (content changes)
+                        if (doc) {
+                            doc.addEventListener('click', function() { scheduleResize(400); }, true);
+                        }
+                    } catch (e) { /* cross-origin */ }
+                });
+                // Re-measure on orientation change / window resize but NOT on a recurring interval
+                window.addEventListener('resize', function() { scheduleResize(300); });
+            })();
+        </script>
+</body>
+</html>

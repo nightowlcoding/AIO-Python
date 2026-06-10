@@ -31,14 +31,32 @@
 </head>
 <body>
   {% set active_endpoint = request.endpoint or '' %}
+  {% set compact_nav_endpoints = ['restaurant_setup', 'select_restaurant', 'select_restaurant_post'] %}
+  {% set fullnav_arg = request.args.get('fullnav') %}
+  {% if fullnav_arg is not none %}
+    {% set show_full_nav = fullnav_arg|lower in ['1', 'true', 'yes'] %}
+  {% elif current_user.is_authenticated %}
+    {% set show_full_nav = (current_user.nav_mode or 'compact') == 'full' %}
+  {% else %}
+    {% set show_full_nav = session.get('pm_nav_mode') == 'full' %}
+  {% endif %}
+  {% set hide_top_nav_items = active_endpoint in compact_nav_endpoints and not show_full_nav %}
   <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
     <div class="container-fluid">
       <a class="navbar-brand d-flex align-items-center" href="{{ url_for('home') }}">
-        <img src="{{ url_for('static', filename='dexter-ui/brand/logo-256.png') }}"
-             alt="Dexter Assistant"
+         <img src="{{ branding_logo_url }}"
+           alt="{{ branding_company_name or 'Dexter Assistant' }}"
              style="height:32px;width:auto;margin-right:10px;">
-        <span class="d-none d-md-inline">Product Mix</span>
+         <span class="d-none d-md-inline">{{ branding_company_name or 'Product Mix' }}</span>
       </a>
+      {% if active_endpoint in compact_nav_endpoints %}
+        {% if hide_top_nav_items %}
+        <a class="btn btn-sm btn-outline-light ms-auto" href="{{ request.path }}?fullnav=1">Show Full Menu</a>
+        {% else %}
+        <a class="btn btn-sm btn-outline-light ms-2" href="{{ request.path }}?fullnav=0">Use Compact Header</a>
+        {% endif %}
+      {% endif %}
+      {% if not hide_top_nav_items %}
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -46,7 +64,8 @@
         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item"><a class="nav-link {% if active_endpoint == 'home' %}active{% endif %}" href="{{ url_for('home') }}">Home</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">Product Mix</a></li>
-          <li class="nav-item"><a class="nav-link {% if active_endpoint in ['reports_page', 'reports_production_page', 'map_item_category_page'] %}active{% endif %}" href="{{ url_for('reports_page') }}">Reports</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_endpoint in ['reports_page', 'reports_production_page', 'reports_categories_page', 'reports_weekly_usage_page', 'reports_analytics_page', 'map_item_category_page'] %}active{% endif %}" href="{{ url_for('reports_page') }}">Reports</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_endpoint == 'reports_analytics_page' %}active{% endif %}" href="{{ url_for('reports_analytics_page') }}">Analytics</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint in ['production_list_page', 'create_master_item', 'create_production_item', 'load_production_item_template', 'delete_production_item'] %}active{% endif %}" href="{{ url_for('production_list_page') }}">Production List</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint in ['restaurant_setup', 'select_restaurant', 'select_restaurant_post'] %}active{% endif %}" href="{{ url_for('restaurant_setup') }}">Restaurant Setup</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">Admin</a></li>
@@ -99,6 +118,7 @@
           {% endif %}
         </ul>
       </div>
+      {% endif %}
     </div>
   </nav>
 
