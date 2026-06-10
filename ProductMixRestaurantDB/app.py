@@ -20,7 +20,6 @@ import uuid
 import logging
 import warnings
 import statistics
-import webbrowser
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -37,24 +36,7 @@ elif (WORKSPACE_TEMPLATE_DIR / "index.html").exists():
 else:
     TEMPLATE_DIR = LOCAL_TEMPLATE_DIR
 
-
-from markupsafe import Markup, escape
-
 app = Flask(__name__, template_folder=str(TEMPLATE_DIR))
-
-# Jinja2 filter for thousands separator, no forced decimals
-@app.template_filter('comma')
-def comma_filter(value):
-    try:
-        if value is None:
-            return "0"
-        # If it's a float and is an integer, show as int
-        if isinstance(value, float) and value.is_integer():
-            value = int(value)
-        return f"{value:,}"
-    except Exception:
-        return str(value)
-
 
 app.config["SECRET_KEY"] = os.environ.get("PM_SECRET_KEY", "dev-change-me")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -98,13 +80,6 @@ ALLOWED_UPLOAD_MIME_TYPES = {
     "application/vnd.ms-excel",
     "application/octet-stream",
 }
-
-
-def _is_allowed_upload_mimetype(file_storage):
-    # Browsers/folder uploads can emit inconsistent or empty MIME values.
-    # Extension checks are authoritative, so treat unknown MIME as acceptable.
-    mimetype = (getattr(file_storage, "mimetype", "") or "").strip().lower()
-    return not mimetype or mimetype in ALLOWED_UPLOAD_MIME_TYPES
 
 
 def _clean_text(value, max_len):
@@ -306,6 +281,95 @@ def before_request_security_and_timing():
     g.request_started_at = time.time()
     g.request_id = uuid.uuid4().hex[:12]
 
+    dexter_company_name = _clean_text(request.headers.get("X-Dexter-Company-Name", ""), 120).strip()
+    dexter_restaurant_raw = _clean_text(request.headers.get("X-Dexter-Restaurant-Id", ""), 40).strip().lower()
+    if dexter_restaurant_raw.startswith("pm_"):
+        dexter_restaurant_raw = dexter_restaurant_raw[3:]
+    dexter_restaurant_id = int(dexter_restaurant_raw) if dexter_restaurant_raw.isdigit() else None
+    session_company_name = _get_selected_company_name()
+    if dexter_company_name and dexter_company_name != session_company_name:
+        session["pm_selected_company"] = dexter_company_name
+
+        conn = get_db_connection()
+        try:
+            scoped_rows = conn.execute(
+                "SELECT id FROM restaurants WHERE name = ? ORDER BY id ASC",
+                (dexter_company_name,),
+            ).fetchall()
+
+            scoped_ids = [int(row["id"]) for row in scoped_rows]
+            if current_user.is_authenticated:
+                if scoped_ids:
+                    target_restaurant_id = scoped_ids[0]
+                    conn.execute("UPDATE users SET restaurant_id = ? WHERE id = ?", (target_restaurant_id, int(current_user.id)))
+                    current_user.restaurant_id = target_restaurant_id
+                else:
+                    conn.execute("UPDATE users SET restaurant_id = NULL WHERE id = ?", (int(current_user.id),))
+                    current_user.restaurant_id = None
+                conn.commit()
+            elif FORMULA_MODE:
+                if scoped_ids:
+                    set_active_restaurant(int(scoped_ids[0]))
+        finally:
+            conn.close()
+
+    if current_user.is_authenticated and dexter_restaurant_id is not None:
+        conn = get_db_connection()
+        try:
+            scoped_company_name = dexter_company_name or _get_selected_company_name()
+            if scoped_company_name:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? AND name = ? LIMIT 1",
+                    (int(dexter_restaurant_id), scoped_company_name),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? LIMIT 1",
+                    (int(dexter_restaurant_id),),
+                ).fetchone()
+
+            if row and _has_access_to_restaurant_id(int(dexter_restaurant_id)):
+                conn.execute("UPDATE users SET restaurant_id = ? WHERE id = ?", (int(dexter_restaurant_id), int(current_user.id)))
+                current_user.restaurant_id = int(dexter_restaurant_id)
+                conn.commit()
+        finally:
+            conn.close()
+    elif FORMULA_MODE and dexter_restaurant_id is not None:
+        conn = get_db_connection()
+        try:
+            scoped_company_name = dexter_company_name or _get_selected_company_name()
+            if scoped_company_name:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? AND name = ? LIMIT 1",
+                    (int(dexter_restaurant_id), scoped_company_name),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id FROM restaurants WHERE id = ? LIMIT 1",
+                    (int(dexter_restaurant_id),),
+                ).fetchone()
+            if row:
+                set_active_restaurant(int(dexter_restaurant_id))
+        finally:
+            conn.close()
+
+    compact_nav_paths = {"/restaurant_setup", "/select_restaurant"}
+    if request.method == "GET" and request.path in compact_nav_paths:
+        full_nav_raw = (request.args.get("fullnav") or "").strip().lower()
+        new_nav_mode = None
+        if full_nav_raw in {"1", "true", "yes"}:
+            new_nav_mode = "full"
+        elif full_nav_raw in {"0", "false", "no"}:
+            new_nav_mode = "compact"
+
+        if new_nav_mode:
+            session["pm_nav_mode"] = new_nav_mode
+            if has_request_context() and current_user.is_authenticated:
+                existing_mode = getattr(current_user, "nav_mode", "compact") or "compact"
+                if existing_mode != new_nav_mode:
+                    _save_user_nav_mode_preference(int(current_user.id), new_nav_mode)
+                    current_user.nav_mode = new_nav_mode
+
     if request.method == "POST" and not FORMULA_MODE:
         csrf_token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
         if not _is_csrf_valid(csrf_token):
@@ -356,6 +420,7 @@ class User(UserMixin):
         self.full_name = row["full_name"] or ""
         self.restaurant_id = row["restaurant_id"]
         self.is_admin = bool(row["is_admin"])
+        self.nav_mode = row["nav_mode"] if "nav_mode" in row.keys() and row["nav_mode"] else "compact"
 
 
 def _is_admin_user():
@@ -368,6 +433,133 @@ def _current_restaurant_id():
     if not current_user.is_authenticated:
         return None
     return current_user.restaurant_id
+
+
+def _users_table_has_column(conn, column_name):
+    try:
+        rows = conn.execute("PRAGMA table_info(users)").fetchall()
+    except Exception:
+        return False
+    return any(str(row[1]) == column_name for row in rows)
+
+
+def _normalize_company_key(value):
+    raw = _clean_text(value or "", 120).strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
+    return normalized or "default"
+
+
+def _get_selected_company_name():
+    if not has_request_context():
+        return ""
+    return _clean_text(session.get("pm_selected_company", ""), 120).strip()
+
+
+def _get_company_scoped_restaurant_ids(conn=None):
+    company_name = _get_selected_company_name()
+    if not company_name:
+        return None
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_db_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id FROM restaurants WHERE name = ? ORDER BY id ASC",
+            (company_name,),
+        ).fetchall()
+        return [int(row["id"]) for row in rows]
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def _load_company_profile(conn, company_name):
+    company = _clean_text(company_name or "", 120).strip()
+    profile = {
+        "name": company,
+        "address": "",
+        "city": "",
+        "state": "",
+        "zip_code": "",
+        "phone": "",
+    }
+
+    if not company:
+        return profile
+
+    fallback_row = conn.execute(
+        """
+        SELECT address, city, state, zip_code, phone
+        FROM restaurants
+        WHERE name = ?
+        ORDER BY id ASC
+        LIMIT 1
+        """,
+        (company,),
+    ).fetchone()
+    if fallback_row:
+        for key in ("address", "city", "state", "zip_code", "phone"):
+            profile[key] = fallback_row[key] or ""
+
+    setting_key = f"company_profile::{_normalize_company_key(company)}"
+    setting_row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = ?",
+        (setting_key,),
+    ).fetchone()
+    if setting_row and setting_row["value"]:
+        try:
+            data = json.loads(setting_row["value"])
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            profile["name"] = _clean_text(data.get("name") or company, 120).strip() or company
+            for key in ("address", "city", "state", "zip_code", "phone"):
+                profile[key] = _clean_text(data.get(key, profile[key]), 255 if key == "address" else 120 if key in {"city", "state"} else 20)
+
+    return profile
+
+
+def _save_company_profile(conn, old_company_name, new_company_name, profile):
+    old_company = _clean_text(old_company_name or "", 120).strip()
+    new_company = _clean_text(new_company_name or "", 120).strip()
+    if not new_company:
+        return
+
+    key_new = f"company_profile::{_normalize_company_key(new_company)}"
+    key_old = f"company_profile::{_normalize_company_key(old_company)}" if old_company else key_new
+
+    payload = {
+        "name": new_company,
+        "address": _clean_text(profile.get("address", ""), 255),
+        "city": _clean_text(profile.get("city", ""), 120),
+        "state": _clean_text(profile.get("state", ""), 120),
+        "zip_code": _clean_text(profile.get("zip_code", ""), 20),
+        "phone": _clean_text(profile.get("phone", ""), 20),
+    }
+
+    conn.execute(
+        """
+        INSERT INTO app_settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (key_new, json.dumps(payload, ensure_ascii=True)),
+    )
+
+    if key_old != key_new:
+        conn.execute("DELETE FROM app_settings WHERE key = ?", (key_old,))
+
+
+def _save_user_nav_mode_preference(user_id, nav_mode):
+    mode = "full" if str(nav_mode).lower() == "full" else "compact"
+    conn = get_db_connection()
+    try:
+        if _users_table_has_column(conn, "nav_mode"):
+            conn.execute("UPDATE users SET nav_mode = ? WHERE id = ?", (mode, int(user_id)))
+            conn.commit()
+    finally:
+        conn.close()
 
 
 def _link_user_to_restaurant(conn, user_id, restaurant_id):
@@ -385,26 +577,44 @@ def _has_access_to_restaurant_id(restaurant_id):
         return True
     if not current_user.is_authenticated:
         return False
-    if _is_admin_user():
-        return True
+    restaurant_id = int(restaurant_id)
     conn = get_db_connection()
-    row = conn.execute(
-        """
-        SELECT 1
-        FROM user_restaurants
-        WHERE user_id = ? AND restaurant_id = ?
-        LIMIT 1
-        """,
-        (int(current_user.id), int(restaurant_id)),
-    ).fetchone()
-    conn.close()
-    return row is not None
+    try:
+        company_ids = _get_company_scoped_restaurant_ids(conn)
+        if company_ids is not None and restaurant_id not in company_ids:
+            return False
+
+        if _is_admin_user():
+            return True
+
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM user_restaurants
+            WHERE user_id = ? AND restaurant_id = ?
+            LIMIT 1
+            """,
+            (int(current_user.id), int(restaurant_id)),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
 
 
 def _get_accessible_restaurant_switch_options():
     if FORMULA_MODE:
         conn = get_db_connection()
-        rows = conn.execute("SELECT id, name, location FROM restaurants ORDER BY id ASC").fetchall()
+        company_ids = _get_company_scoped_restaurant_ids(conn)
+        if company_ids is None:
+            rows = conn.execute("SELECT id, name, location FROM restaurants ORDER BY id ASC").fetchall()
+        elif not company_ids:
+            rows = []
+        else:
+            placeholders = ",".join("?" for _ in company_ids)
+            rows = conn.execute(
+                f"SELECT id, name, location FROM restaurants WHERE id IN ({placeholders}) ORDER BY id ASC",
+                company_ids,
+            ).fetchall()
         conn.close()
         return [dict(r) for r in rows]
 
@@ -425,14 +635,29 @@ def _get_accessible_restaurant_switch_options():
             """,
             (int(current_user.id),),
         ).fetchall()
+    options = [dict(r) for r in rows]
+    company_ids = _get_company_scoped_restaurant_ids(conn)
     conn.close()
-    return [dict(r) for r in rows]
+    if company_ids is None:
+        return options
+    allowed = set(company_ids)
+    return [opt for opt in options if int(opt.get("id") or 0) in allowed]
 
 
 def _get_accessible_restaurant_ids():
     if FORMULA_MODE:
         conn = get_db_connection()
-        rows = conn.execute("SELECT id FROM restaurants ORDER BY id ASC").fetchall()
+        company_ids = _get_company_scoped_restaurant_ids(conn)
+        if company_ids is None:
+            rows = conn.execute("SELECT id FROM restaurants ORDER BY id ASC").fetchall()
+        elif not company_ids:
+            rows = []
+        else:
+            placeholders = ",".join("?" for _ in company_ids)
+            rows = conn.execute(
+                f"SELECT id FROM restaurants WHERE id IN ({placeholders}) ORDER BY id ASC",
+                company_ids,
+            ).fetchall()
         conn.close()
         return [int(row["id"]) for row in rows]
 
@@ -452,8 +677,13 @@ def _get_accessible_restaurant_ids():
             """,
             (int(current_user.id),),
         ).fetchall()
+    restaurant_ids = [int(row["id"]) for row in rows]
+    company_ids = _get_company_scoped_restaurant_ids(conn)
     conn.close()
-    return [int(row["id"]) for row in rows]
+    if company_ids is None:
+        return restaurant_ids
+    allowed = set(company_ids)
+    return [restaurant_id for restaurant_id in restaurant_ids if restaurant_id in allowed]
 
 
 def _restaurant_sync_group_key(restaurant_name):
@@ -742,8 +972,12 @@ def _sync_business_reference_data(conn, base_restaurant=None, restaurant_ids_ove
 
 def get_user_by_id(user_id):
     conn = get_db_connection()
+    has_nav_mode = _users_table_has_column(conn, "nav_mode")
+    select_columns = "id, email, full_name, restaurant_id, is_admin"
+    if has_nav_mode:
+        select_columns += ", nav_mode"
     row = conn.execute(
-        "SELECT id, email, full_name, restaurant_id, is_admin FROM users WHERE id = ?",
+        f"SELECT {select_columns} FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
     conn.close()
@@ -754,8 +988,12 @@ def get_user_by_id(user_id):
 
 def get_user_auth_row_by_email(email):
     conn = get_db_connection()
+    has_nav_mode = _users_table_has_column(conn, "nav_mode")
+    select_columns = "id, email, password_hash, full_name, restaurant_id, is_admin"
+    if has_nav_mode:
+        select_columns += ", nav_mode"
     row = conn.execute(
-        "SELECT id, email, password_hash, full_name, restaurant_id, is_admin FROM users WHERE email = ?",
+        f"SELECT {select_columns} FROM users WHERE email = ?",
         (email,),
     ).fetchone()
     conn.close()
@@ -1134,6 +1372,7 @@ def init_db():
             full_name TEXT,
             restaurant_id INTEGER,
             is_admin INTEGER NOT NULL DEFAULT 0,
+            nav_mode TEXT NOT NULL DEFAULT 'compact',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
         )
@@ -1234,6 +1473,10 @@ def init_db():
         )
         """
     )
+
+    users_cols = [r[1] for r in cursor.execute("PRAGMA table_info(users)").fetchall()]
+    if "nav_mode" not in users_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN nav_mode TEXT NOT NULL DEFAULT 'compact'")
 
     production_item_cols = [r[1] for r in cursor.execute("PRAGMA table_info(production_items)").fetchall()]
     if "master_item_id" not in production_item_cols:
@@ -1560,6 +1803,31 @@ def set_active_restaurant(restaurant_id):
 
 
 def get_active_restaurant():
+    if has_request_context():
+        dexter_company_name = _clean_text(request.headers.get("X-Dexter-Company-Name", ""), 120).strip()
+        if dexter_company_name:
+            conn = get_db_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM restaurants WHERE name = ? ORDER BY id ASC LIMIT 1",
+                    (dexter_company_name,),
+                ).fetchone()
+            finally:
+                conn.close()
+            return dict(row) if row else None
+
+        selected_company = _get_selected_company_name()
+        if selected_company:
+            conn = get_db_connection()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM restaurants WHERE name = ? ORDER BY id ASC LIMIT 1",
+                    (selected_company,),
+                ).fetchone()
+            finally:
+                conn.close()
+            return dict(row) if row else None
+
     if (not FORMULA_MODE) and has_request_context() and current_user.is_authenticated:
         if not current_user.restaurant_id:
             return None
@@ -1649,7 +1917,7 @@ def _find_existing_upload_for_restaurant_day(conn, restaurant_id, day_iso):
 
 
 def _process_uploaded_product_mix_file(file_storage, restaurant):
-    if not _is_allowed_upload_mimetype(file_storage):
+    if file_storage.mimetype not in ALLOWED_UPLOAD_MIME_TYPES:
         return None, {"error": f"{file_storage.filename}: Invalid file type"}, 400
 
     filename = secure_filename(file_storage.filename)
@@ -2062,8 +2330,8 @@ def _get_production_mapping_rows(conn, restaurant_id):
         "SELECT id, name, location, city, state FROM restaurants WHERE id = ? LIMIT 1",
         (int(restaurant_id),),
     ).fetchone()
-    master_scope_ids = _get_master_list_restaurant_ids(dict(restaurant_row)) if restaurant_row else [int(restaurant_id)]
-    source_order_lookup = _get_product_mix_item_order_lookup(conn, master_scope_ids)
+    sync_group_ids = _get_sync_group_restaurant_ids(dict(restaurant_row)) if restaurant_row else [int(restaurant_id)]
+    source_order_lookup = _get_product_mix_item_order_lookup(conn, sync_group_ids)
     production_lookup = {
         row["item_name"]: row
         for row in _get_production_items(conn, restaurant_id)
@@ -2155,7 +2423,7 @@ def _get_source_item_history_rows(restaurant=None, limit=500, restaurant_ids=Non
         if str(v).isdigit()
     ]
     if not source_restaurant_ids:
-        source_restaurant_ids = _get_master_list_restaurant_ids(restaurant) or [int(restaurant["id"])]
+        source_restaurant_ids = _get_sync_group_restaurant_ids(restaurant) or [int(restaurant["id"])]
 
     placeholders = ",".join("?" for _ in source_restaurant_ids)
     conn = get_db_connection()
@@ -2655,15 +2923,13 @@ def _get_recent_product_mix_uploads(restaurant=None, limit=12, search_text="", s
     where_clauses = []
     params = []
 
-    scoped_restaurant_ids = [int(v) for v in (restaurant_ids or []) if str(v).isdigit()]
-
-    if scoped_restaurant_ids:
-        placeholders = ",".join("?" for _ in scoped_restaurant_ids)
-        where_clauses.append(f"u.restaurant_id IN ({placeholders})")
-        params.extend(scoped_restaurant_ids)
-    elif restaurant:
+    if restaurant:
         where_clauses.append("u.restaurant_id = ?")
         params.append(restaurant["id"])
+    elif restaurant_ids:
+        placeholders = ",".join("?" * len(restaurant_ids))
+        where_clauses.append(f"u.restaurant_id IN ({placeholders})")
+        params.extend(restaurant_ids)
     else:
         conn.close()
         return []
@@ -2722,21 +2988,9 @@ def _get_production_list_report_rows(restaurant=None, start_date=None, end_date=
     search_clause = ""
     cleaned_search = _clean_text(search_text, 120)
     if cleaned_search:
-        raw_tokens = [token.strip() for token in re.split(r"\s+", cleaned_search) if token.strip()]
-        search_tokens = []
-        for token in raw_tokens:
-            lowered = token.lower()
-            if lowered not in search_tokens:
-                search_tokens.append(lowered)
-
-        # Match any typed token so searches like "ultra 16oz 32oz" return both variants.
-        if search_tokens:
-            token_clauses = []
-            for token in search_tokens[:8]:
-                like_value = f"%{token}%"
-                token_clauses.append("(LOWER(m.production_item_name) LIKE ? OR LOWER(m.source_item_name) LIKE ?)")
-                where_params.extend([like_value, like_value])
-            search_clause = " AND (" + " OR ".join(token_clauses) + ")"
+        like_value = f"%{cleaned_search}%"
+        search_clause = " AND (m.production_item_name LIKE ? OR m.source_item_name LIKE ?)"
+        where_params.extend([like_value, like_value])
 
     params = [*join_params, *where_params]
 
@@ -2876,7 +3130,7 @@ def _get_production_list_report_rows(restaurant=None, start_date=None, end_date=
     return result
 
 
-def _get_production_item_trend_data(restaurant, production_item_name, source_item_names=None, limit=None):
+def _get_production_item_trend_data(restaurant, production_item_name, source_item_names=None, limit=52):
     """Return per-report-period order/unit totals for a production item or a subset of its source items."""
     if not restaurant or not production_item_name:
         return []
@@ -2886,22 +3140,13 @@ def _get_production_item_trend_data(restaurant, production_item_name, source_ite
 
     if source_item_names:
         placeholders = ",".join("?" for _ in source_item_names)
-        params.append(production_item_name.lower())
         params.extend(s.lower() for s in source_item_names)
-        # Keep source-item trends scoped to the selected production item so
-        # a source mapped into another production item doesn't inflate totals.
-        item_filter = (
-            "AND LOWER(TRIM(m.production_item_name)) = ? "
-            f"AND LOWER(TRIM(m.source_item_name)) IN ({placeholders})"
-        )
+        item_filter = f"AND LOWER(TRIM(m.source_item_name)) IN ({placeholders})"
     else:
         params.append(production_item_name.lower())
         item_filter = "AND LOWER(TRIM(m.production_item_name)) = ?"
 
-    limit_clause = ""
-    if limit is not None and int(limit) > 0:
-        params.append(int(limit))
-        limit_clause = "LIMIT ?"
+    params.append(limit)
 
     rows = conn.execute(
         f"""
@@ -2924,7 +3169,7 @@ def _get_production_item_trend_data(restaurant, production_item_name, source_ite
           AND r.report_end_date IS NOT NULL
         GROUP BY r.report_end_date
         ORDER BY r.report_end_date ASC
-                {limit_clause}
+        LIMIT ?
         """,
         params,
     ).fetchall()
@@ -2963,7 +3208,6 @@ def _get_production_category_report_rows(restaurant=None, start_date=None, end_d
             "production_item_id": row.get("production_item_id"),
             "mapped_menu_items": len(row.get("rows") or []),
             "total_units": float(row.get("total_units") or 0),
-            "total_net_sales": float(row.get("total_net_sales") or 0),
             "cases_required": int(row.get("cases_required") or 0),
             "count_mode": str(row.get("count_mode") or "unit"),
             "case_size": float(row.get("case_size") or 0),
@@ -3034,7 +3278,6 @@ def _get_production_category_report_rows(restaurant=None, start_date=None, end_d
                 "production_items": 0,
                 "mapped_menu_items": 0,
                 "total_units": 0.0,
-                "total_net_sales": 0.0,
                 "cases_required": 0,
                 "rows": [],
             },
@@ -3043,13 +3286,11 @@ def _get_production_category_report_rows(restaurant=None, start_date=None, end_d
         metrics = production_metrics.get(item_key, {})
         menu_item_count = int(metrics.get("mapped_menu_items") or 0)
         total_units = float(metrics.get("total_units") or 0)
-        total_net_sales = float(metrics.get("total_net_sales") or 0)
         cases_required = int(metrics.get("cases_required") or 0)
 
         category_group["production_items"] += 1
         category_group["mapped_menu_items"] += menu_item_count
         category_group["total_units"] += total_units
-        category_group["total_net_sales"] += total_net_sales
         category_group["cases_required"] += cases_required
 
         metric_production_item_id = metrics.get("production_item_id")
@@ -3066,7 +3307,6 @@ def _get_production_category_report_rows(restaurant=None, start_date=None, end_d
                 "case_size": float(metrics.get("case_size") or definition.get("case_size") or 0),
                 "mapped_menu_items": menu_item_count,
                 "total_units": total_units,
-                "total_net_sales": total_net_sales,
                 "cases_required": cases_required,
             }
         )
@@ -3497,80 +3737,8 @@ def _get_weekly_usage_average_rows(restaurant=None, start_date=None, end_date=No
         """,
         params,
     ).fetchall()
-
-    item_names = sorted(
-        {
-            str(row["production_item_name"] or "").strip()
-            for row in rows
-            if str(row["production_item_name"] or "").strip()
-        }
-    )
-
-    item_meta = {}
-    if item_names:
-        placeholders = ",".join("?" for _ in item_names)
-        meta_rows = conn.execute(
-            f"""
-            SELECT
-                p.item_name,
-                CASE
-                    WHEN MAX(CASE WHEN LOWER(TRIM(COALESCE(p.count_mode, 'unit'))) = 'weight' THEN 1 ELSE 0 END) = 1
-                    THEN 'weight'
-                    ELSE 'unit'
-                END AS count_mode,
-                COALESCE(MAX(p.case_pack_units), 250) AS case_size,
-                COALESCE(MAX(p.weight_oz_per_unit), 0) AS weight_oz_per_unit
-            FROM production_items p
-            WHERE p.restaurant_id = ?
-              AND p.item_name IN ({placeholders})
-            GROUP BY p.item_name
-            """,
-            [int(restaurant["id"]), *item_names],
-        ).fetchall()
-
-        for meta in meta_rows:
-            item_name = str(meta["item_name"] or "").strip()
-            if not item_name:
-                continue
-            item_meta[item_name] = {
-                "count_mode": str(meta["count_mode"] or "unit"),
-                "case_size": float(meta["case_size"] or 250),
-                "weight_oz_per_unit": float(meta["weight_oz_per_unit"] or 0),
-            }
-
     conn.close()
-
-    result_rows = []
-    for row in rows:
-        row_dict = dict(row)
-        item_name = str(row_dict.get("production_item_name") or "").strip()
-        meta = item_meta.get(item_name) or {
-            "count_mode": "unit",
-            "case_size": 250.0,
-            "weight_oz_per_unit": 0.0,
-        }
-
-        total_cases = _compute_cases_for_units(
-            row_dict.get("total_units"),
-            meta.get("count_mode"),
-            meta.get("case_size"),
-            meta.get("weight_oz_per_unit"),
-        )
-        average_cases = _compute_cases_for_units(
-            row_dict.get("average_units"),
-            meta.get("count_mode"),
-            meta.get("case_size"),
-            meta.get("weight_oz_per_unit"),
-        )
-
-        row_dict["count_mode"] = str(meta.get("count_mode") or "unit")
-        row_dict["case_size"] = float(meta.get("case_size") or 250)
-        row_dict["weight_oz_per_unit"] = float(meta.get("weight_oz_per_unit") or 0)
-        row_dict["total_cases"] = float(total_cases.get("cases_exact") or 0)
-        row_dict["average_cases"] = float(average_cases.get("cases_exact") or 0)
-        result_rows.append(row_dict)
-
-    return result_rows
+    return [dict(r) for r in rows]
 
 
 def _compute_linear_projection(values, horizon=1):
@@ -4184,7 +4352,7 @@ def _read_all_levels_sheet(file_storage):
     return data_df, headers_dict
 
 
-def _process_all_levels_file(file_storage, restaurant, manual_start_date=None, manual_end_date=None):
+def _process_all_levels_file(file_storage, restaurant):
     """Process an uploaded product mix Excel using the 'All Levels' per-item strategy.
 
     Column E = item_name (primary key per restaurant).
@@ -4192,7 +4360,7 @@ def _process_all_levels_file(file_storage, restaurant, manual_start_date=None, m
     Existing items are matched by name; new dated records are appended.
     Duplicate upload of the same file is silently ignored (UNIQUE guard on item_id+upload_id).
     """
-    if not _is_allowed_upload_mimetype(file_storage):
+    if file_storage.mimetype not in ALLOWED_UPLOAD_MIME_TYPES:
         return None, {"error": f"{file_storage.filename}: Invalid file type"}, 400
 
     filename = secure_filename(file_storage.filename)
@@ -4209,17 +4377,6 @@ def _process_all_levels_file(file_storage, restaurant, manual_start_date=None, m
         return None, {"error": f"Could not read Excel file '{filename}': {str(e)}"}, 400
 
     start_date, end_date = parse_dates_from_filename(filename)
-    if manual_start_date or manual_end_date:
-        start_date = manual_start_date or manual_end_date
-        end_date = manual_end_date or manual_start_date
-
-    if start_date and end_date and start_date != end_date:
-        return None, {
-            "error": (
-                f"{filename}: Daily uploads require the same report start and end date. "
-                f"Found {start_date} to {end_date}."
-            )
-        }, 400
 
     col_e = _ALL_LEVELS_COL_INDICES["E"]
     col_b = _ALL_LEVELS_COL_INDICES["B"]
@@ -4454,6 +4611,7 @@ def login():
             return render_template("login.html", error="Invalid email or password.")
 
         login_user(User(auth_row), remember=False)
+        session["pm_nav_mode"] = auth_row["nav_mode"] if "nav_mode" in auth_row.keys() and auth_row["nav_mode"] in {"full", "compact"} else "compact"
 
         next_path = request.args.get("next")
         if next_path and next_path.startswith("/"):
@@ -4528,44 +4686,43 @@ def home():
 @login_required
 def index():
     restaurant = get_active_restaurant()
-    location_options = _get_accessible_restaurant_switch_options()
-    accessible_restaurant_ids = [
-        int(opt["id"])
-        for opt in location_options
-        if str(opt.get("id", "")).isdigit()
-    ]
-    if not accessible_restaurant_ids and restaurant and str(restaurant.get("id", "")).isdigit():
-        accessible_restaurant_ids = [int(restaurant["id"])]
-
     load_upload_id_raw = (request.args.get("load_upload_id") or "").strip()
     load_upload_id = int(load_upload_id_raw) if load_upload_id_raw.isdigit() else None
     start_date = _normalize_report_date_filter(request.args.get("start_date")) or ""
     end_date = _normalize_report_date_filter(request.args.get("end_date")) or ""
-    recent_uploads = _get_recent_product_mix_uploads(
-        restaurant=restaurant,
-        limit=None,
-        restaurant_ids=accessible_restaurant_ids,
-    )
 
-    uploads_by_location = {}
-    for upload in recent_uploads:
-        location_label = str(upload.get("restaurant_name") or "Unknown Location")
-        location_value = str(upload.get("restaurant_location") or "").strip()
-        if location_value:
-            location_label = f"{location_label} - {location_value}"
-        uploads_by_location.setdefault(location_label, []).append(upload)
-
-    recent_upload_groups = [
-        {"location_label": label, "uploads": rows}
-        for label, rows in uploads_by_location.items()
-    ]
+    all_restaurants = _get_accessible_restaurant_switch_options()
+    all_restaurant_ids = [r["id"] for r in all_restaurants]
+    all_uploads = _get_recent_product_mix_uploads(restaurant_ids=all_restaurant_ids, limit=None)
+    uploads_by_rid = {}
+    for upload in all_uploads:
+        uploads_by_rid.setdefault(upload["restaurant_id"], []).append(upload)
+    recent_upload_groups = []
+    
+    # If an active restaurant is selected, show only its uploads; otherwise show all
+    if restaurant and hasattr(restaurant, 'id') and restaurant.id:
+        active_uploads = uploads_by_rid.get(restaurant.id, [])
+        if active_uploads:
+            label = restaurant.name
+            if hasattr(restaurant, 'location') and restaurant.location:
+                label += f" - {restaurant.location}"
+            recent_upload_groups.append({"location_label": label, "uploads": active_uploads})
+    else:
+        # If no active restaurant, show all locations' uploads (original behavior)
+        for r in all_restaurants:
+            group_uploads = uploads_by_rid.get(r["id"], [])
+            if group_uploads:
+                label = r["name"]
+                if r.get("location"):
+                    label += f" - {r['location']}"
+                recent_upload_groups.append({"location_label": label, "uploads": group_uploads})
 
     return render_template(
         "index.html",
         categories=list(CATEGORIES.keys()),
         restaurant=restaurant,
         load_upload_id=load_upload_id,
-        recent_uploads=recent_uploads,
+        recent_uploads=all_uploads,
         recent_upload_groups=recent_upload_groups,
         product_log_filters={
             "start_date": start_date,
@@ -4575,6 +4732,7 @@ def index():
 
 
 @app.get("/health")
+@limiter.exempt
 def health():
     try:
         conn = get_db_connection()
@@ -4596,7 +4754,18 @@ def reports_page():
     end_date = _normalize_report_date_filter(request.args.get("end_date"))
 
     conn = get_db_connection()
-    if _is_admin_user():
+    location_id_filter = (request.args.get("location_id") or "").strip()
+    if _is_admin_user() and scoped_restaurant and location_id_filter:
+        restaurants_count = 1
+        uploads_count = conn.execute(
+            "SELECT COUNT(*) AS total FROM product_mix_uploads WHERE restaurant_id = ?",
+            (scoped_restaurant["id"],),
+        ).fetchone()["total"]
+        items_count = conn.execute(
+            "SELECT COUNT(*) AS total FROM all_levels_items WHERE restaurant_id = ?",
+            (scoped_restaurant["id"],),
+        ).fetchone()["total"]
+    elif _is_admin_user():
         restaurants_count = conn.execute("SELECT COUNT(*) AS total FROM restaurants").fetchone()["total"]
         uploads_count = conn.execute("SELECT COUNT(*) AS total FROM product_mix_uploads").fetchone()["total"]
         items_count = conn.execute("SELECT COUNT(*) AS total FROM all_levels_items").fetchone()["total"]
@@ -4705,9 +4874,6 @@ def reports_production_page():
     location_options = _get_accessible_restaurant_switch_options()
     scoped_restaurant = _resolve_report_restaurant(request.args.get("location_id"), restaurant)
     search_text = (request.args.get("search") or "").strip()
-    report_view = (request.args.get("view") or "compact").strip().lower()
-    if report_view not in {"compact", "expanded"}:
-        report_view = "compact"
     start_date = _normalize_report_date_filter(request.args.get("start_date"))
     end_date = _normalize_report_date_filter(request.args.get("end_date"))
     focus_item_id_raw = str(request.args.get("focus_item_id") or "").strip()
@@ -4770,7 +4936,6 @@ def reports_production_page():
     report_back_url = url_for(
         "reports_production_page",
         search=search_text,
-        view=report_view,
         start_date=start_date or "",
         end_date=end_date or "",
         location_id=str(scoped_restaurant["id"]) if scoped_restaurant else "",
@@ -4778,7 +4943,6 @@ def reports_production_page():
     current_report_url = url_for(
         "reports_production_page",
         search=search_text,
-        view=report_view,
         start_date=start_date or "",
         end_date=end_date or "",
         location_id=str(scoped_restaurant["id"]) if scoped_restaurant else "",
@@ -4807,53 +4971,13 @@ def reports_production_page():
             source_item_names=trend_source_names if trend_source_names else None,
         )
 
-    all_production_items = []
-    all_tracked_items = []
-    mapped_source_items = []
-    if scoped_restaurant:
-        conn = get_db_connection()
-        _master_ids = _get_master_list_restaurant_ids(scoped_restaurant)
-        _ph = ",".join(["?"] * len(_master_ids))
-        all_production_items = [
-            dict(r) for r in conn.execute(
-                f"SELECT DISTINCT item_name FROM production_items WHERE restaurant_id IN ({_ph}) ORDER BY LOWER(item_name) ASC",
-                _master_ids,
-            ).fetchall()
-        ]
-        all_tracked_items = [
-            dict(r) for r in conn.execute(
-                """
-                SELECT DISTINCT item_name
-                FROM all_levels_items
-                WHERE restaurant_id = ?
-                ORDER BY LOWER(item_name) ASC
-                """,
-                (int(scoped_restaurant["id"]),),
-            ).fetchall()
-        ]
-        mapped_source_items = [
-            dict(r) for r in conn.execute(
-                """
-                SELECT DISTINCT source_item_name
-                FROM product_item_production_mappings
-                WHERE restaurant_id = ?
-                  AND production_category_name = 'Production List'
-                ORDER BY LOWER(source_item_name) ASC
-                """,
-                (int(scoped_restaurant["id"]),),
-            ).fetchall()
-        ]
-        conn.close()
-
     return render_template(
         "reports_production.html",
         restaurant=scoped_restaurant,
         summary=summary,
         production_report_rows=production_report_rows,
+        oz_to_lbs_reference=_build_oz_to_lbs_conversion_reference(),
         location_options=location_options,
-        all_production_items=all_production_items,
-        all_tracked_items=all_tracked_items,
-        mapped_source_items=mapped_source_items,
         success=request.args.get("success"),
         error=request.args.get("error"),
         is_focus_mode=focus_item_id is not None,
@@ -4862,10 +4986,8 @@ def reports_production_page():
         report_back_url=report_back_url,
         current_report_url=current_report_url,
         trend_data=trend_data,
-        report_view=report_view,
         upload_filters={
             "search": search_text,
-            "view": report_view,
             "start_date": start_date or "",
             "end_date": end_date or "",
             "location_id": str(scoped_restaurant["id"]) if scoped_restaurant else "",
@@ -4880,9 +5002,6 @@ def reports_categories_page():
     location_options = _get_accessible_restaurant_switch_options()
     scoped_restaurant = _resolve_report_restaurant(request.args.get("location_id"), restaurant)
     search_text = (request.args.get("search") or "").strip()
-    report_view = (request.args.get("view") or "compact").strip().lower()
-    if report_view not in {"compact", "expanded"}:
-        report_view = "compact"
     start_date = _normalize_report_date_filter(request.args.get("start_date"))
     end_date = _normalize_report_date_filter(request.args.get("end_date"))
 
@@ -4906,12 +5025,10 @@ def reports_categories_page():
         summary=summary,
         category_report_rows=category_report_rows,
         location_options=location_options,
-        report_view=report_view,
         success=request.args.get("success"),
         error=request.args.get("error"),
         upload_filters={
             "search": search_text,
-            "view": report_view,
             "start_date": start_date or "",
             "end_date": end_date or "",
             "location_id": str(scoped_restaurant["id"]) if scoped_restaurant else "",
@@ -4938,133 +5055,33 @@ def reports_weekly_usage_page():
     effective_start = recompute_meta.get("start_date")
     effective_end = recompute_meta.get("end_date")
 
-    all_rows = _get_weekly_usage_average_rows(
+    rows = _get_weekly_usage_average_rows(
         restaurant=scoped_restaurant,
         start_date=effective_start,
         end_date=effective_end,
         search_text=search_text,
-        order_type="",
+        order_type=order_type,
     )
 
-    if order_type:
-        selected_order_lower = str(order_type).strip().lower()
-        rows = [
-            row
-            for row in all_rows
-            if str(row.get("order_type") or "").strip().lower() == selected_order_lower
-        ]
-    else:
-        rows = all_rows
-
-    order_tabs = []
-    seen_tabs = set()
-
-    def _normalize_order_type_display(value):
-        cleaned = _clean_text(value, 80)
-        words = [word.capitalize() for word in str(cleaned or "").strip().split() if word]
-        return " ".join(words)
-
-    order_type_options = []
-    seen_option_keys = set()
-
-    def _append_order_type_option(value):
-        normalized = _normalize_order_type_display(value)
-        key = str(normalized or "").strip().lower()
-        if not key or key in seen_option_keys:
-            return
-        seen_option_keys.add(key)
-        order_type_options.append(normalized)
-
-    def _order_tab_label(value):
-        text = _clean_text(value, 80)
-        lowered = str(text or "").strip().lower()
-        if lowered.endswith(" order"):
-            text = str(text).strip()[: -len(" order")].strip()
-        return text
-
-    def _append_order_tab(label):
-        cleaned_value = _clean_text(label, 80)
-        lowered = str(cleaned_value or "").strip().lower()
-        if not lowered or lowered in seen_tabs:
-            return
-        seen_tabs.add(lowered)
-        order_tabs.append(
-            {
-                "value": cleaned_value,
-                "label": _order_tab_label(cleaned_value),
-            }
-        )
-
-    preset_key = _guess_weekly_usage_schedule_preset_for_restaurant(scoped_restaurant)
-    preset = _get_weekly_usage_schedule_preset(preset_key)
-    if preset:
-        for window in preset.get("windows") or []:
-            window_order_type = window.get("order_type")
-            _append_order_type_option(window_order_type)
-            _append_order_tab(window_order_type)
-
-    for row in all_rows:
-        _append_order_type_option(row.get("order_type"))
-
-    for option in order_type_options:
-        _append_order_tab(option)
-
-    _append_order_type_option(order_type)
-    _append_order_tab(order_type)
+    order_type_options = sorted({str(row.get("order_type") or "") for row in rows if str(row.get("order_type") or "").strip()})
 
     summary = {
         "production_items": len({str(r.get("production_item_name") or "") for r in rows}),
         "order_types": len(order_type_options),
         "rows": len(rows),
-        "avg_cases": _format_numeric_for_response(
-            (sum(float(r.get("average_cases") or 0) for r in rows) / len(rows)) if rows else 0
+        "avg_units": _format_numeric_for_response(
+            (sum(float(r.get("average_units") or 0) for r in rows) / len(rows)) if rows else 0
         ),
     }
-
-    order_groups_by_key = {}
-    for row in rows:
-        group_value = _clean_text(row.get("order_type"), 80)
-        if not group_value:
-            group_value = "Unspecified"
-        group_key = str(group_value).strip().lower()
-
-        group = order_groups_by_key.get(group_key)
-        if not group:
-            group = {
-                "order_type": group_value,
-                "order_type_label": _order_tab_label(group_value),
-                "rows": [],
-                "production_items": 0,
-                "windows_total": 0,
-                "windows_with_data": 0,
-                "total_cases": 0.0,
-                "avg_cases": 0.0,
-            }
-            order_groups_by_key[group_key] = group
-
-        group["rows"].append(row)
-        group["windows_total"] += int(row.get("windows_total") or 0)
-        group["windows_with_data"] += int(row.get("windows_with_data") or 0)
-        group["total_cases"] += float(row.get("total_cases") or 0)
-
-    order_groups = sorted(order_groups_by_key.values(), key=lambda group: str(group.get("order_type") or "").lower())
-    for group in order_groups:
-        group["production_items"] = len(group.get("rows") or [])
-        rows_in_group = group.get("rows") or []
-        group["avg_cases"] = (
-            sum(float(group_row.get("average_cases") or 0) for group_row in rows_in_group) / len(rows_in_group)
-        ) if rows_in_group else 0.0
 
     return render_template(
         "reports_weekly_usage.html",
         restaurant=scoped_restaurant,
         summary=summary,
         weekly_rows=rows,
-        order_groups=order_groups,
         location_options=location_options,
         is_admin_user=_is_admin_user(),
         order_type_options=order_type_options,
-        order_tabs=order_tabs,
         effective_start_date=effective_start,
         effective_end_date=effective_end,
         success=request.args.get("success"),
@@ -5964,43 +5981,6 @@ def create_master_item():
     return _append_redirect_message(next_url, "success", "Master item saved")
 
 
-@app.post("/production-list/create-quick")
-@login_required
-@limiter.limit("30 per minute")
-def create_production_item_quick():
-    """Lightweight create for a new production item with sensible defaults.
-    Only requires item_name; no master item selection needed.
-    """
-    restaurant = get_active_restaurant()
-    if not restaurant:
-        return redirect(url_for("restaurant_setup", error="Add+restaurant+information+first"))
-
-    next_url = request.form.get("next") or url_for("reports_production_page",
-        location_id=str(restaurant["id"]))
-
-    item_name = _clean_text(request.form.get("item_name"), 180)
-    if not item_name:
-        return _append_redirect_message(next_url, "error", "Production item name is required")
-
-    conn = get_db_connection()
-    restaurant_ids = _get_master_list_restaurant_ids(restaurant) or [int(restaurant["id"])]
-    for restaurant_id in restaurant_ids:
-        master_item = _upsert_master_item(conn, restaurant_id, item_name)
-        _upsert_production_item(
-            conn,
-            restaurant_id,
-            item_name,
-            master_item["id"] if master_item else None,
-            "unit",
-            250,
-            None,
-            "",
-        )
-    conn.commit()
-    conn.close()
-    return _append_redirect_message(next_url, "success", f"Production item '{item_name}' created")
-
-
 @app.post("/production-list/create")
 @login_required
 @limiter.limit("30 per minute")
@@ -6492,9 +6472,76 @@ def undo_delete_production_item():
 @limiter.limit("60 per minute")
 def restaurant_setup():
     if request.method == "POST":
-        payload, payload_error = _validate_restaurant_payload(request.form)
+        form_type = (request.form.get("form_type") or "location_create").strip().lower()
+
+        if form_type == "company_profile":
+            old_company_name = _clean_text(request.form.get("old_company_name", ""), 120).strip()
+            new_company_name = _clean_text(request.form.get("company_name", ""), 120).strip()
+            if not new_company_name:
+                return redirect(url_for("restaurant_setup", error="Company+name+is+required"))
+
+            conn = get_db_connection()
+            if _is_admin_user():
+                target_rows = conn.execute(
+                    "SELECT id FROM restaurants WHERE name = ? ORDER BY id ASC",
+                    (old_company_name,),
+                ).fetchall() if old_company_name else []
+            else:
+                target_rows = conn.execute(
+                    """
+                    SELECT r.id
+                    FROM restaurants r
+                    JOIN user_restaurants ur ON ur.restaurant_id = r.id
+                    WHERE ur.user_id = ? AND r.name = ?
+                    ORDER BY r.id ASC
+                    """,
+                    (int(current_user.id), old_company_name),
+                ).fetchall() if old_company_name else []
+
+            if old_company_name and not target_rows:
+                conn.close()
+                return redirect(url_for("restaurant_setup", error="Company+not+found"))
+
+            if old_company_name and old_company_name != new_company_name:
+                if _is_admin_user():
+                    conn.execute(
+                        "UPDATE restaurants SET name = ? WHERE name = ?",
+                        (new_company_name, old_company_name),
+                    )
+                else:
+                    target_ids = [int(r["id"]) for r in target_rows]
+                    if target_ids:
+                        placeholders = ",".join("?" for _ in target_ids)
+                        conn.execute(
+                            f"UPDATE restaurants SET name = ? WHERE id IN ({placeholders})",
+                            (new_company_name, *target_ids),
+                        )
+
+            profile_payload = {
+                "address": _clean_text(request.form.get("address", ""), 255),
+                "city": _clean_text(request.form.get("city", ""), 120),
+                "state": _clean_text(request.form.get("state", ""), 120),
+                "zip_code": _clean_text(request.form.get("zip_code", ""), 20),
+                "phone": _clean_text(request.form.get("phone", ""), 20),
+            }
+            _save_company_profile(conn, old_company_name or new_company_name, new_company_name, profile_payload)
+            conn.commit()
+            conn.close()
+
+            session["pm_selected_company"] = new_company_name
+            return redirect(url_for("restaurant_setup", company=new_company_name, success="Company+profile+saved"))
+
+        company_name = _clean_text(request.form.get("company_name", ""), 120).strip()
+        location_form = request.form.to_dict(flat=True)
+        if company_name and not _clean_text(location_form.get("name", ""), 120):
+            location_form["name"] = company_name
+
+        payload, payload_error = _validate_restaurant_payload(location_form)
+        if company_name:
+            payload["name"] = company_name
+
         if payload_error:
-            return redirect(url_for("restaurant_setup", error=payload_error.replace(" ", "+")))
+            return redirect(url_for("restaurant_setup", error=payload_error.replace(" ", "+"), company=payload.get("name", "")))
 
         conn = get_db_connection()
         cur = conn.execute(
@@ -6511,8 +6558,9 @@ def restaurant_setup():
         conn.close()
 
         set_active_restaurant(cur.lastrowid)
+        session["pm_selected_company"] = payload["name"]
 
-        return redirect(url_for("restaurant_setup", success="Location+saved"))
+        return redirect(url_for("restaurant_setup", company=payload["name"], success="Location+saved"))
 
     audit_location_filter = _clean_text(request.args.get("audit_location", ""), 120)
     audit_editor_filter = _clean_text(request.args.get("audit_editor", ""), 120)
@@ -6568,10 +6616,62 @@ def restaurant_setup():
         item["changes_summary"] = _format_audit_changes(item.get("changes_json"))
         audit_entries.append(item)
 
+    company_options = sorted(
+        {
+            _clean_text(r.get("name", ""), 120).strip()
+            for r in restaurants
+            if _clean_text(r.get("name", ""), 120).strip()
+        },
+        key=lambda name: name.lower(),
+    )
+
+    requested_company = _clean_text(request.args.get("company", ""), 120).strip()
+    session_company = _clean_text(session.get("pm_selected_company", ""), 120).strip()
+    selected_company = ""
+    if requested_company and requested_company in company_options:
+        selected_company = requested_company
+    elif session_company and session_company in company_options:
+        selected_company = session_company
+    elif company_options:
+        selected_company = company_options[0]
+
+    if selected_company:
+        session["pm_selected_company"] = selected_company
+        restaurants = [r for r in restaurants if _clean_text(r.get("name", ""), 120).strip() == selected_company]
+    else:
+        session.pop("pm_selected_company", None)
+
+    profile_conn = get_db_connection()
+    company_profile = _load_company_profile(profile_conn, selected_company) if selected_company else {
+        "name": "",
+        "address": "",
+        "city": "",
+        "state": "",
+        "zip_code": "",
+        "phone": "",
+    }
+    profile_conn.close()
+
     active_restaurant = get_active_restaurant()
+    if selected_company:
+        active_company_name = _clean_text(active_restaurant.get("name", ""), 120).strip() if active_restaurant else ""
+        if active_company_name != selected_company:
+            if restaurants:
+                switch_error = _switch_active_restaurant_or_error(int(restaurants[0]["id"]))
+                if not switch_error:
+                    active_restaurant = get_active_restaurant()
+                else:
+                    active_restaurant = restaurants[0]
+            else:
+                active_restaurant = None
+
     return render_template(
         "restaurant_setup.html",
         restaurants=restaurants,
+        company_options=company_options,
+        selected_company=selected_company,
+        company_profile=company_profile,
+        is_super_admin=_is_admin_user(),
         audit_entries=audit_entries,
         audit_location_filter=audit_location_filter,
         audit_editor_filter=audit_editor_filter,
@@ -7168,42 +7268,7 @@ def upload():
         files = [request.files["file"]]
 
     if not files:
-        message = "No files were received. Click Choose Files (or Bulk Upload Folder), select at least one .xlsx/.xls file, then upload again."
-        if _wants_json_response():
-            return jsonify({"error": message}), 400
-        return redirect(url_for("index", error=message))
-
-    raw_manual_date = (request.form.get("report_date") or "").strip()
-    raw_manual_start = (request.form.get("report_start_date") or "").strip()
-    raw_manual_end = (request.form.get("report_end_date") or "").strip()
-
-    if raw_manual_date:
-        raw_manual_start = raw_manual_date
-        raw_manual_end = raw_manual_date
-
-    manual_start_date = _normalize_report_date_filter(raw_manual_start)
-    manual_end_date = _normalize_report_date_filter(raw_manual_end)
-
-    if raw_manual_start and not manual_start_date:
-        message = "Report date must be in YYYY-MM-DD format."
-        if _wants_json_response():
-            return jsonify({"error": message}), 400
-        return redirect(url_for("index", error=message))
-
-    if raw_manual_end and not manual_end_date:
-        message = "Report date must be in YYYY-MM-DD format."
-        if _wants_json_response():
-            return jsonify({"error": message}), 400
-        return redirect(url_for("index", error=message))
-
-    if (manual_start_date or manual_end_date) and len(files) != 1:
-        message = "Manual report dates can only be used when uploading a single file."
-        if _wants_json_response():
-            return jsonify({"error": message}), 400
-        return redirect(url_for("index", error=message))
-
-    if manual_start_date and manual_end_date and manual_start_date != manual_end_date:
-        message = "Daily uploads require Report Start Date and Report End Date to be the same day."
+        message = "No file provided"
         if _wants_json_response():
             return jsonify({"error": message}), 400
         return redirect(url_for("index", error=message))
@@ -7212,12 +7277,7 @@ def upload():
     skipped = []
     failed = []
     for file_storage in files:
-        result, error_payload, status_code = _process_all_levels_file(
-            file_storage,
-            restaurant,
-            manual_start_date=manual_start_date,
-            manual_end_date=manual_end_date,
-        )
+        result, error_payload, status_code = _process_all_levels_file(file_storage, restaurant)
         if error_payload:
             failed.append(
                 {
@@ -7254,10 +7314,6 @@ def upload():
         message_parts.append(f"Skipped {len(skipped)} file(s) because that day already exists for the active location.")
     if failed:
         message_parts.append(f"Failed {len(failed)} file(s) and continued with the rest.")
-        first_failed = failed[0]
-        failed_reason = str(first_failed.get("error") or "Upload failed")
-        failed_name = str(first_failed.get("filename") or "(unknown)")
-        message_parts.append(f"First failure: {failed_name} -> {failed_reason}")
     if not message_parts:
         message_parts.append("No files were uploaded.")
 
@@ -7359,7 +7415,4 @@ def handle_rate_limit(error):
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("PM_DEBUG", "1") == "1"
-    should_open_browser = os.environ.get("PM_OPEN_BROWSER", "1") == "1"
-    if should_open_browser and (not debug_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
-        webbrowser.open("http://localhost:5050", new=0, autoraise=True)
     app.run(debug=debug_mode, port=5050)

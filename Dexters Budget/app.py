@@ -36,6 +36,17 @@ CREATE TABLE IF NOT EXISTS transactions (
     category TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS import_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    import_id INTEGER NOT NULL REFERENCES csv_imports(id),
+    date TEXT NOT NULL,
+    amount REAL NOT NULL,
+    description TEXT NOT NULL,
+    merchant TEXT NOT NULL,
+    category TEXT NOT NULL,
+    is_duplicate INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS manual_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT NOT NULL,
@@ -79,6 +90,17 @@ CREATE TABLE IF NOT EXISTS savings_history (
     notes TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS monthly_budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    month TEXT NOT NULL,
+    category TEXT NOT NULL,
+    amount REAL NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(month, category)
+);
 """
 
 # ---------------------------------------------------------------------------
@@ -113,10 +135,20 @@ TRANSFER_KEYWORDS = [
     "APPLE CASH SENT",
 ]
 
+TRANSFER_EXTRA_KEYWORDS = [
+    "ZELLE",
+    "VENMO",
+    "CASH APP",
+    "PAYPAL *XFER",
+    "TRANSFER",
+]
+
 DEPOSIT_KEYWORDS = [
     "EDEPOSIT",
     "DEPOSIT",
 ]
+
+BUDGET_CATEGORIES = ["mortgage", "recurring", "expense", "transfer"]
 
 # Merchant display name normalization map (substring → display name)
 MERCHANT_MAP = [
@@ -167,6 +199,9 @@ def classify(desc: str, amount: float) -> str:
     for kw in TRANSFER_KEYWORDS:
         if kw in upper:
             return "transfer"
+    for kw in TRANSFER_EXTRA_KEYWORDS:
+        if kw in upper:
+            return "transfer"
     for kw in RECURRING_KEYWORDS:
         if kw in upper:
             return "recurring"
@@ -199,36 +234,132 @@ def init_db():
         conn.commit()
 
 
+def parse_date_value(raw: str) -> str:
+    value = (raw or "").strip().strip('"')
+    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    raise ValueError(f"Invalid date: {raw}")
+
+
+def parse_money_value(raw: str) -> float:
+    text = (raw or "").strip().strip('"').replace(",", "")
+    if not text:
+        return 0.0
+    if text.startswith("(") and text.endswith(")"):
+        text = "-" + text[1:-1]
+    return float(text)
+
+
+def find_column_index(headers: list[str], choices: list[str]):
+    lowered = [h.strip().lower() for h in headers]
+    for i, h in enumerate(lowered):
+        for c in choices:
+            if c in h:
+                return i
+    return None
+
+
 def parse_csv(filepath: str):
-    """Parse Wells Fargo CSV (no header). Returns list of dicts."""
-    rows = []
+    """Parse statement CSVs. Supports Wells Fargo no-header and common header formats."""
+    parsed_rows = []
+    skipped_rows = 0
+
     with open(filepath, newline="", encoding="utf-8-sig") as f:
         reader = csv.reader(f)
-        for row in reader:
-            if len(row) < 5:
-                continue
+        all_rows = [r for r in reader if any((x or "").strip() for x in r)]
+
+    if not all_rows:
+        return {"rows": [], "skipped": 0}
+
+    first_row = [c.strip() for c in all_rows[0]]
+    header_tokens = [
+        "date", "amount", "description", "memo", "merchant", "debit", "credit", "withdrawal", "deposit",
+    ]
+    has_header = any(any(token in cell.lower() for token in header_tokens) for cell in first_row)
+
+    if has_header:
+        headers = first_row
+        data_rows = all_rows[1:]
+        date_idx = find_column_index(headers, ["date", "posted", "transaction date"])
+        amount_idx = find_column_index(headers, ["amount"])
+        debit_idx = find_column_index(headers, ["debit", "withdrawal", "outflow", "spent"])
+        credit_idx = find_column_index(headers, ["credit", "deposit", "inflow"])
+        desc_idx = find_column_index(headers, ["description", "memo", "name", "merchant", "details", "payee"])
+
+        if date_idx is None or desc_idx is None or (amount_idx is None and debit_idx is None and credit_idx is None):
+            return {"rows": [], "skipped": len(data_rows)}
+
+        for row in data_rows:
             try:
-                date_str = row[0].strip().strip('"')
-                amount_str = row[1].strip().strip('"')
-                desc = row[4].strip().strip('"')
-                date = datetime.strptime(date_str, "%m/%d/%Y").strftime("%Y-%m-%d")
-                amount = float(amount_str.replace(",", ""))
+                if max(date_idx, desc_idx) >= len(row):
+                    skipped_rows += 1
+                    continue
+
+                date = parse_date_value(row[date_idx])
+                desc = row[desc_idx].strip().strip('"')
+                if not desc:
+                    skipped_rows += 1
+                    continue
+
+                if amount_idx is not None and amount_idx < len(row) and (row[amount_idx] or "").strip():
+                    amount = parse_money_value(row[amount_idx])
+                else:
+                    debit_val = parse_money_value(row[debit_idx]) if debit_idx is not None and debit_idx < len(row) else 0.0
+                    credit_val = parse_money_value(row[credit_idx]) if credit_idx is not None and credit_idx < len(row) else 0.0
+                    amount = (-abs(debit_val) if debit_val else 0.0) + abs(credit_val)
+
                 merchant = normalize_merchant(desc)
                 category = classify(desc, amount)
-                rows.append({
+                parsed_rows.append(
+                    {
+                        "date": date,
+                        "amount": amount,
+                        "description": desc,
+                        "merchant": merchant,
+                        "category": category,
+                    }
+                )
+            except (ValueError, IndexError):
+                skipped_rows += 1
+                continue
+
+        return {"rows": parsed_rows, "skipped": skipped_rows}
+
+    # Fallback: original Wells Fargo no-header format.
+    for row in all_rows:
+        if len(row) < 5:
+            skipped_rows += 1
+            continue
+        try:
+            date_str = row[0].strip().strip('"')
+            amount_str = row[1].strip().strip('"')
+            desc = row[4].strip().strip('"')
+            date = parse_date_value(date_str)
+            amount = parse_money_value(amount_str)
+            merchant = normalize_merchant(desc)
+            category = classify(desc, amount)
+            parsed_rows.append(
+                {
                     "date": date,
                     "amount": amount,
                     "description": desc,
                     "merchant": merchant,
                     "category": category,
-                })
-            except (ValueError, IndexError):
-                continue
-    return rows
+                }
+            )
+        except (ValueError, IndexError):
+            skipped_rows += 1
+            continue
+
+    return {"rows": parsed_rows, "skipped": skipped_rows}
 
 
 def import_csv(filepath: str, filename: str) -> dict:
-    rows = parse_csv(filepath)
+    parsed = parse_csv(filepath)
+    rows = parsed["rows"]
     inserted = 0
     duplicates = 0
     with get_conn() as conn:
@@ -242,6 +373,11 @@ def import_csv(filepath: str, filename: str) -> dict:
                 "SELECT 1 FROM transactions WHERE date=? AND amount=? AND description=?",
                 (r["date"], r["amount"], r["description"]),
             ).fetchone()
+            is_duplicate = 1 if exists else 0
+            conn.execute(
+                "INSERT INTO import_rows (import_id, date, amount, description, merchant, category, is_duplicate) VALUES (?,?,?,?,?,?,?)",
+                (import_id, r["date"], r["amount"], r["description"], r["merchant"], r["category"], is_duplicate),
+            )
             if exists:
                 duplicates += 1
                 continue
@@ -251,7 +387,13 @@ def import_csv(filepath: str, filename: str) -> dict:
             )
             inserted += 1
         conn.commit()
-    return {"inserted": inserted, "duplicates": duplicates, "total": len(rows)}
+    return {
+        "import_id": import_id,
+        "inserted": inserted,
+        "duplicates": duplicates,
+        "total": len(rows),
+        "skipped": parsed["skipped"],
+    }
 
 
 def merchant_slug(name: str) -> str:
@@ -306,6 +448,150 @@ def get_expense_totals(conn, month: str = None) -> dict:
     }
 
 
+def get_expense_totals_from_import_rows(conn, import_id: int, month: str = None) -> dict:
+    where_parts = ["import_id=?", "category IN ('recurring','mortgage','expense')"]
+    params = [import_id]
+    if month:
+        where_parts.append("strftime('%Y-%m', date)=?")
+        params.append(month)
+
+    rows = conn.execute(
+        f"SELECT category, SUM(ABS(amount)) as total FROM import_rows WHERE {' AND '.join(where_parts)} GROUP BY category",
+        params,
+    ).fetchall()
+
+    result = {"recurring": 0.0, "mortgage": 0.0, "expense": 0.0}
+    for r in rows:
+        result[r["category"]] = round(float(r["total"] or 0), 2)
+
+    return {
+        "recurring": result["recurring"],
+        "mortgage": result["mortgage"],
+        "expenses": result["expense"],
+        "monthly_expenses_total": round(result["recurring"] + result["mortgage"] + result["expense"], 2),
+    }
+
+
+def get_latest_data_month(conn):
+    row = conn.execute(
+        """
+        SELECT MAX(m) as m FROM (
+            SELECT strftime('%Y-%m', date) as m FROM transactions
+            UNION
+            SELECT strftime('%Y-%m', date) as m FROM manual_entries
+            UNION
+            SELECT strftime('%Y-%m', date) as m FROM import_rows
+        )
+        WHERE m IS NOT NULL
+        """
+    ).fetchone()
+    return row["m"] if row else None
+
+
+def is_transfer_like_text(text: str) -> bool:
+    upper = (text or "").upper()
+    for kw in TRANSFER_KEYWORDS + TRANSFER_EXTRA_KEYWORDS:
+        if kw in upper:
+            return True
+    return False
+
+
+def sum_expense_excluding_transfers(conn, month: str = None, import_id: int = None) -> float:
+    tx_where = ["category='expense'"]
+    tx_params = []
+    if month:
+        tx_where.append("strftime('%Y-%m', date)=?")
+        tx_params.append(month)
+    if import_id is not None:
+        tx_where.append("import_id=?")
+        tx_params.append(import_id)
+
+    me_where = ["category='expense'"]
+    me_params = []
+    if month:
+        me_where.append("strftime('%Y-%m', date)=?")
+        me_params.append(month)
+
+    tx_rows = conn.execute(
+        f"SELECT amount, description FROM transactions WHERE {' AND '.join(tx_where)}",
+        tx_params,
+    ).fetchall()
+    me_rows = conn.execute(
+        f"SELECT amount, notes as description FROM manual_entries WHERE {' AND '.join(me_where)}",
+        me_params,
+    ).fetchall()
+
+    total = 0.0
+    for r in tx_rows:
+        if not is_transfer_like_text(r["description"]):
+            total += abs(r["amount"])
+    for r in me_rows:
+        if not is_transfer_like_text(r["description"]):
+            total += abs(r["amount"])
+    return round(total, 2)
+
+
+def calculate_monthly_expenses_avg(conn) -> float:
+    """Sum each recurring/mortgage merchant's most recent monthly total."""
+    rec_rows = conn.execute(
+        """
+        SELECT merchant, strftime('%Y-%m', date) as month, SUM(amount) as total
+        FROM transactions WHERE category IN ('recurring','mortgage')
+        GROUP BY merchant, month
+        UNION ALL
+        SELECT merchant, strftime('%Y-%m', date) as month, SUM(amount) as total
+        FROM manual_entries WHERE category IN ('recurring','mortgage')
+        GROUP BY merchant, month
+        ORDER BY merchant, month
+        """
+    ).fetchall()
+    merchant_latest = {}
+    for r in rec_rows:
+        merchant = r["merchant"]
+        if merchant not in merchant_latest or r["month"] > merchant_latest[merchant]["month"]:
+            merchant_latest[merchant] = {"month": r["month"], "total": abs(r["total"])}
+        elif r["month"] == merchant_latest[merchant]["month"]:
+            merchant_latest[merchant]["total"] += abs(r["total"])
+    return round(sum(v["total"] for v in merchant_latest.values()), 2)
+
+
+def get_actual_spend_by_category(conn, month: str) -> dict:
+    rows = conn.execute(
+        """
+        SELECT category, SUM(ABS(amount)) as total
+        FROM (
+            SELECT date, category, amount FROM transactions
+            UNION ALL
+            SELECT date, category, amount FROM manual_entries
+        )
+        WHERE amount < 0
+          AND strftime('%Y-%m', date) = ?
+          AND category IN ('mortgage', 'recurring', 'expense', 'transfer')
+        GROUP BY category
+        """,
+        (month,),
+    ).fetchall()
+    values = {cat: 0.0 for cat in BUDGET_CATEGORIES}
+    for r in rows:
+        values[r["category"]] = round(float(r["total"] or 0), 2)
+    return values
+
+
+def get_budget_by_category(conn, month: str) -> dict:
+    rows = conn.execute(
+        """
+        SELECT category, amount
+        FROM monthly_budgets
+        WHERE month = ?
+        """,
+        (month,),
+    ).fetchall()
+    values = {cat: 0.0 for cat in BUDGET_CATEGORIES}
+    for r in rows:
+        values[r["category"]] = round(float(r["amount"] or 0), 2)
+    return values
+
+
 def calculate_buckets(
     current_balance,
     monthly_leftover,
@@ -355,16 +641,55 @@ def compute_income_plan(payload: dict, conn) -> dict:
     buffer_goal = float(payload.get("buffer_goal", 1000))
     balance_1 = float(payload.get("current_balance_1", 0))
     balance_2 = float(payload.get("current_balance_2", 0))
+    if balance_1 < 0 or balance_2 < 0:
+        raise ValueError("Current balance values must be zero or greater")
+
+    # Account balance is derived from both person balances by requirement.
+    bills_account_balance = round(balance_1 + balance_2, 2)
     run_month = payload.get("run_month") or None  # e.g. "2026-05"
+    run_month_used = run_month
 
     totals = get_expense_totals(conn, month=run_month)
+    if run_month and totals["monthly_expenses_total"] == 0:
+        latest_import = conn.execute(
+            "SELECT id FROM csv_imports ORDER BY imported_at DESC, id DESC LIMIT 1"
+        ).fetchone()
+        if latest_import:
+            import_totals = get_expense_totals_from_import_rows(
+                conn,
+                import_id=latest_import["id"],
+                month=run_month,
+            )
+            if import_totals["monthly_expenses_total"] > 0:
+                totals = import_totals
+
+        if totals["monthly_expenses_total"] == 0:
+            latest_month = get_latest_data_month(conn)
+            if latest_month and latest_month != run_month:
+                fallback_totals = get_expense_totals(conn, month=latest_month)
+                if fallback_totals["monthly_expenses_total"] == 0 and latest_import:
+                    fallback_totals = get_expense_totals_from_import_rows(
+                        conn,
+                        import_id=latest_import["id"],
+                        month=latest_month,
+                    )
+                if fallback_totals["monthly_expenses_total"] > 0:
+                    totals = fallback_totals
+                    run_month_used = latest_month
+
     monthly_expenses_total = totals["monthly_expenses_total"]
 
     contribution_1 = round(monthly_expenses_total * (split_pct_1 / 100.0), 2)
     contribution_2 = round(monthly_expenses_total * (split_pct_2 / 100.0), 2)
 
-    leftover_1 = round(income_1 - contribution_1, 2)
-    leftover_2 = round(income_2 - contribution_2, 2)
+    # Reduce what each person needs to add if there is already money in the bills account.
+    amount_due_after_balance = round(max(monthly_expenses_total - bills_account_balance, 0), 2)
+    adjusted_contribution_1 = round(amount_due_after_balance * (split_pct_1 / 100.0), 2)
+    adjusted_contribution_2 = round(amount_due_after_balance * (split_pct_2 / 100.0), 2)
+
+    # Leftover should be based on each person's required bill amount after using current bills account balance.
+    leftover_1 = round(income_1 - adjusted_contribution_1, 2)
+    leftover_2 = round(income_2 - adjusted_contribution_2, 2)
 
     buckets_1 = calculate_buckets(
         balance_1,
@@ -390,6 +715,9 @@ def compute_income_plan(payload: dict, conn) -> dict:
             "current_balance_1": round(balance_1, 2),
             "current_balance_2": round(balance_2, 2),
             "buffer_goal": round(buffer_goal, 2),
+            "bills_account_balance": round(bills_account_balance, 2),
+            "run_month_requested": run_month,
+            "run_month_used": run_month_used,
             "split_pct_1": round(split_pct_1, 2),
             "split_pct_2": round(split_pct_2, 2),
             "sinking_pct": round(sinking_pct, 2),
@@ -405,6 +733,11 @@ def compute_income_plan(payload: dict, conn) -> dict:
         "bills_split": {
             "contribution_1": contribution_1,
             "contribution_2": contribution_2,
+        },
+        "adjusted_bills_split": {
+            "amount_due_after_balance": amount_due_after_balance,
+            "contribution_1": adjusted_contribution_1,
+            "contribution_2": adjusted_contribution_2,
         },
         "leftover": {
             "person_1": leftover_1,
@@ -430,11 +763,85 @@ def upload():
     f = request.files.get("csvfile")
     if not f or not f.filename:
         return jsonify({"error": "No file provided"}), 400
+    if not f.filename.lower().endswith(".csv"):
+        return jsonify({"error": "Please upload a CSV statement file"}), 400
     filepath = os.path.join(BASE_DIR, "uploads_tmp.csv")
     f.save(filepath)
     result = import_csv(filepath, f.filename)
     os.remove(filepath)
+    if result["total"] == 0:
+        return jsonify({
+            "error": "No valid transactions found in this file. Use a CSV with Date + Amount (or Debit/Credit) + Description columns.",
+            "skipped": result.get("skipped", 0),
+        }), 400
     return jsonify(result)
+
+
+@app.route("/upload/result/<int:import_id>")
+def upload_result(import_id):
+    return render_template("upload_result.html", import_id=import_id)
+
+
+@app.route("/api/import/<int:import_id>/rows")
+def api_import_rows(import_id):
+    with get_conn() as conn:
+        info = conn.execute(
+            "SELECT id, filename, imported_at FROM csv_imports WHERE id=?",
+            (import_id,),
+        ).fetchone()
+        if not info:
+            return jsonify({"error": "Upload not found"}), 404
+
+        rows = conn.execute(
+            """
+            SELECT id, date, amount, description, merchant, category, is_duplicate
+            FROM import_rows
+            WHERE import_id=?
+            ORDER BY date DESC, ABS(amount) DESC, merchant ASC
+            """,
+            (import_id,),
+        ).fetchall()
+
+        # Backward compatibility for old imports created before import_rows existed.
+        if not rows:
+            rows = conn.execute(
+                """
+                SELECT id, date, amount, description, merchant, category, 0 as is_duplicate
+                FROM transactions
+                WHERE import_id=?
+                ORDER BY date DESC, ABS(amount) DESC, merchant ASC
+                """,
+                (import_id,),
+            ).fetchall()
+
+    payload_rows = [dict(r) for r in rows]
+    by_category = {"mortgage": 0.0, "recurring": 0.0, "expense": 0.0, "transfer": 0.0, "deposit": 0.0}
+    by_merchant = {}
+    for r in payload_rows:
+        cat = r["category"]
+        by_category[cat] = round(by_category.get(cat, 0.0) + abs(r["amount"]), 2)
+        m = r["merchant"]
+        by_merchant[m] = round(by_merchant.get(m, 0.0) + abs(r["amount"]), 2)
+
+    top_merchants = sorted(
+        [{"merchant": k, "total": v} for k, v in by_merchant.items()],
+        key=lambda x: x["total"],
+        reverse=True,
+    )[:12]
+
+    return jsonify(
+        {
+            "import": dict(info),
+            "totals": {
+                "count": len(payload_rows),
+                "duplicates": sum(1 for r in payload_rows if r.get("is_duplicate")),
+                "categories": by_category,
+                "net": round(sum(r["amount"] for r in payload_rows), 2),
+            },
+            "top_merchants": top_merchants,
+            "rows": payload_rows,
+        }
+    )
 
 
 @app.route("/api/summary")
@@ -443,29 +850,16 @@ def api_summary():
         recurring = round(abs(sum_category(conn, "recurring")), 2)
         mortgage = round(abs(sum_category(conn, "mortgage")), 2)
 
-        expenses = round(abs(sum_category(conn, "expense")), 2)
+        latest_import = conn.execute(
+            "SELECT id FROM csv_imports ORDER BY imported_at DESC, id DESC LIMIT 1"
+        ).fetchone()
+        latest_import_id = latest_import["id"] if latest_import else None
+
+        expenses = sum_expense_excluding_transfers(conn, import_id=latest_import_id)
+        expenses_all_time_ex_transfer = sum_expense_excluding_transfers(conn)
         monthly_expenses_total = round(recurring + mortgage + expenses, 2)
 
-        # Monthly expenses = sum of each recurring/mortgage merchant's latest month amount
-        # (matches the "SUM OF LATEST AMOUNTS" total on the recurring tab)
-        rec_rows = conn.execute("""
-            SELECT merchant, strftime('%Y-%m', date) as month, SUM(amount) as total
-            FROM transactions WHERE category IN ('recurring','mortgage')
-            GROUP BY merchant, month
-            UNION ALL
-            SELECT merchant, strftime('%Y-%m', date) as month, SUM(amount) as total
-            FROM manual_entries WHERE category IN ('recurring','mortgage')
-            GROUP BY merchant, month
-            ORDER BY merchant, month
-        """).fetchall()
-        merchant_latest = {}
-        for r in rec_rows:
-            m = r["merchant"]
-            if m not in merchant_latest or r["month"] > merchant_latest[m]["month"]:
-                merchant_latest[m] = {"month": r["month"], "total": abs(r["total"])}
-            elif r["month"] == merchant_latest[m]["month"]:
-                merchant_latest[m]["total"] += abs(r["total"])
-        monthly_expenses_avg = round(sum(v["total"] for v in merchant_latest.values()), 2)
+        monthly_expenses_avg = calculate_monthly_expenses_avg(conn)
 
         # Expense paid YTD = all recurring+mortgage expenses for the current year
         current_year = datetime.now().strftime("%Y")
@@ -496,6 +890,8 @@ def api_summary():
         "recurring": recurring,
         "mortgage": mortgage,
         "expenses": expenses,
+        "expenses_all_time_ex_transfer": expenses_all_time_ex_transfer,
+        "expenses_scope": "latest_upload_ex_transfer",
         "monthly_expenses_avg": monthly_expenses_avg,
         "total_income": total_income,
         "expense_paid_ytd": expense_paid_ytd,
@@ -700,6 +1096,22 @@ def api_transactions():
 @app.route("/api/recurring")
 def api_recurring():
     with get_conn() as conn:
+        latest_import = conn.execute(
+            "SELECT id FROM csv_imports ORDER BY imported_at DESC, id DESC LIMIT 1"
+        ).fetchone()
+        latest_upload_amounts = {}
+        if latest_import:
+            uploaded_rows = conn.execute(
+                """
+                SELECT merchant, SUM(ABS(amount)) as total
+                FROM transactions
+                WHERE import_id=? AND category IN ('recurring','mortgage')
+                GROUP BY merchant
+                """,
+                (latest_import["id"],),
+            ).fetchall()
+            latest_upload_amounts = {r["merchant"]: round(r["total"], 2) for r in uploaded_rows}
+
         rows = conn.execute("""
             SELECT merchant,
                    strftime('%Y-%m', date) as month,
@@ -735,7 +1147,7 @@ def api_recurring():
         sorted_months = sorted(months.keys())
         amounts = [months[m]["total"] for m in sorted_months]
         avg = round(sum(amounts) / len(amounts), 2) if amounts else 0
-        last = amounts[-1] if amounts else 0
+        last = latest_upload_amounts.get(merchant, amounts[-1] if amounts else 0)
         trend = "→"
         if len(amounts) >= 2:
             diff_pct = (amounts[-1] - amounts[-2]) / max(amounts[-2], 0.01) * 100
@@ -1019,8 +1431,195 @@ def api_expense(slug):
 @app.route("/api/months")
 def api_months():
     with get_conn() as conn:
-        rows = conn.execute("SELECT DISTINCT strftime('%Y-%m', date) as m FROM transactions ORDER BY m").fetchall()
+        rows = conn.execute(
+            """
+            SELECT DISTINCT m FROM (
+                SELECT strftime('%Y-%m', date) as m FROM transactions
+                UNION
+                SELECT strftime('%Y-%m', date) as m FROM manual_entries
+                UNION
+                SELECT strftime('%Y-%m', date) as m FROM import_rows
+            )
+            WHERE m IS NOT NULL
+            ORDER BY m
+            """
+        ).fetchall()
     return jsonify([r["m"] for r in rows])
+
+
+@app.route("/api/budget/save", methods=["POST"])
+def api_budget_save():
+    payload = request.get_json(force=True)
+    month = str(payload.get("month", "")).strip()
+    budgets = payload.get("budgets", {})
+    notes = str(payload.get("notes", "")).strip()
+
+    if not re.fullmatch(r"\d{4}-\d{2}", month):
+        return jsonify({"error": "month must be in YYYY-MM format"}), 400
+    if not isinstance(budgets, dict):
+        return jsonify({"error": "budgets must be an object"}), 400
+
+    now = datetime.now().isoformat()
+    to_save = {}
+    for cat in BUDGET_CATEGORIES:
+        val = budgets.get(cat, 0)
+        try:
+            amount = float(val)
+        except (TypeError, ValueError):
+            return jsonify({"error": f"Invalid amount for category: {cat}"}), 400
+        if amount < 0:
+            return jsonify({"error": f"Budget cannot be negative for category: {cat}"}), 400
+        to_save[cat] = round(amount, 2)
+
+    with get_conn() as conn:
+        for cat, amount in to_save.items():
+            conn.execute(
+                """
+                INSERT INTO monthly_budgets (month, category, amount, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(month, category)
+                DO UPDATE SET amount=excluded.amount, notes=excluded.notes, updated_at=excluded.updated_at
+                """,
+                (month, cat, amount, notes, now, now),
+            )
+        conn.commit()
+
+    return jsonify({"ok": True, "month": month, "budgets": to_save})
+
+
+@app.route("/api/budget/compare")
+def api_budget_compare():
+    month = (request.args.get("month") or "").strip()
+    with get_conn() as conn:
+        if not month:
+            found = conn.execute(
+                """
+                SELECT MAX(month) as month
+                FROM (
+                    SELECT strftime('%Y-%m', date) as month FROM transactions
+                    UNION
+                    SELECT strftime('%Y-%m', date) as month FROM manual_entries
+                    UNION
+                    SELECT month FROM monthly_budgets
+                )
+                """
+            ).fetchone()
+            month = (found["month"] if found else None) or datetime.now().strftime("%Y-%m")
+
+        if not re.fullmatch(r"\d{4}-\d{2}", month):
+            return jsonify({"error": "month must be in YYYY-MM format"}), 400
+
+        budget = get_budget_by_category(conn, month)
+        actual = get_actual_spend_by_category(conn, month)
+
+    lines = []
+    for cat in BUDGET_CATEGORIES:
+        b = budget.get(cat, 0.0)
+        a = actual.get(cat, 0.0)
+        lines.append(
+            {
+                "category": cat,
+                "budget": round(b, 2),
+                "actual": round(a, 2),
+                "variance": round(a - b, 2),
+                "status": "over" if a > b else "under" if a < b else "on_track",
+            }
+        )
+
+    return jsonify(
+        {
+            "month": month,
+            "categories": lines,
+            "totals": {
+                "budget": round(sum(x["budget"] for x in lines), 2),
+                "actual": round(sum(x["actual"] for x in lines), 2),
+                "variance": round(sum(x["variance"] for x in lines), 2),
+            },
+        }
+    )
+
+
+@app.route("/api/budget/trends")
+def api_budget_trends():
+    months_limit = request.args.get("months", "12")
+    try:
+        months_limit = max(1, min(int(months_limit), 36))
+    except ValueError:
+        months_limit = 12
+
+    with get_conn() as conn:
+        month_rows = conn.execute(
+            """
+            SELECT month FROM (
+                SELECT strftime('%Y-%m', date) as month FROM transactions
+                UNION
+                SELECT strftime('%Y-%m', date) as month FROM manual_entries
+                UNION
+                SELECT month FROM monthly_budgets
+            )
+            WHERE month IS NOT NULL
+            ORDER BY month DESC
+            LIMIT ?
+            """,
+            (months_limit,),
+        ).fetchall()
+
+        months = sorted([r["month"] for r in month_rows])
+        budget_totals = []
+        actual_totals = []
+        variance_totals = []
+
+        for month in months:
+            budget = get_budget_by_category(conn, month)
+            actual = get_actual_spend_by_category(conn, month)
+            b_total = round(sum(budget.values()), 2)
+            a_total = round(sum(actual.values()), 2)
+            budget_totals.append(b_total)
+            actual_totals.append(a_total)
+            variance_totals.append(round(a_total - b_total, 2))
+
+    return jsonify(
+        {
+            "months": months,
+            "budget_totals": budget_totals,
+            "actual_totals": actual_totals,
+            "variance_totals": variance_totals,
+        }
+    )
+
+
+@app.route("/api/budget/current")
+def api_budget_current():
+    month = (request.args.get("month") or "").strip()
+    with get_conn() as conn:
+        if not month:
+            found = conn.execute(
+                """
+                SELECT MAX(month) as month
+                FROM (
+                    SELECT strftime('%Y-%m', date) as month FROM transactions
+                    UNION
+                    SELECT strftime('%Y-%m', date) as month FROM manual_entries
+                )
+                """
+            ).fetchone()
+            month = (found["month"] if found else None) or datetime.now().strftime("%Y-%m")
+
+        if not re.fullmatch(r"\d{4}-\d{2}", month):
+            return jsonify({"error": "month must be in YYYY-MM format"}), 400
+
+        current_budget = calculate_monthly_expenses_avg(conn)
+        selected_totals = get_expense_totals(conn, month)
+        selected_bills_total = round(selected_totals["recurring"] + selected_totals["mortgage"], 2)
+
+    return jsonify(
+        {
+            "month": month,
+            "current_budget": round(current_budget, 2),
+            "uploaded_statement_bills_total": selected_bills_total,
+            "difference": round(selected_bills_total - current_budget, 2),
+        }
+    )
 
 
 if __name__ == "__main__":

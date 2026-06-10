@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "Kaitlyn",
+    "lastName": "Esfahani ",
+    "dateOfHire": "2026-05-23",
+    "id": 1779569806289.8933,
+    "locationId": "pm_2"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

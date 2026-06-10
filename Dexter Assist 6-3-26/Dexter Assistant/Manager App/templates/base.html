@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Dexter Assistant — restaurant operations dashboard">
+    <meta name="theme-color" content="#22427A">
+    <script>try{if(window.top!==window.self){document.documentElement.classList.add("dx-embedded");}}catch(e){document.documentElement.classList.add("dx-embedded");}</script>
+    <title>{% block title %}Dexter Restaurant Management Assistant{% endblock %}</title>
+
+    <!-- Brand favicons -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='dexter-ui/brand/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='dexter-ui/brand/favicon-32.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='dexter-ui/brand/apple-touch-icon.png') }}">
+
+    <!-- Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Dexter UI tokens (load BEFORE Bootstrap) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='dexter-ui/tokens.css') }}">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+
+    <!-- Dexter UI component overrides -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='dexter-ui/components.css') }}">
+
+    <!-- Custom CSS (app-specific, kept last) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if current_user.is_authenticated %}
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('dashboard') }}">
+                <img src="{{ url_for('static', filename='dexter-ui/brand/logo-256.png') }}" alt="Dexter Assistant" style="height:32px;width:auto;margin-right:10px;">
+                <span class="d-none d-md-inline">Dexter Restaurant Management Assistant</span>
+            </a>
+            <div class="d-flex align-items-center ms-auto gap-2 flex-wrap">
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['dashboard', 'daily_log', 'cash_manager', 'employees', 'locations', 'reports'] %}active{% endif %}"
+                           href="#"
+                           id="operationsMenuToggle"
+                           role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false">
+                            <i class="bi bi-list"></i> Menu
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="operationsMenuToggle">
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                                    <i class="bi bi-house-door"></i> Home
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'daily_log' %}active{% endif %}" href="{{ url_for('daily_log') }}">
+                                    <i class="bi bi-calendar-check"></i> Daily Log
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'cash_manager' %}active{% endif %}" href="{{ url_for('cash_manager') }}">
+                                    <i class="bi bi-cash-stack"></i> Cash Manager
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'employees' %}active{% endif %}" href="{{ url_for('employees') }}">
+                                    <i class="bi bi-people"></i> Employees
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'locations' %}active{% endif %}" href="{{ url_for('locations') }}">
+                                    <i class="bi bi-geo-alt"></i> Locations
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'reports' %}active{% endif %}" href="{{ url_for('reports') }}">
+                                    <i class="bi bi-graph-up"></i> Reports
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="companyDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-building"></i> 
+                            {% if current_user.current_company_id %}
+                                {{ current_user.companies | selectattr('id', 'equalto', current_user.current_company_id) | map(attribute='name') | first }}
+                            {% else %}
+                                Select Company
+                            {% endif %}
+                        </a>
+                        <ul class="dropdown-menu">
+                            {% for company in current_user.companies %}
+                            <li>
+                                <a class="dropdown-item {% if company.id == current_user.current_company_id %}active{% endif %}" 
+                                   href="{{ url_for('set_company', company_id=company.id) }}">
+                                    {{ company.name }} <small class="text-muted">({{ company.role }})</small>
+                                </a>
+                            </li>
+                            {% endfor %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('create_company') }}">
+                                <i class="bi bi-plus-circle"></i> Create New Company
+                            </a></li>
+                        </ul>
+                    </li>
+                    
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" title="Theme" aria-label="Theme">
+                            <i class="bi bi-palette"></i>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><h6 class="dropdown-header">Appearance</h6></li>
+                            <li><button type="button" class="dropdown-item" data-dx-theme-value="light"><i class="bi bi-sun me-2"></i>Light</button></li>
+                            <li><button type="button" class="dropdown-item" data-dx-theme-value="dark"><i class="bi bi-moon-stars me-2"></i>Dark</button></li>
+                            <li><button type="button" class="dropdown-item" data-dx-theme-value="auto"><i class="bi bi-circle-half me-2"></i>Follow OS</button></li>
+                        </ul>
+                    </li>
+
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle"></i> {{ current_user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('settings') }}">
+                                <i class="bi bi-gear"></i> Settings
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('manage_users') }}">
+                                <i class="bi bi-people"></i> Manage Users
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('audit_log') }}">
+                                <i class="bi bi-file-text"></i> Audit Log
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                                <i class="bi bi-box-arrow-right"></i> Logout
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+    
+    <!-- Flash Messages -->
+    <div class="container mt-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {% if category == 'danger' %}
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                    {% elif category == 'success' %}
+                        <i class="bi bi-check-circle-fill"></i>
+                    {% elif category == 'warning' %}
+                        <i class="bi bi-exclamation-circle-fill"></i>
+                    {% else %}
+                        <i class="bi bi-info-circle-fill"></i>
+                    {% endif %}
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+    
+    <!-- Main Content -->
+    <main class="{% if current_user.is_authenticated %}container-fluid{% endif %} mt-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="dx-version-badge" aria-hidden="true">Dexter · Manager · v0.9-demo</div>
+    
+    <!-- Footer -->
+    <footer class="footer mt-auto py-3 bg-light">
+        <div class="container text-center">
+            <span class="text-muted">
+                &copy; 2025 Manager App | 
+                <a href="#">Privacy Policy</a> | 
+                <a href="#">Terms of Service</a>
+            </span>
+        </div>
+    </footer>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Dexter UI -->
+    <script src="{{ url_for('static', filename='dexter-ui/theme.js') }}"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,8 +1,0 @@
-﻿AIO tidy run completed.
-
-Run folder: C:\Users\arnol\OneDrive\Desktop\AIO-Python\AIO_Tidy\tidy_run_2026-04-24_15-14-47
-Top-level Python files copied: 12
-Top-level docs copied: 0
-App inventory rows: 21
-
-This process is copy-only. No files were deleted or moved.

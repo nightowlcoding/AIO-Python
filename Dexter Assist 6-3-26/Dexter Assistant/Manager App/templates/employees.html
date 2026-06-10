@@ -1,0 +1,1054 @@
+{% extends "base.html" %}
+
+{% block title %}Employees - Manager App{% endblock %}
+
+{% block content %}
+<script>
+    window.currentCompanyId = "{{ current_user.current_company_id }}";
+    window.selectedLocationId = "{{ selected_location_id }}";
+    window.archiveRetentionDays = Number("{{ archive_retention_days or 30 }}") || 30;
+</script>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-people"></i> Employee Management</h1>
+        {% if locations %}
+        <select class="form-select" id="locationSelector" onchange="changeLocation(this.value)" style="width: auto;">
+            <option value="">Select Location</option>
+            {% for location in locations %}
+            <option value="{{ location.id }}" {% if location.id == selected_location_id %}selected{% endif %}>
+                {{ location.name }}
+            </option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </div>
+    
+    {% if not selected_location_id and locations %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        <strong>Please select a location</strong> to view or manage employees.
+    </div>
+    {% elif not locations %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        <strong>No locations found.</strong> Please <a href="{{ url_for('locations') }}">add a location</a> first.
+    </div>
+    {% else %}
+    
+    <!-- Employee Roster Dropdown Button -->
+    <div class="mb-4">
+        <div class="dropdown">
+            <button class="btn btn-primary btn-lg dropdown-toggle" type="button" id="employeeRosterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-list-ul"></i> Employee Roster
+            </button>
+            <ul class="dropdown-menu" aria-labelledby="employeeRosterDropdown">
+                <li>
+                    <a class="dropdown-item" href="#" onclick="showEmployeeSection(); return false;">
+                        <i class="bi bi-person"></i> Employee
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="showImportSection(); return false;">
+                        <i class="bi bi-upload"></i> Import Employees
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="showArchivedSection(); return false;">
+                        <i class="bi bi-archive"></i> Archived Employees
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Employee Section -->
+    <div id="employeeSection" class="card mb-4" style="display: none;">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-person"></i> Employee List</h5>
+        </div>
+        <div class="card-body">
+            <!-- Quick Add Employee Form -->
+            <div class="card mb-3 border-success">
+                <div class="card-header bg-success bg-opacity-10">
+                    <h6 class="mb-0 text-success"><i class="bi bi-plus-circle"></i> Quick Add Employee</h6>
+                </div>
+                <div class="card-body">
+                    <form id="quickAddForm" onsubmit="addEmployee(event)">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label for="firstName" class="form-label">First Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="firstName" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="lastName" class="form-label">Last Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="lastName" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="jobTitle" class="form-label">Job Title</label>
+                                <input type="text" class="form-control" id="jobTitle" placeholder="Optional">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="dateOfHire" class="form-label">Date of Hire <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="dateOfHire" required>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-plus-lg"></i> Add Employee
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="clearQuickAddForm()">
+                                <i class="bi bi-x-lg"></i> Clear
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Employee List Table -->
+            <div class="card">
+                <div class="card-header bg-light">
+                    <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                        <h6 class="mb-0">
+                            <i class="bi bi-list-ul"></i> Employees 
+                            <span class="badge bg-primary" id="employeeCount">0</span>
+                        </h6>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleSelectAllEmployees()">
+                                <i class="bi bi-check2-square"></i> Select All
+                            </button>
+                            <button type="button" class="btn btn-warning btn-sm" onclick="archiveSelectedEmployees()">
+                                <i class="bi bi-archive"></i> Archive Selected
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:40px;"><input type="checkbox" id="selectAllEmployees" onchange="toggleSelectAllEmployees(this.checked)"></th>
+                                    <th>#</th>
+                                    <th>First Name</th>
+                                    <th>Last Name</th>
+                                    <th>Job Title</th>
+                                    <th>Date of Hire</th>
+                                    <th>Days Employed</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeTableBody">
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        No employees added yet. Use the Quick Add form above to get started.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import Employees Section -->
+    <div id="importSection" class="card mb-4" style="display: none;">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="bi bi-upload"></i> Import Employees</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Import employees from CSV or Excel file. The file should contain columns for First Name and Last Name. Date of Hire and Job Description are optional.</p>
+            
+            <div class="card border-primary mb-3">
+                <div class="card-header bg-primary bg-opacity-10">
+                    <h6 class="mb-0 text-primary"><i class="bi bi-file-earmark-arrow-up"></i> Upload File</h6>
+                </div>
+                <div class="card-body">
+                    <form id="importForm" onsubmit="importEmployees(event)">
+                        <div class="mb-3">
+                            <label for="employeeFile" class="form-label">Select CSV or Excel File</label>
+                            <input type="file" class="form-control" id="employeeFile" accept=".csv,.xlsx,.xls" required>
+                            <div class="form-text">Accepted formats: CSV, Excel (.xlsx, .xls)</div>
+                        </div>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-upload"></i> Import Employees
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                <strong>Expected File Format:</strong><br>
+                The file should contain columns with headers like: <code>First Name</code>, <code>Last Name</code>, <code>Date of Hire</code>, <code>Job Description</code> (or similar variations).<br>
+                Duplicate names will be automatically skipped.
+            </div>
+
+            <div id="importResults" style="display: none;" class="alert alert-success">
+                <i class="bi bi-check-circle"></i>
+                <span id="importMessage"></span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Remove Employees Section -->
+    <div id="removeSection" class="card mb-4" style="display: none;">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-archive"></i> Archived Employees 
+                <span class="badge bg-light text-dark" id="removedEmployeeCount">0</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">View, edit, and restore previously archived employees.</p>
+            <div class="alert alert-warning py-2 px-3 mb-3 d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge bg-dark" id="archiveRetentionBadge">Auto-delete: 30 days</span>
+                <span class="small text-muted" id="archiveRetentionMessage">Archived employees older than 30 days are permanently deleted automatically.</span>
+            </div>
+            
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>First Name</th>
+                                    <th>Last Name</th>
+                                    <th>Job Title</th>
+                                    <th>Date of Hire</th>
+                                    <th>Archived Date</th>
+                                    <th>Days Left</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="removedEmployeeTableBody">
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        No archived employees.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="employeeEditModal" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="z-index: 1055; background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px);">
+        <div class="d-flex align-items-center justify-content-center w-100 h-100 p-3">
+            <div class="card shadow" style="max-width: 520px; width: 100%;">
+                <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+                    <div>
+                        <strong id="employeeEditModalTitle">Edit Employee</strong>
+                        <div class="small opacity-75" id="employeeEditModalSubtitle">Update employee details</div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Close" onclick="closeEmployeeEditModal()"></button>
+                </div>
+                <div class="card-body">
+                    <input type="hidden" id="employeeEditMode">
+                    <input type="hidden" id="employeeEditId">
+                    <div class="mb-3">
+                        <label for="employeeEditFirstName" class="form-label">First Name</label>
+                        <input type="text" class="form-control" id="employeeEditFirstName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="employeeEditLastName" class="form-label">Last Name</label>
+                        <input type="text" class="form-control" id="employeeEditLastName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="employeeEditJobTitle" class="form-label">Job Title</label>
+                        <input type="text" class="form-control" id="employeeEditJobTitle" placeholder="Optional">
+                    </div>
+                    <div class="mb-3">
+                        <label for="employeeEditDateOfHire" class="form-label">Date of Hire</label>
+                        <input type="date" class="form-control" id="employeeEditDateOfHire" required>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-outline-secondary" onclick="closeEmployeeEditModal()">Cancel</button>
+                        <button type="button" class="btn btn-primary" onclick="saveEmployeeEditModal()">Save Changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Employee list storage
+let employees = [];
+let removedEmployees = [];
+
+// Load from localStorage on startup
+try {
+    const stored = localStorage.getItem('employees');
+    if (stored) {
+        employees = JSON.parse(stored);
+        console.log('Loaded', employees.length, 'employees from localStorage');
+    }
+    
+    const storedRemoved = localStorage.getItem('removedEmployees');
+    if (storedRemoved) {
+        removedEmployees = JSON.parse(storedRemoved);
+        console.log('Loaded', removedEmployees.length, 'removed employees from localStorage');
+    }
+} catch (e) {
+    console.error('Error loading from localStorage:', e);
+}
+
+function showEmployeeSection() {
+    document.getElementById('employeeSection').style.display = 'block';
+    document.getElementById('importSection').style.display = 'none';
+    document.getElementById('removeSection').style.display = 'none';
+}
+
+function showImportSection() {
+    document.getElementById('employeeSection').style.display = 'none';
+    document.getElementById('importSection').style.display = 'block';
+    document.getElementById('removeSection').style.display = 'none';
+}
+
+function showArchivedSection() {
+    document.getElementById('employeeSection').style.display = 'none';
+    document.getElementById('importSection').style.display = 'none';
+    document.getElementById('removeSection').style.display = 'block';
+    updateArchiveRetentionStatus();
+    updateRemovedEmployeeTable();
+}
+
+function showRemoveSection() {
+    showArchivedSection();
+}
+
+function addEmployee(event) {
+    event.preventDefault();
+    
+    const firstName = document.getElementById('firstName').value.trim();
+    const lastName = document.getElementById('lastName').value.trim();
+    const jobTitle = document.getElementById('jobTitle').value.trim();
+    const dateOfHire = document.getElementById('dateOfHire').value;
+    
+    if (!firstName || !lastName || !dateOfHire) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    // Check for duplicates
+    if (isDuplicate(firstName, lastName)) {
+        alert(`Employee ${firstName} ${lastName} already exists in the list.`);
+        return;
+    }
+    
+    const employee = {
+        id: Date.now(),
+        firstName: firstName,
+        lastName: lastName,
+        jobTitle: jobTitle,
+        dateOfHire: dateOfHire
+    };
+    
+    employees.push(employee);
+    updateEmployeeTable();
+    saveAllData();
+    clearQuickAddForm();
+    
+    // Show success message
+    showToast('Success!', `${firstName} ${lastName} has been added to the employee list.`, 'success');
+}
+
+function clearQuickAddForm() {
+    document.getElementById('quickAddForm').reset();
+    document.getElementById('firstName').focus();
+}
+
+function updateEmployeeTable() {
+    const tbody = document.getElementById('employeeTableBody');
+    const countBadge = document.getElementById('employeeCount');
+    const selectedIds = getSelectedEmployeeIds();
+    
+    countBadge.textContent = employees.length;
+    
+    if (employees.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                    No employees added yet. Use the Quick Add form above to get started.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = employees.map((emp, index) => {
+        const daysEmployed = calculateDaysEmployed(emp.dateOfHire);
+        const companyId = window.currentCompanyId || '';
+        const empFileName = `${escapeHtml(emp.firstName)}_${escapeHtml(emp.lastName)}.json`;
+        const profileUrl = `/employee/${companyId}/${empFileName}`;
+        const isSelected = selectedIds.includes(String(emp.id));
+        return `
+            <tr class="employee-row" style="cursor:pointer" onclick="window.open('${profileUrl}', '_blank')">
+            <td><input type="checkbox" class="employee-select" value="${emp.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); syncSelectAllState();"></td>
+                <td>${index + 1}</td>
+                <td>${escapeHtml(emp.firstName)}</td>
+                <td>${escapeHtml(emp.lastName)}</td>
+                <td>${escapeHtml(emp.jobTitle || '-')}</td>
+                <td>${emp.dateOfHire}</td>
+                <td>${daysEmployed} days</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="event.stopPropagation(); editEmployee(${emp.id});" title="Edit employee">
+                        <i class="bi bi-pencil-square"></i> Edit
+                    </button>
+                    <button class="btn btn-sm btn-warning me-1" onclick="event.stopPropagation(); archiveEmployee(${emp.id});" title="Archive employee">
+                        <i class="bi bi-archive"></i> Archive
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="window.open('${profileUrl}', '_blank'); event.stopPropagation();">View Profile</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    syncSelectAllState();
+}
+
+function editEmployee(id) {
+    const employee = employees.find(emp => emp.id === id);
+    if (!employee) {
+        return;
+    }
+    openEmployeeEditModal(employee, 'active');
+}
+
+function archiveEmployee(id) {
+    const employee = employees.find(emp => emp.id === id);
+    if (employee && confirm(`Are you sure you want to archive ${employee.firstName} ${employee.lastName}?`)) {
+        employees = employees.filter(emp => emp.id !== id);
+
+        employee.archivedDate = new Date().toISOString().split('T')[0];
+        removedEmployees.push(employee);
+
+        updateEmployeeTable();
+        updateRemovedEmployeeTable();
+        saveAllData();
+
+        showToast('Archived', `${employee.firstName} ${employee.lastName} has been moved to archived employees.`, 'warning');
+    }
+}
+
+function openEmployeeEditModal(employee, mode) {
+    const modal = document.getElementById('employeeEditModal');
+    const title = document.getElementById('employeeEditModalTitle');
+    const subtitle = document.getElementById('employeeEditModalSubtitle');
+
+    if (!modal || !employee) return;
+
+    document.getElementById('employeeEditMode').value = mode || 'active';
+    document.getElementById('employeeEditId').value = String(employee.id || '');
+    document.getElementById('employeeEditFirstName').value = employee.firstName || '';
+    document.getElementById('employeeEditLastName').value = employee.lastName || '';
+    document.getElementById('employeeEditJobTitle').value = employee.jobTitle || '';
+    document.getElementById('employeeEditDateOfHire').value = employee.dateOfHire || '';
+
+    if (title) title.textContent = mode === 'archived' ? 'Edit Archived Employee' : 'Edit Employee';
+    if (subtitle) subtitle.textContent = mode === 'archived' ? 'Update the archived employee log entry' : 'Update employee details';
+
+    modal.classList.remove('d-none');
+}
+
+function closeEmployeeEditModal() {
+    const modal = document.getElementById('employeeEditModal');
+    if (modal) modal.classList.add('d-none');
+}
+
+function saveEmployeeEditModal() {
+    const mode = document.getElementById('employeeEditMode').value;
+    const id = Number(document.getElementById('employeeEditId').value);
+    const firstName = document.getElementById('employeeEditFirstName').value.trim();
+    const lastName = document.getElementById('employeeEditLastName').value.trim();
+    const jobTitle = document.getElementById('employeeEditJobTitle').value.trim();
+    const dateOfHire = document.getElementById('employeeEditDateOfHire').value.trim();
+
+    if (!firstName || !lastName || !dateOfHire) {
+        alert('First name, last name, and date of hire are required.');
+        return;
+    }
+
+    const targetList = mode === 'archived' ? removedEmployees : employees;
+    const employee = targetList.find((item) => Number(item.id) === id);
+    if (!employee) {
+        closeEmployeeEditModal();
+        return;
+    }
+
+    employee.firstName = firstName;
+    employee.lastName = lastName;
+    employee.jobTitle = jobTitle;
+    employee.dateOfHire = dateOfHire;
+
+    if (mode === 'archived') {
+        updateRemovedEmployeeTable();
+    } else {
+        updateEmployeeTable();
+    }
+
+    saveAllData();
+    closeEmployeeEditModal();
+    showToast('Updated', `${firstName} ${lastName} has been updated.`, 'success');
+}
+
+function getSelectedEmployeeIds() {
+    return Array.from(document.querySelectorAll('.employee-select:checked')).map((checkbox) => String(checkbox.value));
+}
+
+function syncSelectAllState() {
+    const selectAll = document.getElementById('selectAllEmployees');
+    const checkboxes = Array.from(document.querySelectorAll('.employee-select'));
+    if (!selectAll) return;
+
+    if (!checkboxes.length) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+    }
+
+    const checkedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+    selectAll.checked = checkedCount === checkboxes.length;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+}
+
+function toggleSelectAllEmployees(forceState) {
+    const selectAll = document.getElementById('selectAllEmployees');
+    const checkboxes = Array.from(document.querySelectorAll('.employee-select'));
+    const nextState = typeof forceState === 'boolean'
+        ? forceState
+        : !(selectAll && selectAll.checked);
+
+    checkboxes.forEach((checkbox) => {
+        checkbox.checked = nextState;
+    });
+    syncSelectAllState();
+}
+
+function archiveSelectedEmployees() {
+    const selectedIds = getSelectedEmployeeIds().map((value) => Number(value));
+    if (!selectedIds.length) {
+        alert('Select at least one employee to archive.');
+        return;
+    }
+
+    const selectedEmployees = employees.filter((employee) => selectedIds.includes(Number(employee.id)));
+    if (!selectedEmployees.length) {
+        return;
+    }
+
+    const label = selectedEmployees.length === 1
+        ? `${selectedEmployees[0].firstName} ${selectedEmployees[0].lastName}`
+        : `${selectedEmployees.length} employees`;
+
+    if (!confirm(`Archive ${label}?`)) {
+        return;
+    }
+
+    const archivedDate = new Date().toISOString().split('T')[0];
+    employees = employees.filter((employee) => !selectedIds.includes(Number(employee.id)));
+    selectedEmployees.forEach((employee) => {
+        employee.archivedDate = archivedDate;
+        removedEmployees.push(employee);
+    });
+
+    updateEmployeeTable();
+    updateRemovedEmployeeTable();
+    saveAllData();
+    showToast('Archived', `${selectedEmployees.length} employee(s) moved to archived employees.`, 'warning');
+}
+
+function purgeExpiredArchivedEmployees() {
+    const retentionDays = Number(window.archiveRetentionDays || 30);
+    if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
+        return;
+    }
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    cutoff.setHours(0, 0, 0, 0);
+
+    const beforeCount = removedEmployees.length;
+    removedEmployees = removedEmployees.filter((employee) => {
+        const archivedValue = String(employee.archivedDate || employee.removedDate || '').trim();
+        if (!archivedValue) return true;
+
+        const archivedDate = new Date(archivedValue);
+        if (Number.isNaN(archivedDate.getTime())) return true;
+        return archivedDate >= cutoff;
+    });
+
+    if (removedEmployees.length !== beforeCount) {
+        saveAllData();
+    }
+}
+
+function updateArchiveRetentionStatus() {
+    const retentionDays = Number(window.archiveRetentionDays || 30);
+    const badge = document.getElementById('archiveRetentionBadge');
+    const message = document.getElementById('archiveRetentionMessage');
+
+    if (!badge || !message) {
+        return;
+    }
+
+    const daysText = Number.isFinite(retentionDays) && retentionDays > 0 ? retentionDays : 30;
+    badge.textContent = `Auto-delete: ${daysText} day${daysText === 1 ? '' : 's'}`;
+    message.textContent = `Archived employees older than ${daysText} day${daysText === 1 ? '' : 's'} are permanently deleted automatically.`;
+}
+
+function restoreEmployee(id) {
+    const employee = removedEmployees.find(emp => emp.id === id);
+    if (employee && confirm(`Restore ${employee.firstName} ${employee.lastName} to active employees?`)) {
+        // Remove from removed list
+        removedEmployees = removedEmployees.filter(emp => emp.id !== id);
+        
+        delete employee.archivedDate;
+        delete employee.removedDate;
+        
+        // Add back to active employees
+        employees.push(employee);
+        
+        // Update displays and save
+        updateEmployeeTable();
+        updateRemovedEmployeeTable();
+        saveAllData();
+        
+        showToast('Restored', `${employee.firstName} ${employee.lastName} has been restored to active employees.`, 'success');
+    }
+}
+
+function permanentlyDeleteEmployee(id) {
+    const employee = removedEmployees.find(emp => emp.id === id);
+    if (employee && confirm(`Permanently delete ${employee.firstName} ${employee.lastName}? This cannot be undone.`)) {
+        removedEmployees = removedEmployees.filter(emp => emp.id !== id);
+        updateRemovedEmployeeTable();
+        saveAllData();
+        showToast('Deleted', 'Employee has been permanently deleted.', 'warning');
+    }
+}
+
+function updateRemovedEmployeeTable() {
+    purgeExpiredArchivedEmployees();
+    const tbody = document.getElementById('removedEmployeeTableBody');
+    const countBadge = document.getElementById('removedEmployeeCount');
+    
+    countBadge.textContent = removedEmployees.length;
+    
+    if (removedEmployees.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                    No archived employees.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = removedEmployees.map((emp, index) => {
+        const daysLeft = getArchiveDaysLeft(emp);
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${escapeHtml(emp.firstName)}</td>
+                <td>${escapeHtml(emp.lastName)}</td>
+                <td>${escapeHtml(emp.jobTitle || '-')}</td>
+                <td>${emp.dateOfHire}</td>
+                <td>${emp.archivedDate || emp.removedDate || 'N/A'}</td>
+                <td>${daysLeft}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editArchivedEmployee(${emp.id})" title="Edit archived employee">
+                        <i class="bi bi-pencil-square"></i> Edit
+                    </button>
+                    <button class="btn btn-sm btn-success me-1" onclick="restoreEmployee(${emp.id})" title="Restore to active">
+                        <i class="bi bi-arrow-counterclockwise"></i> Restore
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="permanentlyDeleteEmployee(${emp.id})" title="Delete permanently">
+                        <i class="bi bi-trash-fill"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function getArchiveDaysLeft(employee) {
+    const retentionDays = Number(window.archiveRetentionDays || 30);
+    if (!Number.isFinite(retentionDays) || retentionDays <= 0) {
+        return 'N/A';
+    }
+
+    const archivedValue = String(employee && (employee.archivedDate || employee.removedDate) || '').trim();
+    if (!archivedValue) {
+        return 'N/A';
+    }
+
+    const archivedDate = new Date(archivedValue);
+    if (Number.isNaN(archivedDate.getTime())) {
+        return 'N/A';
+    }
+
+    const now = new Date();
+    const elapsedDays = Math.max(0, Math.floor((now.getTime() - archivedDate.getTime()) / 86400000));
+    const daysLeft = retentionDays - elapsedDays;
+
+    if (daysLeft <= 0) {
+        return 'Due now';
+    }
+
+    return `${daysLeft} day${daysLeft === 1 ? '' : 's'}`;
+}
+
+function editArchivedEmployee(id) {
+    const employee = removedEmployees.find(emp => emp.id === id);
+    if (!employee) {
+        return;
+    }
+    openEmployeeEditModal(employee, 'archived');
+}
+
+function calculateDaysEmployed(hireDate) {
+    const hire = new Date(hireDate);
+    const today = new Date();
+    const diffTime = Math.abs(today - hire);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(title, message, type) {
+    // Simple toast notification
+    const alertClass = type === 'success' ? 'alert-success' : type === 'warning' ? 'alert-warning' : 'alert-info';
+    const toast = document.createElement('div');
+    toast.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <strong>${title}</strong> ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function isDuplicate(firstName, lastName) {
+    const normalizedFirstName = String(firstName || '').trim().toLowerCase();
+    const normalizedLastName = String(lastName || '').trim().toLowerCase();
+    return employees.some(emp => 
+        String(emp && emp.firstName || '').trim().toLowerCase() === normalizedFirstName && 
+        String(emp && emp.lastName || '').trim().toLowerCase() === normalizedLastName
+    );
+}
+
+function importEmployees(event) {
+    event.preventDefault();
+    
+    const fileInput = document.getElementById('employeeFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file to import');
+        return;
+    }
+    
+    const fileName = String(file.name || '').toLowerCase();
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        try {
+            const data = e.target.result;
+            let importedEmployees = [];
+            
+            if (fileName.endsWith('.csv')) {
+                importedEmployees = parseCSV(data);
+            } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                // For Excel files, we need to send to backend
+                importExcelFile(file);
+                return;
+            } else {
+                alert('Unsupported file type. Please use CSV or Excel files.');
+                return;
+            }
+            
+            processImportedEmployees(importedEmployees);
+        } catch (error) {
+            console.error('Import processing error:', error);
+            alert('Import failed: ' + (error && error.message ? error.message : 'Unknown error'));
+        }
+    };
+
+    reader.onerror = function() {
+        alert('Unable to read the selected file. Please try again.');
+    };
+    
+    if (fileName.endsWith('.csv')) {
+        reader.readAsText(file);
+    } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        importExcelFile(file);
+    } else {
+        alert('Unsupported file type. Please use CSV or Excel files.');
+    }
+}
+
+function parseCSV(data) {
+    const lines = String(data || '').split('\n').map(line => line.replace(/\r$/, '')).filter(line => line.trim());
+    if (lines.length === 0) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    
+    // Find column indices
+    const firstNameIdx = headers.findIndex(h => 
+        h.includes('first') && h.includes('name') || h === 'firstname'
+    );
+    const lastNameIdx = headers.findIndex(h => 
+        h.includes('last') && h.includes('name') || h === 'lastname'
+    );
+    const dateOfHireIdx = headers.findIndex(h => 
+        h.includes('date') && h.includes('hire') || h.includes('hire') || h.includes('start')
+    );
+    const jobTitleIdx = headers.findIndex(h =>
+        (h.includes('job') && (h.includes('description') || h.includes('title'))) ||
+        h === 'job description' || h === 'job descriptions' || h === 'job title' || h === 'position'
+    );
+    
+    if (firstNameIdx === -1 || lastNameIdx === -1) {
+        alert('Could not find First Name or Last Name columns in the CSV file');
+        return [];
+    }
+    
+    const importedEmployees = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        
+        if (values.length > Math.max(firstNameIdx, lastNameIdx)) {
+            const firstName = values[firstNameIdx];
+            const lastName = values[lastNameIdx];
+            let dateOfHire = dateOfHireIdx !== -1 ? values[dateOfHireIdx] : new Date().toISOString().split('T')[0];
+            const jobTitle = jobTitleIdx !== -1 ? values[jobTitleIdx] : '';
+            
+            // Try to parse date if it's in a different format
+            if (dateOfHire && !dateOfHire.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                const parsedDate = new Date(dateOfHire);
+                if (!isNaN(parsedDate.getTime())) {
+                    dateOfHire = parsedDate.toISOString().split('T')[0];
+                } else {
+                    dateOfHire = new Date().toISOString().split('T')[0];
+                }
+            }
+            
+            if (firstName && lastName) {
+                importedEmployees.push({
+                    firstName: firstName,
+                    lastName: lastName,
+                    dateOfHire: dateOfHire,
+                    jobTitle: jobTitle
+                });
+            }
+        }
+    }
+    
+    return importedEmployees;
+}
+
+function importExcelFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    fetch('/api/import-employees', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            processImportedEmployees(data.employees);
+        } else {
+            alert('Error importing Excel file: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error importing file. Please try again.');
+    });
+}
+
+function processImportedEmployees(importedEmployees) {
+    if (!Array.isArray(importedEmployees)) {
+        importedEmployees = [];
+    }
+
+    let added = 0;
+    let duplicates = 0;
+    let invalidRows = 0;
+    
+    importedEmployees.forEach(emp => {
+        const firstName = String(emp && emp.firstName || '').trim();
+        const lastName = String(emp && emp.lastName || '').trim();
+        const dateOfHire = String(emp && emp.dateOfHire || '').trim() || new Date().toISOString().split('T')[0];
+        const jobTitle = String((emp && (emp.jobTitle || emp.job_title || emp.jobDescription || emp.job_description || emp.jobDescriptions || emp.job_descriptions)) || '').trim();
+
+        if (!firstName || !lastName) {
+            invalidRows++;
+            return;
+        }
+
+        if (!isDuplicate(firstName, lastName)) {
+            employees.push({
+                id: Date.now() + Math.random(),
+                firstName: firstName,
+                lastName: lastName,
+                jobTitle: jobTitle,
+                dateOfHire: dateOfHire
+            });
+            added++;
+        } else {
+            duplicates++;
+        }
+    });
+    
+    updateEmployeeTable();
+    saveAllData();
+    
+    // Show results
+    const resultsDiv = document.getElementById('importResults');
+    const messageSpan = document.getElementById('importMessage');
+    
+    let message = `<strong>Import Complete!</strong><br>`;
+    message += `${added} employee(s) added successfully.`;
+    if (duplicates > 0) {
+        message += `<br>${duplicates} duplicate(s) skipped.`;
+    }
+    if (invalidRows > 0) {
+        message += `<br>${invalidRows} invalid row(s) skipped.`;
+    }
+    
+    if (resultsDiv && messageSpan) {
+        messageSpan.innerHTML = message;
+        resultsDiv.style.display = 'block';
+        resultsDiv.className = added > 0 ? 'alert alert-success' : 'alert alert-warning';
+
+        // Hide results after 5 seconds
+        setTimeout(() => {
+            resultsDiv.style.display = 'none';
+        }, 5000);
+    } else {
+        console.warn('Import results container not found in DOM. Falling back to toast only.');
+    }
+    
+    // Reset form
+    document.getElementById('importForm').reset();
+    
+    const summaryParts = [`${added} added`, `${duplicates} duplicates`];
+    if (invalidRows > 0) summaryParts.push(`${invalidRows} invalid`);
+    showToast('Import Complete', summaryParts.join(', '), added > 0 ? 'success' : 'warning');
+}
+
+// Save all data (employees and removed employees)
+function saveAllData() {
+    purgeExpiredArchivedEmployees();
+
+    // Save to localStorage immediately
+    try {
+        localStorage.setItem('employees', JSON.stringify(employees));
+        localStorage.setItem('removedEmployees', JSON.stringify(removedEmployees));
+        console.log('Auto-saved:', employees.length, 'active and', removedEmployees.length, 'removed employees');
+    } catch (e) {
+        console.error('Error saving to localStorage:', e);
+    }
+    
+    // Also save to backend
+    fetch('/api/save-employees', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            employees: employees,
+            removedEmployees: removedEmployees,
+            location_id: window.selectedLocationId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Saved to backend successfully');
+        } else {
+            console.error('Error saving to backend:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error saving to backend:', error);
+    });
+}
+
+// Backward compatibility
+function saveEmployeesToBackend() {
+    saveAllData();
+}
+
+// Load employees from backend on page load
+function loadEmployeesFromBackend() {
+    fetch('/api/employee-names')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.employees && data.employees.length > 0) {
+                    employees = data.employees;
+                    localStorage.setItem('employees', JSON.stringify(employees));
+                    console.log('Loaded', employees.length, 'employees from backend');
+                }
+                if (data.removedEmployees && data.removedEmployees.length > 0) {
+                    removedEmployees = data.removedEmployees;
+                    localStorage.setItem('removedEmployees', JSON.stringify(removedEmployees));
+                    console.log('Loaded', removedEmployees.length, 'removed employees from backend');
+                }
+                updateEmployeeTable();
+                updateRemovedEmployeeTable();
+            } else {
+                console.log('No employees in backend, using localStorage data');
+                updateEmployeeTable();
+                updateRemovedEmployeeTable();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading employees from backend:', error);
+            // Use localStorage data if backend fails
+            updateEmployeeTable();
+            updateRemovedEmployeeTable();
+        });
+}
+
+// Set today's date as default for hire date
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('dateOfHire').value = today;
+
+    showEmployeeSection();
+    
+    // Load existing employees
+    loadEmployeesFromBackend();
+    
+    updateArchiveRetentionStatus();
+
+    // Update removed employee table
+    updateRemovedEmployeeTable();
+
+    purgeExpiredArchivedEmployees();
+});
+
+function changeLocation(locationId) {
+    window.location.href = '{{ url_for("employees") }}?location_id=' + locationId;
+}
+</script>
+{% endif %}
+{% endblock %}

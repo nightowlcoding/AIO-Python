@@ -1,0 +1,1033 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.print-only {
+  display: none;
+}
+
+.report-view-compact .production-group-card .card-header {
+  padding: 0.55rem 0.75rem;
+}
+
+.report-view-compact .production-group-card .compact-kpi .badge {
+  font-size: 0.72rem;
+}
+
+.report-view-compact .production-group-card .card-body {
+  padding-top: 0.4rem;
+}
+
+.report-view-expanded .production-group-card .card-header {
+  padding: 0.8rem 1rem;
+}
+
+.production-group-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.production-group-controls form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.production-group-summary {
+  row-gap: 0.35rem;
+}
+
+.trend-panel-heading {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink-700);
+  margin-bottom: 0.5rem;
+}
+
+.trend-bar-chart {
+  width: 100%;
+  height: 260px;
+  max-height: none;
+}
+
+.trend-surface-compact {
+  min-height: 260px;
+}
+
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0.35in;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .app-navbar,
+  .nav-tabs,
+  .production-report-filters,
+  .production-interactive,
+  .mapping-pill-remove,
+  .btn,
+  .form-check,
+  .collapse:not(.show) {
+    display: none !important;
+  }
+
+  .app-shell {
+    max-width: none;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .report-view-compact,
+  .report-view-expanded {
+    gap: 0.45rem !important;
+  }
+
+  .card,
+  .production-group-card {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .card:hover,
+  .production-group-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  .card-header,
+  .card-body,
+  .production-group-card .card-header {
+    padding: 0.35rem 0.55rem !important;
+  }
+
+  .stat-card .card-body {
+    padding: 0.45rem !important;
+  }
+
+  .section-eyebrow {
+    font-size: 0.62rem !important;
+    margin-bottom: 0.12rem !important;
+  }
+
+  .stat-value {
+    font-size: 1rem !important;
+  }
+
+  .production-group-controls form {
+    display: none !important;
+  }
+
+  .production-group-summary .badge,
+  .compact-kpi .badge {
+    font-size: 0.62rem !important;
+    padding: 0.18rem 0.4rem !important;
+  }
+
+  .table {
+    font-size: 8.5px;
+  }
+
+  .table thead th,
+  .table tbody td,
+  .table tfoot th,
+  .table tfoot td {
+    padding: 0.18rem 0.28rem !important;
+    line-height: 1.15;
+  }
+
+  .table tfoot {
+    display: none;
+  }
+
+  .trend-chart {
+    height: 150px !important;
+  }
+
+  .trend-bar-chart {
+    height: 120px !important;
+  }
+
+  .trend-surface {
+    min-height: 150px !important;
+  }
+
+  .trend-surface-compact {
+    min-height: 120px !important;
+  }
+}
+</style>
+<div class="row g-4 report-view-{{ report_view or 'compact' }} production-report-root">
+  <div class="col-12 print-only">
+    <div class="border rounded px-3 py-2">
+      <div class="fw-semibold">Production List Report</div>
+      <div class="small text-muted">
+        {{ restaurant.name if restaurant else 'No location selected' }}
+        {% if upload_filters.start_date or upload_filters.end_date %}
+        | {{ upload_filters.start_date if upload_filters.start_date else 'Start' }} to {{ upload_filters.end_date if upload_filters.end_date else 'Today' }}
+        {% endif %}
+        {% if focused_item_name %}
+        | {{ focused_item_name }}{% if focused_source_item_name %} / {{ focused_source_item_name }}{% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header gradient-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-diagram-3-fill me-2"></i>Production List Report</span>
+        <span class="small opacity-75">{{ restaurant.name if restaurant else 'No location selected' }}</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-0">Grouped production report built from Production List mappings and uploaded item history.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-table me-1"></i>Tracked Items Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_analytics_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-graph-up-arrow me-1"></i>Analytics Dashboard
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link active" aria-current="page" href="{{ url_for('reports_production_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-diagram-3 me-1"></i>Production List Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_categories_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-tags me-1"></i>Category Report
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('reports_weekly_usage_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '') }}">
+          <i class="bi bi-calendar-week me-1"></i>Weekly Usage
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  <div class="col-12">
+    <div class="row g-3">
+      {% set prod_kpi_icons = {'production_items': 'bi-diagram-3', 'mapped_menu_items': 'bi-list-check', 'total_units': 'bi-boxes', 'cases_required': 'bi-archive'} %}
+      {% for k, v in (summary or {}).items() %}
+      <div class="col-6 col-lg-3">
+        <div class="dx-kpi{% if loop.first %} dx-kpi--accent{% endif %}">
+          <div class="dx-kpi__label"><i class="bi {{ prod_kpi_icons.get(k, 'bi-bar-chart') }} me-1"></i>{{ k.replace('_', ' ').title() }}</div>
+          <div class="dx-kpi__value">{{ v }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if success %}
+  <div class="col-12">
+    <div class="alert alert-success mb-0"><i class="bi bi-check-circle-fill me-2"></i>{{ success }}</div>
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="col-12">
+    <div class="alert alert-danger mb-0"><i class="bi bi-exclamation-octagon-fill me-2"></i>{{ error }}</div>
+  </div>
+  {% endif %}
+
+  <div class="col-12">
+    <div class="card production-report-filters">
+      <div class="card-header"><i class="bi bi-funnel-fill me-2"></i>Filters</div>
+      <div class="card-body">
+        <form method="get" action="{{ url_for('reports_production_page') }}" class="row g-3 align-items-end">
+          <input type="hidden" name="view" value="{{ report_view or 'compact' }}">
+          <div class="col-12 col-md-4 col-lg-3">
+            <label class="form-label">Search Item</label>
+            <input class="form-control" type="text" name="search" list="production-search-items" value="{{ upload_filters.search if upload_filters else '' }}" placeholder="Production or menu item">
+            <datalist id="production-search-items">
+              {% for pi in all_production_items or [] %}
+              <option value="{{ pi.item_name }}">
+              {% endfor %}
+            </datalist>
+          </div>
+          <div class="col-6 col-md-3 col-lg-2">
+            <label class="form-label">Start Date</label>
+            <input class="form-control" type="date" name="start_date" value="{{ upload_filters.start_date if upload_filters else '' }}">
+          </div>
+          <div class="col-6 col-md-3 col-lg-2">
+            <label class="form-label">End Date</label>
+            <input class="form-control" type="date" name="end_date" value="{{ upload_filters.end_date if upload_filters else '' }}">
+          </div>
+          <div class="col-12 col-md-2 col-lg-3">
+            <label class="form-label">Location</label>
+            <select class="form-select" name="location_id">
+              {% for opt in location_options or [] %}
+              <option value="{{ opt.id }}" {% if (upload_filters and upload_filters.location_id == (opt.id|string)) %}selected{% endif %}>
+                {{ opt.name }}{% if opt.location %} - {{ opt.location }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-6 col-md-2 col-lg-1 d-grid">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-1"></i>Apply</button>
+          </div>
+          <div class="col-6 col-md-2 col-lg-1 d-grid">
+            <a class="btn btn-outline-secondary" href="{{ url_for('reports_page') }}"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</a>
+          </div>
+          <div class="col-12 col-md-auto d-flex align-items-end">
+            <div class="d-flex flex-wrap gap-3 mb-2">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideZeroSalesToggle" checked>
+                <label class="form-check-label" for="hideZeroSalesToggle">Hide zero-sales items</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showZeroUnitGroupsToggle">
+                <label class="form-check-label" for="showZeroUnitGroupsToggle">Show production items with 0 total units</label>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
+        <span><i class="bi bi-layout-text-window-reverse me-2"></i>Production Output</span>
+        <div class="d-flex align-items-center gap-2 flex-wrap production-header-actions">
+          <span class="badge text-bg-primary status-badge">{{ (production_report_rows or []) | length }} production items</span>
+          {% set _prod_view_compact_url = url_for('reports_production_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '', focus_item_id=request.args.get('focus_item_id') or '', focus_source_item=focused_source_item_name if focused_source_item_name else '', view='compact') %}
+          {% set _prod_view_expanded_url = url_for('reports_production_page', search=upload_filters.search if upload_filters else '', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '', focus_item_id=request.args.get('focus_item_id') or '', focus_source_item=focused_source_item_name if focused_source_item_name else '', view='expanded') %}
+          <div class="btn-group btn-group-sm" role="group" aria-label="Report view mode">
+            <a class="btn production-interactive {% if (report_view or 'compact') == 'compact' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{{ _prod_view_compact_url }}">Compact</a>
+            <a class="btn production-interactive {% if (report_view or 'compact') == 'expanded' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{{ _prod_view_expanded_url }}">Expanded</a>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary production-interactive" type="button" onclick="window.print()">
+            <i class="bi bi-filetype-pdf me-1"></i>Print / PDF
+          </button>
+          <button class="btn btn-sm btn-outline-light production-interactive" type="button" data-bs-toggle="collapse" data-bs-target="#quickAddProductionItem" aria-expanded="false" title="Add new production item">
+            <i class="bi bi-plus-lg"></i>
+          </button>
+        </div>
+      </div>
+      <div class="collapse border-bottom" id="quickAddProductionItem">
+        <div class="px-3 py-2 bg-light">
+          <form method="post" action="{{ url_for('create_production_item_quick') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="next" value="{{ report_back_url }}">
+            <div class="col-12 col-md-6">
+              <label class="form-label small mb-1">New Production Item Name</label>
+              <input class="form-control form-control-sm" type="text" name="item_name" placeholder="e.g. Burger Patties" required>
+            </div>
+            <div class="col-auto d-grid">
+              <label class="form-label small mb-1">&nbsp;</label>
+              <button class="btn btn-sm btn-success" type="submit"><i class="bi bi-plus-circle me-1"></i>Add Item</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="card-body">
+        {% if is_focus_mode %}
+        <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <span>
+            <i class="bi bi-pencil-square me-2"></i>Quick Edit: {{ focused_item_name or 'Selected item' }}
+            {% if focused_source_item_name %}
+            <span class="small text-muted"> / {{ focused_source_item_name }}</span>
+            {% endif %}
+          </span>
+          <div class="d-flex gap-2 flex-wrap">
+            {% if focused_source_item_name %}
+            <form method="post" action="{{ url_for('unmap_item_category_page') }}" class="d-inline" onsubmit="return confirm('Remove the mapping for &quot;{{ focused_source_item_name }}&quot;? This cannot be undone.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="item_name" value="{{ focused_source_item_name }}">
+              <input type="hidden" name="location_id" value="{{ upload_filters.location_id if upload_filters else '' }}">
+              <input type="hidden" name="next" value="{{ report_back_url }}">
+              <button class="btn btn-sm btn-outline-danger" type="submit" title="Remove this menu item's mapping to {{ focused_item_name }}">
+                <i class="bi bi-x-circle me-1"></i>Unmap
+              </button>
+            </form>
+            {% endif %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ report_back_url }}">
+              <i class="bi bi-arrow-left me-1"></i>Back to Full Report
+            </a>
+          </div>
+        </div>
+        {% endif %}
+        <datalist id="tracked-items-list"></datalist>
+        {% for group in production_report_rows or [] %}
+        {% set group_meta = namespace(total_oz=0) %}
+        {% for meta_row in group.rows or [] %}
+        {% set group_meta.total_oz = group_meta.total_oz + (meta_row.total_oz or 0) %}
+        {% endfor %}
+        <div class="card mb-3 production-group-card" data-total-units="{{ '%.6f'|format(group.total_units or 0) }}">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <span class="fw-semibold fs-5">{{ group.production_item_name }}</span>
+              <div class="d-flex flex-wrap gap-1 mt-1 compact-kpi">
+                <span class="badge text-bg-light border">Total Units {{ group.total_units|comma }}</span>
+                <span class="badge text-bg-light border">Cases Exact {{ '%.2f'|format(group.cases_exact) }}</span>
+                <span class="badge text-bg-secondary">Mapped {{ (group.rows or [])|length }}</span>
+              </div>
+            </div>
+            <div class="production-group-controls">
+              {% if (report_view or 'compact') == 'compact' and not is_focus_mode %}
+              <button class="btn btn-sm btn-outline-primary production-interactive" type="button" data-bs-toggle="collapse" data-bs-target="#groupDetails-{{ loop.index }}" aria-expanded="false">
+                <i class="bi bi-arrows-expand me-1"></i>Details
+              </button>
+              {% endif %}
+              {% if group.production_item_id %}
+              <form method="post" action="{{ url_for('update_production_item_case_pack', item_id=group.production_item_id) }}" class="production-interactive">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="location_id" value="{{ upload_filters.location_id if upload_filters else '' }}">
+                <input type="hidden" name="next" value="{{ url_for('reports_production_page', search=upload_filters.search if upload_filters else '', view=report_view or 'compact', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '', focus_item_id=group.production_item_id if is_focus_mode and group.production_item_id else '') }}">
+                <label class="small text-muted mb-0">Mode</label>
+                <select class="form-select form-select-sm w-compact-110" name="count_mode">
+                  <option value="unit" {% if group.count_mode != 'weight' %}selected{% endif %}>Unit</option>
+                  <option value="weight" {% if group.count_mode == 'weight' %}selected{% endif %}>Weight</option>
+                </select>
+                <label class="small text-muted mb-0">{% if group.count_mode == 'weight' %}Case Weight (lbs){% else %}Case Pack{% endif %}</label>
+                <input class="form-control form-control-sm w-compact-120" type="number" name="case_pack_units" min="0.01" step="0.01" value="{{ '%.2f'|format(group.case_size or 250) }}">
+                <label class="small text-muted mb-0">Oz/Unit</label>
+                <input class="form-control form-control-sm w-compact-120" type="number" name="weight_oz_per_unit" min="0.01" step="0.01" value="{{ '%.2f'|format(group.weight_oz_per_unit or 0) if group.count_mode == 'weight' else '' }}" placeholder="required if weight">
+                <button class="btn btn-sm btn-outline-primary" type="submit">
+                  <i class="bi bi-check2"></i>
+                </button>
+              </form>
+              {% endif %}
+            </div>
+          </div>
+          <div class="px-3 pb-2 pt-0 border-top-0">
+            <div class="d-flex flex-wrap gap-2 production-group-summary">
+              <span class="badge text-bg-light border">Mode {{ 'Weight' if group.count_mode == 'weight' else 'Unit' }}</span>
+              <span class="badge text-bg-light border">{% if group.count_mode == 'weight' %}Case Weight{% else %}Case Pack{% endif %} {{ '%.2f'|format(group.case_size or 0) }}</span>
+              {% if group.weight_oz_per_unit %}
+              <span class="badge text-bg-light border">Oz/Unit {{ '%.2f'|format(group.weight_oz_per_unit or 0) }}</span>
+              {% endif %}
+              {% if group_meta.total_oz > 0 %}
+              <span class="badge text-bg-light border">Total Oz {{ '%.2f'|format(group_meta.total_oz) }}</span>
+              {% endif %}
+              {% if group.total_weight_lbs is not none %}
+              <span class="badge text-bg-light border">Total Lbs {{ '%.2f'|format(group.total_weight_lbs) }}</span>
+              {% endif %}
+              <span class="badge text-bg-light border">Cases Round Up {{ '%.2f'|format(group.cases_required) }}</span>
+            </div>
+          </div>
+          <div id="groupDetails-{{ loop.index }}" class="{% if (report_view or 'compact') == 'compact' and not is_focus_mode %}collapse{% endif %} {% if (report_view or 'compact') == 'expanded' or is_focus_mode %}show{% endif %}">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-sm table-striped table-hover mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th>Menu Item</th>
+                    <th>Avg Price</th>
+                    <th>Orders</th>
+                    <th>Gross Total</th>
+                    <th>Discount</th>
+                    <th>Net Sales</th>
+                    <th>Units per Order</th>
+                    <th>Total Units</th>
+                    <th>Total Oz</th>
+                    <th>Total Lbs</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in group.rows %}
+                  <tr data-orders="{{ row.orders | int }}">
+                    <td>
+                      {% if group.production_item_id %}
+                      <a class="link-primary text-decoration-none" href="{{ url_for('reports_production_page', search=upload_filters.search if upload_filters else '', view=report_view or 'compact', start_date=upload_filters.start_date if upload_filters else '', end_date=upload_filters.end_date if upload_filters else '', location_id=upload_filters.location_id if upload_filters else '', focus_item_id=group.production_item_id, focus_source_item=row.source_item_name) }}" title="Open quick edit for this menu item">
+                        {{ row.source_item_name }}
+                      </a>
+                      {% else %}
+                      {{ row.source_item_name }}
+                      {% endif %}
+                    </td>
+                    <td>${{ '%.2f'|format(row.item_cost) }}</td>
+                    <td>{{ row.orders }}</td>
+                    <td>${{ '%.2f'|format(row.gross_total) }}</td>
+                    <td>${{ '%.2f'|format(row.total_refund) }}</td>
+                    <td>${{ '%.2f'|format(row.net_sales) }}</td>
+                    <td>
+                      {% if is_focus_mode and focused_source_item_name and group.production_item_id and row.source_item_name == focused_source_item_name %}
+                      <form method="post" action="{{ url_for('update_reports_production_mapping_units') }}" class="d-flex align-items-center gap-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="location_id" value="{{ upload_filters.location_id if upload_filters else '' }}">
+                        <input type="hidden" name="production_item_name" value="{{ group.production_item_name }}">
+                        <input type="hidden" name="source_item_name" value="{{ row.source_item_name }}">
+                        <input type="hidden" name="next" value="{{ current_report_url }}">
+                        <input class="form-control form-control-sm w-compact-110" type="number" name="units_per_order" min="0.01" step="0.01" value="{{ '%.2f'|format(row.units_per_order) }}">
+                        <button class="btn btn-sm btn-outline-primary" type="submit" title="Save units per order">
+                          <i class="bi bi-check2"></i>
+                        </button>
+                      </form>
+                      {% else %}
+                      {{ '%.2f'|format(row.units_per_order) }}
+                      {% endif %}
+                    </td>
+                    <td>{{ '%.2f'|format(row.total_units) }}</td>
+                    <td>{% if row.total_oz is not none %}{{ '%.2f'|format(row.total_oz) }}{% else %}&mdash;{% endif %}</td>
+                    <td>{% if row.total_lbs is not none %}{{ '%.2f'|format(row.total_lbs) }}{% else %}&mdash;{% endif %}</td>
+                    <td class="text-end">
+                      {% if group.production_item_id %}
+                      <form method="post" action="{{ url_for('unmap_item_category_page') }}" class="d-inline" onsubmit="return confirm('Remove mapping for &quot;{{ row.source_item_name | replace('\"', '&quot;') }}&quot;? This cannot be undone.')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="item_name" value="{{ row.source_item_name }}">
+                        <input type="hidden" name="location_id" value="{{ upload_filters.location_id if upload_filters else '' }}">
+                        <input type="hidden" name="next" value="{{ report_back_url }}">
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1" type="submit" title="Remove this mapping">
+                          <i class="bi bi-x-circle"></i>
+                        </button>
+                      </form>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th colspan="2" class="text-end">Gross Total</th>
+                    <th colspan="3">${{ '%.2f'|format(group.total_gross) }}</th>
+                    <th colspan="6"></th>
+                  </tr>
+                  <tr>
+                    <th colspan="2" class="text-end">Total Discount</th>
+                    <th colspan="3">${{ '%.2f'|format(group.total_refund) }}</th>
+                    <th colspan="6"></th>
+                  </tr>
+                  <tr>
+                    <th colspan="2" class="text-end">Net Sales</th>
+                    <th colspan="3">${{ '%.2f'|format(group.total_net_sales) }}</th>
+                    <th colspan="6"></th>
+                  </tr>
+                  <tr>
+                    <th colspan="10" class="text-end">Total Units</th>
+                    <th>{{ '%.2f'|format(group.total_units) }}</th>
+                  </tr>
+                  <tr>
+                    <th colspan="7" class="text-end">{% if group.count_mode == 'weight' %}Case Weight (lbs per case){% else %}Case Pack (units per case){% endif %}</th>
+                    <th>{{ '%.2f'|format(group.case_size) }}</th>
+                  </tr>
+                  {% if group.count_mode == 'weight' %}
+                  <tr>
+                    <th colspan="7" class="text-end">Weight Basis (oz per unit)</th>
+                    <th>{{ '%.2f'|format(group.weight_oz_per_unit) }}</th>
+                  </tr>
+                  <tr>
+                    <th colspan="7" class="text-end">Total Weight (lbs)</th>
+                    <th>{{ '%.2f'|format(group.total_weight_lbs) }}</th>
+                  </tr>
+                  {% endif %}
+                  <tr>
+                    <th colspan="7" class="text-end">Cases Needed (exact)</th>
+                    <th>{{ '%.2f'|format(group.cases_exact) }}</th>
+                  </tr>
+                  <tr>
+                    <th colspan="7" class="text-end">Cases Needed (round up)</th>
+                    <th>{{ '%.2f'|format(group.cases_required) }}</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {% if group.production_item_id %}
+            <div class="px-3 py-2 border-top">
+              <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                <span class="small text-muted fw-semibold">Mapped items:</span>
+                {% for row in group.rows %}
+                <span class="badge rounded-pill bg-light text-dark border d-inline-flex align-items-center gap-1 mapping-pill">
+                  {{ row.source_item_name }}
+                  <span class="text-muted mapping-pill-meta">× {{ "%.2f"|format(row.units_per_order) }}</span>
+                  <form method="post" action="{{ url_for('unmap_item_category_page') }}" class="d-inline m-0 p-0" onsubmit="return confirm('Remove mapping for &quot;{{ row.source_item_name }}&quot;?')">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="item_name" value="{{ row.source_item_name }}">
+                    <input type="hidden" name="location_id" value="{{ upload_filters.location_id if upload_filters else '' }}">
+                    <input type="hidden" name="next" value="{{ report_back_url }}">
+                    <button type="submit" class="btn btn-link p-0 m-0 text-danger lh-1 mapping-pill-remove" title="Unmap {{ row.source_item_name }}">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </form>
+                </span>
+                {% else %}
+                <span class="small text-muted fst-italic">No items mapped yet.</span>
+                {% endfor %}
+              </div>
+              <button class="btn btn-sm btn-outline-success" type="button" data-bs-toggle="collapse" data-bs-target="#addMapping-{{ group.production_item_id }}" aria-expanded="false">
+                <i class="bi bi-plus-circle me-1"></i>Add Mapping
+              </button>
+              <div class="collapse mt-2" id="addMapping-{{ group.production_item_id }}">
+                <form method="post" action="{{ url_for('map_item_category_page') }}" class="row g-2 align-items-end">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="location_id" value="{{ upload_filters.location_id if upload_filters else '' }}">
+                  <input type="hidden" name="next" value="{{ report_back_url }}">
+                  <div class="col-12 col-md-4">
+                    <label class="form-label small mb-1">Source Item <span class="text-muted">(exact name from upload)</span></label>
+                    <input class="form-control form-control-sm js-source-item-autocomplete" type="text" name="item_name" list="tracked-items-list" value="{{ focused_source_item_name if is_focus_mode and focused_source_item_name else '' }}" placeholder="e.g. Philly Cheese Tater" autocomplete="off" required>
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label small mb-1">Map into Production Item</label>
+                    <select class="form-select form-select-sm" name="production_item_name" id="prodSelect-{{ group.production_item_id }}">
+                      <option value="">— select existing —</option>
+                      {% for pi in all_production_items or [] %}
+                      <option value="{{ pi.item_name }}" {% if pi.item_name == group.production_item_name %}selected{% endif %}>{{ pi.item_name }}</option>
+                      {% endfor %}
+                    </select>
+                    <div class="mt-1 d-flex align-items-center gap-1">
+                      <span class="small text-muted">or create new:</span>
+                      <input class="form-control form-control-sm w-compact-220" type="text" name="new_production_item_name" placeholder="New item name">
+                    </div>
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label small mb-1">Units per Order</label>
+                    <input class="form-control form-control-sm" type="number" name="units_per_order" value="1" min="0.01" step="0.01" required>
+                  </div>
+                  <div class="col-6 col-md-2 d-grid">
+                    <label class="form-label small mb-1">&nbsp;</label>
+                    <button class="btn btn-sm btn-success" type="submit"><i class="bi bi-check2 me-1"></i>Map</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+          </div>
+        </div>
+        {% endfor %}
+        {% if not production_report_rows %}
+        <div class="text-muted">No Production List mappings found for this location and filter set.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if is_focus_mode and trend_data %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-graph-up me-2"></i>
+          Movement Trend — {{ focused_item_name }}{% if focused_source_item_name %} / {{ focused_source_item_name }}{% endif %}
+        </span>
+        <div class="d-flex gap-2 align-items-center">
+          <label class="small text-muted mb-0 me-1">Range</label>
+          <select class="form-select form-select-sm w-compact-160" id="trendRangeSelect">
+            <option value="week" selected>Last 7 Days</option>
+            <option value="month">Last 30 Days</option>
+            <option value="ytd">Year to Date</option>
+            <option value="all">All Time</option>
+          </select>
+          <label class="small text-muted mb-0 me-1">Show</label>
+          <select class="form-select form-select-sm w-compact-160" id="trendMetricSelect">
+            <option value="total_units" selected>Total Units</option>
+            <option value="total_orders">Total Orders</option>
+            <option value="total_gross">Gross Total ($)</option>
+            <option value="total_refund">Discount ($)</option>
+            <option value="total_net_sales">Net Sales ($)</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive pb-1">
+          <div class="trend-panel-heading">Line Trend</div>
+          <div id="productTrendSurface" class="trend-surface">
+            <canvas id="productTrendChart" class="trend-chart"></canvas>
+          </div>
+        </div>
+        <div class="table-responsive pt-3 border-top mt-3">
+          <div class="trend-panel-heading">Bar Breakdown</div>
+          <div id="productTrendBarSurface" class="trend-surface trend-surface-compact">
+            <canvas id="productTrendBarChart" class="trend-bar-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script>
+  (function () {
+    var trendData = {{ trend_data | tojson }};
+    var allPoints = trendData.map(function (d) {
+      var parsedDate = null;
+      if (d.period) {
+        var isoDay = String(d.period) + 'T00:00:00';
+        var tmp = new Date(isoDay);
+        if (!Number.isNaN(tmp.getTime())) {
+          parsedDate = tmp;
+        }
+      }
+      return {
+        period: d.period,
+        date: parsedDate,
+        total_units: d.total_units,
+        total_orders: d.total_orders,
+        total_gross: d.total_gross,
+        total_refund: d.total_refund,
+        total_net_sales: d.total_net_sales,
+      };
+    });
+
+    var metricMap = {
+      total_units:     { label: 'Total Units', color: 'rgb(99,102,241)', isDollar: false },
+      total_orders:    { label: 'Total Orders', color: 'rgb(16,185,129)', isDollar: false },
+      total_gross:     { label: 'Gross Total', color: 'rgb(245,158,11)', isDollar: true },
+      total_refund:    { label: 'Discount', color: 'rgb(239,68,68)', isDollar: true },
+      total_net_sales: { label: 'Net Sales', color: 'rgb(6,182,212)', isDollar: true },
+    };
+
+    var currentMetric = 'total_units';
+    var currentRange = 'week';
+    var canvasEl = document.getElementById('productTrendChart');
+    var barCanvasEl = document.getElementById('productTrendBarChart');
+    var trendSurface = document.getElementById('productTrendSurface');
+    var trendBarSurface = document.getElementById('productTrendBarSurface');
+
+    function getLatestDate(points) {
+      var latest = null;
+      points.forEach(function (p) {
+        if (!p.date) {
+          return;
+        }
+        if (!latest || p.date > latest) {
+          latest = p.date;
+        }
+      });
+      return latest;
+    }
+
+    function getPointsForRange(rangeKey) {
+      if (rangeKey === 'all') {
+        return allPoints.slice();
+      }
+
+      var latest = getLatestDate(allPoints);
+      if (!latest) {
+        return allPoints.slice();
+      }
+
+      var start = new Date(latest);
+      if (rangeKey === 'week') {
+        start.setDate(start.getDate() - 6);
+      } else if (rangeKey === 'month') {
+        start.setDate(start.getDate() - 29);
+      } else if (rangeKey === 'ytd') {
+        start = new Date(latest.getFullYear(), 0, 1);
+      }
+
+      var filtered = allPoints.filter(function (p) {
+        if (!p.date) {
+          return true;
+        }
+        return p.date >= start && p.date <= latest;
+      });
+
+      return filtered.length ? filtered : allPoints.slice();
+    }
+
+    function getSeriesValues(points, metricKey) {
+      return points.map(function (p) {
+        return Number(p[metricKey] || 0);
+      });
+    }
+
+    var initialPoints = getPointsForRange(currentRange);
+    var initialLabels = initialPoints.map(function (p) { return p.period; });
+    var initialMetric = metricMap[currentMetric];
+
+    var ctx = canvasEl.getContext('2d');
+    var chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: initialLabels,
+        datasets: [{
+          label: initialMetric.label,
+          data: getSeriesValues(initialPoints, currentMetric),
+          borderColor: initialMetric.color,
+          backgroundColor: initialMetric.color.replace('rgb', 'rgba').replace(')', ',0.12)'),
+          borderWidth: 2,
+          pointRadius: initialLabels.length > 120 ? 1.5 : (initialLabels.length > 60 ? 2.5 : 4),
+          pointHoverRadius: 6,
+          tension: 0.3,
+          fill: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var isDollar = metricMap[currentMetric].isDollar;
+                var val = ctx.parsed.y.toFixed(2);
+                return ctx.dataset.label + ': ' + (isDollar ? '$' : '') + val;
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(val) {
+                return metricMap[currentMetric].isDollar ? '$' + val.toFixed(2) : val;
+              }
+            }
+          },
+          x: {
+            ticks: {
+              autoSkip: false,
+              maxRotation: 60,
+              minRotation: 60,
+            }
+          }
+        }
+      }
+    });
+
+    var barCtx = barCanvasEl.getContext('2d');
+    var barChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: initialLabels,
+        datasets: [{
+          label: initialMetric.label,
+          data: getSeriesValues(initialPoints, currentMetric),
+          backgroundColor: initialMetric.color.replace('rgb', 'rgba').replace(')', ',0.72)'),
+          borderColor: initialMetric.color,
+          borderWidth: 1,
+          borderRadius: 6,
+          maxBarThickness: 36,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var isDollar = metricMap[currentMetric].isDollar;
+                var val = ctx.parsed.y.toFixed(2);
+                return ctx.dataset.label + ': ' + (isDollar ? '$' : '') + val;
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: function(val) {
+                return metricMap[currentMetric].isDollar ? '$' + val.toFixed(2) : val;
+              }
+            }
+          },
+          x: {
+            ticks: {
+              autoSkip: false,
+              maxRotation: 60,
+              minRotation: 60,
+            }
+          }
+        }
+      }
+    });
+
+    function updateChart() {
+      var points = getPointsForRange(currentRange);
+      var labels = points.map(function (p) { return p.period; });
+      var metric = metricMap[currentMetric];
+
+      if (trendSurface) {
+        var minWidth = Math.max(1000, labels.length * 64);
+        trendSurface.style.minWidth = minWidth + 'px';
+      }
+
+      if (trendBarSurface) {
+        var barMinWidth = Math.max(1000, labels.length * 48);
+        trendBarSurface.style.minWidth = barMinWidth + 'px';
+      }
+
+      chart.data.labels = labels;
+      chart.data.datasets[0].label = metric.label;
+      chart.data.datasets[0].data = getSeriesValues(points, currentMetric);
+      chart.data.datasets[0].borderColor = metric.color;
+      chart.data.datasets[0].backgroundColor = metric.color.replace('rgb', 'rgba').replace(')', ',0.12)');
+      chart.data.datasets[0].pointRadius = labels.length > 120 ? 1.5 : (labels.length > 60 ? 2.5 : 4);
+      chart.update();
+
+      barChart.data.labels = labels;
+      barChart.data.datasets[0].label = metric.label;
+      barChart.data.datasets[0].data = getSeriesValues(points, currentMetric);
+      barChart.data.datasets[0].borderColor = metric.color;
+      barChart.data.datasets[0].backgroundColor = metric.color.replace('rgb', 'rgba').replace(')', ',0.72)');
+      barChart.update();
+    }
+
+    document.getElementById('trendMetricSelect').addEventListener('change', function () {
+      currentMetric = this.value;
+      updateChart();
+    });
+
+    document.getElementById('trendRangeSelect').addEventListener('change', function () {
+      currentRange = this.value;
+      updateChart();
+    });
+
+    updateChart();
+
+    window.addEventListener('beforeprint', function () {
+      chart.resize();
+      barChart.resize();
+    });
+
+    window.addEventListener('afterprint', function () {
+      chart.resize();
+      barChart.resize();
+    });
+  })();
+  </script>
+  {% endif %}
+</div>
+<script>
+(function () {
+  var printPanels = Array.prototype.slice.call(document.querySelectorAll('[id^="groupDetails-"]'));
+  if (!printPanels.length) return;
+
+  function togglePrintMode(enable) {
+    document.body.classList.toggle('production-report-printing', enable);
+    printPanels.forEach(function (panel) {
+      if (enable) {
+        panel.dataset.wasShown = panel.classList.contains('show') ? '1' : '0';
+        panel.classList.add('show');
+        return;
+      }
+
+      if (panel.dataset.wasShown === '0') {
+        panel.classList.remove('show');
+      }
+      delete panel.dataset.wasShown;
+    });
+  }
+
+  window.addEventListener('beforeprint', function () {
+    togglePrintMode(true);
+  });
+
+  window.addEventListener('afterprint', function () {
+    togglePrintMode(false);
+  });
+})();
+
+(function () {
+  var hideZeroSalesToggle = document.getElementById('hideZeroSalesToggle');
+  var showZeroUnitGroupsToggle = document.getElementById('showZeroUnitGroupsToggle');
+  if (!hideZeroSalesToggle || !showZeroUnitGroupsToggle) return;
+  hideZeroSalesToggle.checked = true;
+  showZeroUnitGroupsToggle.checked = false;
+
+  function applyFilter() {
+    var hideZero = hideZeroSalesToggle.checked;
+    var showZeroUnitGroups = showZeroUnitGroupsToggle.checked;
+    document.querySelectorAll('.production-group-card').forEach(function (card) {
+      var totalUnits = parseFloat(card.getAttribute('data-total-units') || '0');
+      var visibleRows = 0;
+
+      card.querySelectorAll('tr[data-orders]').forEach(function (tr) {
+        var orders = parseInt(tr.getAttribute('data-orders'), 10);
+        var hideRow = hideZero && orders === 0;
+        tr.style.display = hideRow ? 'none' : '';
+        if (!hideRow) {
+          visibleRows += 1;
+        }
+      });
+
+      var hideGroup = (!showZeroUnitGroups && totalUnits <= 0) || (hideZero && visibleRows === 0);
+      card.style.display = hideGroup ? 'none' : '';
+    });
+  }
+
+  hideZeroSalesToggle.addEventListener('change', applyFilter);
+  showZeroUnitGroupsToggle.addEventListener('change', applyFilter);
+  applyFilter(); // Apply filter on page load
+})();
+
+(function () {
+  var datalist = document.getElementById('tracked-items-list');
+  if (!datalist) return;
+
+  var sourceInputs = Array.prototype.slice.call(document.querySelectorAll('.js-source-item-autocomplete'));
+  if (!sourceInputs.length) return;
+
+  var trackedItems = {{ (all_tracked_items or []) | map(attribute='item_name') | list | tojson }};
+  var mappedItems = {{ (mapped_source_items or []) | map(attribute='source_item_name') | list | tojson }};
+  var mappedSet = new Set((mappedItems || []).map(function (v) {
+    return String(v || '').trim().toLowerCase();
+  }));
+
+  var unmappedItems = (trackedItems || []).filter(function (item) {
+    var normalized = String(item || '').trim().toLowerCase();
+    return normalized && !mappedSet.has(normalized);
+  });
+
+  function rankedSuggestions(query) {
+    var q = String(query || '').trim().toLowerCase();
+    if (!q) {
+      return unmappedItems.slice(0, 120);
+    }
+
+    var prefix = [];
+    var contains = [];
+
+    unmappedItems.forEach(function (item) {
+      var normalized = String(item || '').toLowerCase();
+      if (normalized.indexOf(q) === 0) {
+        prefix.push(item);
+      } else if (normalized.indexOf(q) > -1) {
+        contains.push(item);
+      }
+    });
+
+    return prefix.concat(contains).slice(0, 120);
+  }
+
+  function renderSuggestions(query) {
+    var suggestions = rankedSuggestions(query);
+    datalist.innerHTML = '';
+    suggestions.forEach(function (item) {
+      var option = document.createElement('option');
+      option.value = item;
+      datalist.appendChild(option);
+    });
+  }
+
+  sourceInputs.forEach(function (input) {
+    input.addEventListener('focus', function () {
+      renderSuggestions(input.value);
+    });
+    input.addEventListener('input', function () {
+      renderSuggestions(input.value);
+    });
+  });
+})();
+</script>
+{% endblock %}

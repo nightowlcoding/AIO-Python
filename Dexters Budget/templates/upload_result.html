@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>UPLOAD REVIEW</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --green: #00FF41;
+    --green-dim: #00aa2a;
+    --green-dark: #003B00;
+    --green-glow: rgba(0,255,65,0.25);
+    --bg: #0a0a0a;
+    --surface: #0f0f0f;
+    --surface2: #151515;
+    --amber: #FFB300;
+    --red: #FF3B3B;
+    --cyan: #00E5FF;
+    --purple: #CC66FF;
+    --border: 1px solid var(--green-dim);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  header {
+    background: #050505;
+    border-bottom: 1px solid var(--green);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 0 18px var(--green-glow);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  h1 { font-size: 1.1rem; letter-spacing: 3px; }
+  .btn {
+    background: transparent;
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: inherit;
+    padding: 6px 14px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 0.8rem;
+  }
+  .btn:hover { background: var(--green-dark); }
+  main { padding: 18px 24px; max-width: 1400px; margin: 0 auto; }
+  .meta {
+    border: var(--border);
+    background: var(--surface);
+    padding: 12px;
+    margin-bottom: 16px;
+    font-size: 0.78rem;
+    color: var(--green-dim);
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .card {
+    background: var(--surface);
+    border: var(--border);
+    padding: 12px;
+  }
+  .label { font-size: 0.68rem; color: var(--green-dim); margin-bottom: 6px; letter-spacing: 1px; }
+  .value { font-size: 1.1rem; }
+  .cyan { color: var(--cyan); }
+  .amber { color: var(--amber); }
+  .red { color: var(--red); }
+  .section-title {
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    color: var(--green-dim);
+    border-bottom: var(--border);
+    padding-bottom: 6px;
+    margin: 20px 0 10px;
+  }
+  .filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .filters input, .filters select {
+    background: var(--surface2);
+    border: var(--border);
+    color: var(--green);
+    font-family: inherit;
+    font-size: 0.78rem;
+    padding: 6px 8px;
+    min-width: 160px;
+  }
+  .table-wrap {
+    background: var(--surface);
+    border: var(--border);
+    overflow-x: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--green-dim); }
+  th, td { padding: 8px 10px; text-align: left; }
+  tbody tr { border-bottom: 1px solid #1a1a1a; }
+  tbody tr:hover { background: var(--green-dark); }
+  .amount-pos { color: var(--green); }
+  .amount-neg { color: var(--red); }
+  .badge { display: inline-block; border: 1px solid var(--green-dim); font-size: 0.64rem; padding: 2px 6px; }
+  .loading { padding: 22px; color: var(--green-dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>&gt; UPLOAD REVIEW</h1>
+  <div>
+    <a class="btn" href="/">[ BACK TO DASHBOARD ]</a>
+  </div>
+</header>
+
+<main>
+  <div id="import-meta" class="meta">Loading upload details...</div>
+
+  <div class="cards" id="summary-cards"></div>
+
+  <div class="section-title">TOP MERCHANTS IN THIS UPLOAD</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>MERCHANT</th><th>TOTAL</th></tr></thead>
+      <tbody id="merchant-tbody"><tr><td colspan="2" class="loading">LOADING...</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">UPLOADED TRANSACTIONS (SORTED)</div>
+  <div class="filters">
+    <select id="filter-category">
+      <option value="">ALL CATEGORIES</option>
+      <option value="recurring">RECURRING</option>
+      <option value="mortgage">MORTGAGE</option>
+      <option value="expense">EXPENSE</option>
+      <option value="transfer">TRANSFER</option>
+      <option value="deposit">DEPOSIT</option>
+    </select>
+    <input id="filter-search" type="text" placeholder="Search merchant/description"/>
+    <button class="btn" onclick="renderRows()">[ APPLY FILTER ]</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>DATE</th><th>MERCHANT</th><th>DESCRIPTION</th><th>CATEGORY</th><th>DUP</th><th>AMOUNT</th></tr></thead>
+      <tbody id="rows-tbody"><tr><td colspan="5" class="loading">LOADING...</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+const importId = Number(location.pathname.split('/').pop());
+const fmt = v => '$' + Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+let allRows = [];
+
+function badge(cat) {
+  return `<span class="badge">${(cat || '').toUpperCase()}</span>`;
+}
+
+function renderSummary(totals) {
+  const c = totals.categories || {};
+  const totalRecurring = Number(c.recurring || 0) + Number(c.mortgage || 0);
+  const billsPlusExpense = totalRecurring + Number(c.expense || 0);
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="card"><div class="label">ROW COUNT</div><div class="value">${totals.count || 0}</div></div>
+    <div class="card"><div class="label">DUPLICATES</div><div class="value amber">${totals.duplicates || 0}</div></div>
+    <div class="card"><div class="label">RECURRING</div><div class="value amber">${fmt(c.recurring || 0)}</div></div>
+    <div class="card"><div class="label">MORTGAGE</div><div class="value cyan">${fmt(c.mortgage || 0)}</div></div>
+    <div class="card"><div class="label">EXPENSE (THIS UPLOAD)</div><div class="value red">${fmt(c.expense || 0)}</div></div>
+    <div class="card"><div class="label">TOTAL RECURRING (REC + MTG)</div><div class="value amber">${fmt(totalRecurring)}</div></div>
+    <div class="card"><div class="label">BILLS + EXPENSE</div><div class="value cyan">${fmt(billsPlusExpense)}</div></div>
+    <div class="card"><div class="label">TRANSFER</div><div class="value">${fmt(c.transfer || 0)}</div></div>
+    <div class="card"><div class="label">DEPOSIT</div><div class="value">${fmt(c.deposit || 0)}</div></div>
+    <div class="card"><div class="label">NET</div><div class="value ${totals.net >= 0 ? 'amount-pos' : 'amount-neg'}">${totals.net >= 0 ? '+' : ''}${totals.net.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</div></div>
+  `;
+}
+
+function renderMerchants(list) {
+  const tbody = document.getElementById('merchant-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="2" class="loading">NO DATA</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(x => `<tr><td>${x.merchant}</td><td>${fmt(x.total)}</td></tr>`).join('');
+}
+
+function renderRows() {
+  const cat = document.getElementById('filter-category').value;
+  const q = document.getElementById('filter-search').value.trim().toLowerCase();
+  let rows = allRows.slice();
+  if (cat) rows = rows.filter(r => r.category === cat);
+  if (q) rows = rows.filter(r => (r.merchant || '').toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q));
+
+  const tbody = document.getElementById('rows-tbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">NO MATCHING ROWS</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.date}</td>
+      <td>${r.merchant}</td>
+      <td>${r.description || ''}</td>
+      <td>${badge(r.category)}</td>
+      <td>${r.is_duplicate ? 'YES' : ''}</td>
+      <td class="${r.amount >= 0 ? 'amount-pos' : 'amount-neg'}">${r.amount >= 0 ? '+' : '-'}${fmt(r.amount)}</td>
+    </tr>
+  `).join('');
+}
+
+async function init() {
+  const res = await fetch(`/api/import/${importId}/rows`);
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById('import-meta').textContent = 'Unable to load upload details: ' + (data.error || 'Unknown error');
+    return;
+  }
+
+  document.getElementById('import-meta').innerHTML =
+    `UPLOAD #${data.import.id} | FILE: ${data.import.filename} | IMPORTED: ${new Date(data.import.imported_at).toLocaleString()}`;
+
+  allRows = data.rows || [];
+  renderSummary(data.totals || {count: 0, categories: {}, net: 0});
+  renderMerchants(data.top_merchants || []);
+  renderRows();
+}
+
+init();
+</script>
+</body>
+</html>

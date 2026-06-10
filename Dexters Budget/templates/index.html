@@ -285,6 +285,7 @@
   <button data-tab="transfers">TRANSFERS</button>
   <button data-tab="expenses">EXPENSES</button>
   <button data-tab="income-savings">INCOME &amp; SAVINGS</button>
+  <button data-tab="budget-control">BUDGET VS ACTUAL</button>
   <button data-tab="all">ALL TRANSACTIONS</button>
   <button data-tab="add-entry">+ ADD ENTRY</button>
 </nav>
@@ -312,7 +313,7 @@
           <tr>
             <th>MERCHANT</th>
             <th>MONTHLY AVG</th>
-            <th>LAST AMOUNT</th>
+            <th>LAST UPLOAD AMOUNT</th>
             <th>TREND</th>
             <th>MONTHS (SPARKLINE)</th>
             <th>ACTION</th>
@@ -434,6 +435,11 @@
         <button class="btn" onclick="saveIncomePlan()">[ SAVE RUN ]</button>
         <button class="btn btn-amber" onclick="resetIncomeDefaults()">[ RESET DEFAULTS ]</button>
       </div>
+      <div style="font-size:0.72rem;color:var(--green-dim);margin-top:10px;line-height:1.5;">
+        ACCOUNT BALANCE = PERSON 1 BALANCE + PERSON 2 BALANCE.<br/>
+        BILLS DUE AFTER ACCOUNT BALANCE = MONTHLY EXPENSES - ACCOUNT BALANCE.<br/>
+        ADJUSTED BILLS PERSON 1 = BILLS DUE * 60% | ADJUSTED BILLS PERSON 2 = BILLS DUE * 40%.
+      </div>
       <div id="income-status" style="font-size:0.78rem;min-height:20px;margin-top:10px;color:var(--green-dim);"></div>
     </div>
 
@@ -460,6 +466,68 @@
         <tbody id="savings-history-tbody"></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- ══════════════════ BUDGET VS ACTUAL ══════════════════ -->
+  <div class="tab-panel" id="tab-budget-control">
+    <div class="section-title">MONTHLY BUDGET CONTROL</div>
+    <div style="background:var(--surface);border:var(--border);padding:20px;box-shadow:0 0 6px var(--green-glow);margin-bottom:20px;">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>MONTH</label>
+          <input type="month" id="budget-month"/>
+        </div>
+        <div class="form-group">
+          <label>RECURRING BUDGET</label>
+          <input type="number" id="budget-recurring" step="0.01" value="0"/>
+        </div>
+        <div class="form-group">
+          <label>MORTGAGE BUDGET</label>
+          <input type="number" id="budget-mortgage" step="0.01" value="0"/>
+        </div>
+        <div class="form-group">
+          <label>MISC EXPENSE BUDGET</label>
+          <input type="number" id="budget-expense" step="0.01" value="0"/>
+        </div>
+        <div class="form-group">
+          <label>TRANSFER BUDGET</label>
+          <input type="number" id="budget-transfer" step="0.01" value="0"/>
+        </div>
+        <div class="form-group" style="grid-column: span 2;">
+          <label>NOTES</label>
+          <textarea id="budget-notes" placeholder="Optional notes for this month..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn" onclick="saveBudgetPlan()">[ SAVE BUDGET ]</button>
+        <button class="btn" onclick="loadBudgetComparison()">[ REFRESH COMPARISON ]</button>
+      </div>
+      <div id="budget-status" style="font-size:0.78rem;min-height:20px;margin-top:10px;color:var(--green-dim);"></div>
+    </div>
+
+    <div class="section-title">CURRENT BUDGET BASELINE (AVG MONTHLY BILLS)</div>
+    <div style="background:var(--surface);border:var(--border);padding:14px 20px;box-shadow:0 0 6px var(--green-glow);margin-bottom:16px;">
+      <div class="filters" style="margin-bottom:8px;">
+        <label style="font-size:0.72rem;color:var(--green-dim);">COMPARE MONTH</label>
+        <input type="month" id="current-budget-month"/>
+        <button class="btn" onclick="loadCurrentBudgetComparison()">[ COMPARE ]</button>
+      </div>
+      <div class="cards" id="current-budget-cards"></div>
+      <div id="current-budget-status" style="font-size:0.75rem;min-height:18px;color:var(--green-dim);"></div>
+    </div>
+
+    <div class="cards" id="budget-summary-cards"></div>
+
+    <div class="section-title">CATEGORY COMPARISON</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>CATEGORY</th><th>BUDGET</th><th>ACTUAL</th><th>VARIANCE</th><th>STATUS</th></tr></thead>
+        <tbody id="budget-compare-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="section-title">BUDGET TREND (LAST 12 MONTHS)</div>
+    <div class="chart-wrap"><canvas id="budget-trend-chart"></canvas></div>
   </div>
 
   <!-- ══════════════════ ALL TRANSACTIONS ══════════════════ -->
@@ -593,6 +661,7 @@ document.querySelectorAll('#tabs button').forEach(btn => {
     if (btn.dataset.tab === 'transfers') loadTransfers();
     if (btn.dataset.tab === 'expenses') loadExpenses();
     if (btn.dataset.tab === 'income-savings') loadIncomeSavings();
+    if (btn.dataset.tab === 'budget-control') loadBudgetControl();
     if (btn.dataset.tab === 'all') loadAll();
     if (btn.dataset.tab === 'add-entry') loadManualList();
   });
@@ -617,7 +686,12 @@ $('upload-btn').addEventListener('click', async () => {
   if (data.error) {
     $('upload-status').textContent = 'ERROR: ' + data.error;
   } else {
-    $('upload-status').textContent = `OK: ${data.inserted} inserted, ${data.duplicates} duplicates skipped`;
+    const skipped = Number(data.skipped || 0);
+    $('upload-status').textContent = `OK: ${data.inserted} inserted, ${data.duplicates} duplicates, ${skipped} invalid rows skipped`;
+    if (data.import_id) {
+      window.location.href = '/upload/result/' + encodeURIComponent(data.import_id);
+      return;
+    }
     loadOverview();
     loadImportHistory();
   }
@@ -764,6 +838,7 @@ async function loadLatestRunIntoForm() {
 // ─── Monthly Chart ───
 let monthlyChart = null;
 let monthlyExpensesCompositionChart = null;
+let budgetTrendChart = null;
 async function loadOverview() {
   const [sumRes, bkRes, histRes] = await Promise.all([fetch('/api/summary'), fetch('/api/monthly_breakdown'), fetch('/api/savings/history')]);
   const sum = await sumRes.json();
@@ -774,7 +849,8 @@ async function loadOverview() {
     <div class="card amber"><div class="label">MONTHLY EXPENSES</div><div class="value">${fmt(sum.monthly_expenses_avg || 0)}</div></div>
     <div class="card green"><div class="label">TOTAL INCOME</div><div class="value">${fmt(sum.total_income || 0)}</div></div>
     <div class="card red"><div class="label">EXPENSE PAID YTD</div><div class="value">${fmt(sum.expense_paid_ytd || 0)}</div></div>
-    <div class="card amber"><div class="label">MISC EXPENSES</div><div class="value">${fmt(sum.expenses)}</div></div>
+    <div class="card amber"><div class="label">MISC EXPENSES (LAST UPLOAD)</div><div class="value">${fmt(sum.expenses)}</div></div>
+    <div class="card amber"><div class="label">MISC EXPENSES (ALL-TIME, EX TRANSFERS)</div><div class="value">${fmt(sum.expenses_all_time_ex_transfer || 0)}</div></div>
     <div class="card ${sum.net >= 0 ? 'green' : 'red'}"><div class="label">NET CASH FLOW</div><div class="value">${fmtSigned(sum.net)}</div></div>
   `;
 
@@ -1156,12 +1232,16 @@ function calculateBucketsPreview(currentBalance, monthlyLeftover, bufferGoal, si
 
 function mapSavedRunToIncomeResult(r) {
   const monthlyTotal = Number(r.monthly_expenses_total || 0);
+  const billsAccountBalance = Number(r.current_balance_1 || 0) + Number(r.current_balance_2 || 0);
   const income1 = Number(r.income_1 || 0);
   const income2 = Number(r.income_2 || 0);
   const contribution1 = Number((monthlyTotal * 0.60).toFixed(2));
   const contribution2 = Number((monthlyTotal * 0.40).toFixed(2));
-  const remainder1 = Number((income1 - contribution1).toFixed(2));
-  const remainder2 = Number((income2 - contribution2).toFixed(2));
+  const adjustedTotal = Number(Math.max(monthlyTotal - billsAccountBalance, 0).toFixed(2));
+  const adjustedContribution1 = Number((adjustedTotal * 0.60).toFixed(2));
+  const adjustedContribution2 = Number((adjustedTotal * 0.40).toFixed(2));
+  const remainder1 = Number((income1 - adjustedContribution1).toFixed(2));
+  const remainder2 = Number((income2 - adjustedContribution2).toFixed(2));
   const buckets1 = calculateBucketsPreview(
     Number(r.current_balance_1 || 0),
     remainder1,
@@ -1189,6 +1269,11 @@ function mapSavedRunToIncomeResult(r) {
       contribution_1: contribution1,
       contribution_2: contribution2,
     },
+    adjusted_bills_split: {
+      amount_due_after_balance: adjustedTotal,
+      contribution_1: adjustedContribution1,
+      contribution_2: adjustedContribution2,
+    },
     leftover: {
       person_1: remainder1,
       person_2: remainder2,
@@ -1201,9 +1286,11 @@ function mapSavedRunToIncomeResult(r) {
 }
 
 function gatherIncomePayload() {
+  const income1Default = Number.parseFloat($('inc-income-1').placeholder) || 0;
+  const income2Default = Number.parseFloat($('inc-income-2').placeholder) || 0;
   return {
-    income_1: numOrDefault('inc-income-1', 0),
-    income_2: numOrDefault('inc-income-2', 0),
+    income_1: numOrDefault('inc-income-1', income1Default),
+    income_2: numOrDefault('inc-income-2', income2Default),
     current_balance_1: numOrDefault('inc-balance-1', 0),
     current_balance_2: numOrDefault('inc-balance-2', 0),
     split_pct_1: numOrDefault('inc-split-1', 60),
@@ -1212,19 +1299,37 @@ function gatherIncomePayload() {
     growth_pct: numOrDefault('inc-growth-pct', 10),
     fun_pct: numOrDefault('inc-fun-pct', 75),
     buffer_goal: numOrDefault('inc-buffer-goal', 1000),
-    run_month: $('inc-run-month').value || new Date().toISOString().slice(0, 7),
+    run_month: $('inc-run-month').value || '',
     notes: $('inc-notes').value.trim(),
   };
 }
 
+async function getLatestStatementMonth() {
+  const res = await fetch('/api/months');
+  const months = await res.json();
+  if (Array.isArray(months) && months.length) {
+    return months[months.length - 1];
+  }
+  return new Date().toISOString().slice(0, 7);
+}
+
 function renderIncomeResult(result) {
+  const adjusted = result.adjusted_bills_split || {
+    amount_due_after_balance: result.monthly_expenses.total,
+    contribution_1: result.bills_split.contribution_1,
+    contribution_2: result.bills_split.contribution_2,
+  };
+
   $('income-results-cards').innerHTML = `
     <div class="card amber"><div class="label">MONTHLY EXPENSES</div><div class="value">${fmt(result.monthly_expenses.total)}</div></div>
     <div class="card amber"><div class="label">RECURRING</div><div class="value">${fmt(result.monthly_expenses.recurring)}</div></div>
     <div class="card cyan"><div class="label">MORTGAGE</div><div class="value">${fmt(result.monthly_expenses.mortgage)}</div></div>
     <div class="card red"><div class="label">EXPENSE</div><div class="value">${fmt(result.monthly_expenses.expense)}</div></div>
+    <div class="card purple"><div class="label">BILLS DUE AFTER ACCOUNT BALANCE</div><div class="value">${fmt(adjusted.amount_due_after_balance)}</div></div>
     <div class="card purple"><div class="label">BILLS PERSON 1</div><div class="value">${fmt(result.bills_split.contribution_1)}</div></div>
     <div class="card purple"><div class="label">BILLS PERSON 2</div><div class="value">${fmt(result.bills_split.contribution_2)}</div></div>
+    <div class="card cyan"><div class="label">ADJUSTED BILLS PERSON 1</div><div class="value">${fmt(adjusted.contribution_1)}</div></div>
+    <div class="card cyan"><div class="label">ADJUSTED BILLS PERSON 2</div><div class="value">${fmt(adjusted.contribution_2)}</div></div>
     <div class="card green"><div class="label">LEFTOVER PERSON 1</div><div class="value">${fmtSigned(result.leftover.person_1)}</div></div>
     <div class="card green"><div class="label">LEFTOVER PERSON 2</div><div class="value">${fmtSigned(result.leftover.person_2)}</div></div>
   `;
@@ -1263,7 +1368,14 @@ async function calculateIncomePlan() {
     return;
   }
   renderIncomeResult(data);
-  $('income-status').textContent = 'CALCULATION COMPLETE.';
+  const requested = data.inputs?.run_month_requested || payload.run_month || 'all data';
+  const used = data.inputs?.run_month_used || requested;
+  if (requested && used && requested !== used) {
+    $('inc-run-month').value = used;
+    $('income-status').textContent = `CALCULATION COMPLETE. NO DATA FOR ${requested}; USED ${used}.`;
+  } else {
+    $('income-status').textContent = `CALCULATION COMPLETE FOR ${used || 'ALL DATA'}.`;
+  }
 }
 
 async function saveIncomePlan() {
@@ -1354,7 +1466,7 @@ function loadRunIntoForm(id) {
 
 async function loadIncomeSavings() {
   if (!$('inc-run-month').value) {
-    $('inc-run-month').value = new Date().toISOString().slice(0, 7);
+    $('inc-run-month').value = await getLatestStatementMonth();
   }
   await loadSavingsHistory();
   const res = await fetch('/api/savings/history');
@@ -1363,6 +1475,145 @@ async function loadIncomeSavings() {
     renderIncomeResult(mapSavedRunToIncomeResult(rows[0]));
     $('income-status').textContent = `SHOWING LATEST SAVED RUN #${rows[0].id} (${rows[0].run_month})`;
   }
+
+  // Always compute fresh values from current inputs and selected run month so cards don't stay stale.
+  await calculateIncomePlan();
+}
+
+function gatherBudgetPayload() {
+  return {
+    month: $('budget-month').value || new Date().toISOString().slice(0, 7),
+    budgets: {
+      recurring: numOrDefault('budget-recurring', 0),
+      mortgage: numOrDefault('budget-mortgage', 0),
+      expense: numOrDefault('budget-expense', 0),
+      transfer: numOrDefault('budget-transfer', 0),
+    },
+    notes: $('budget-notes').value.trim(),
+  };
+}
+
+async function saveBudgetPlan() {
+  const payload = gatherBudgetPayload();
+  $('budget-status').textContent = 'SAVING BUDGET...';
+  const res = await fetch('/api/budget/save', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    $('budget-status').textContent = 'ERROR: ' + (data.error || 'Unable to save budget');
+    return;
+  }
+  $('budget-status').textContent = `BUDGET SAVED FOR ${payload.month}`;
+  await loadBudgetComparison();
+}
+
+async function loadBudgetComparison() {
+  const month = $('budget-month').value || new Date().toISOString().slice(0, 7);
+  const res = await fetch('/api/budget/compare?month=' + encodeURIComponent(month));
+  const data = await res.json();
+  if (!res.ok) {
+    $('budget-status').textContent = 'ERROR: ' + (data.error || 'Unable to load comparison');
+    return;
+  }
+
+  $('budget-summary-cards').innerHTML = `
+    <div class="card amber"><div class="label">BUDGET TOTAL</div><div class="value">${fmt(data.totals.budget)}</div></div>
+    <div class="card cyan"><div class="label">ACTUAL TOTAL</div><div class="value">${fmt(data.totals.actual)}</div></div>
+    <div class="card ${data.totals.variance > 0 ? 'red' : 'green'}"><div class="label">VARIANCE</div><div class="value">${fmtSigned(data.totals.variance)}</div></div>
+  `;
+
+  $('budget-compare-tbody').innerHTML = data.categories.map(c => {
+    const statusColor = c.status === 'over' ? 'var(--red)' : c.status === 'under' ? 'var(--green)' : 'var(--amber)';
+    const varianceClass = c.variance > 0 ? 'amount-neg' : (c.variance < 0 ? 'amount-pos' : 'trend-flat');
+    return `<tr>
+      <td>${c.category.toUpperCase()}</td>
+      <td>${fmt(c.budget)}</td>
+      <td>${fmt(c.actual)}</td>
+      <td class="${varianceClass}">${fmtSigned(c.variance)}</td>
+      <td style="color:${statusColor}">${c.status.toUpperCase()}</td>
+    </tr>`;
+  }).join('');
+
+  $('budget-status').textContent = `SHOWING BUDGET VS ACTUAL FOR ${data.month}`;
+}
+
+async function loadCurrentBudgetComparison() {
+  const month = $('current-budget-month').value || $('budget-month').value || new Date().toISOString().slice(0, 7);
+  const res = await fetch('/api/budget/current?month=' + encodeURIComponent(month));
+  const data = await res.json();
+  if (!res.ok) {
+    $('current-budget-status').textContent = 'ERROR: ' + (data.error || 'Unable to compare current budget');
+    return;
+  }
+
+  $('current-budget-cards').innerHTML = `
+    <div class="card amber"><div class="label">CURRENT BUDGET (AVG BILLS)</div><div class="value">${fmt(data.current_budget)}</div></div>
+    <div class="card cyan"><div class="label">UPLOADED STATEMENT BILLS</div><div class="value">${fmt(data.uploaded_statement_bills_total)}</div></div>
+    <div class="card ${data.difference > 0 ? 'red' : 'green'}"><div class="label">DIFFERENCE</div><div class="value">${fmtSigned(data.difference)}</div></div>
+  `;
+  $('current-budget-status').textContent = `MONTH ${data.month}: DIFFERENCE = STATEMENT - CURRENT BUDGET`;
+}
+
+async function loadBudgetTrends() {
+  const res = await fetch('/api/budget/trends?months=12');
+  const data = await res.json();
+  const ctx = $('budget-trend-chart').getContext('2d');
+  if (budgetTrendChart) budgetTrendChart.destroy();
+
+  budgetTrendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.months || [],
+      datasets: [
+        {
+          label: 'Budget',
+          data: data.budget_totals || [],
+          borderColor: '#00E5FF',
+          backgroundColor: 'rgba(0,229,255,0.1)',
+          tension: 0.2,
+        },
+        {
+          label: 'Actual',
+          data: data.actual_totals || [],
+          borderColor: '#FFB300',
+          backgroundColor: 'rgba(255,179,0,0.1)',
+          tension: 0.2,
+        },
+        {
+          label: 'Variance',
+          data: data.variance_totals || [],
+          borderColor: '#FF3B3B',
+          backgroundColor: 'rgba(255,59,59,0.1)',
+          tension: 0.2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#00aa2a', font: { family: 'Share Tech Mono' } } },
+      },
+      scales: {
+        x: { ticks: { color: '#00aa2a', font:{family:'Share Tech Mono'} }, grid: { color: '#1a1a1a' } },
+        y: { ticks: { color: '#00aa2a', font:{family:'Share Tech Mono'}, callback: v => '$'+v }, grid: { color: '#1a1a1a' } },
+      },
+    },
+  });
+}
+
+async function loadBudgetControl() {
+  if (!$('budget-month').value) {
+    $('budget-month').value = new Date().toISOString().slice(0, 7);
+  }
+  if (!$('current-budget-month').value) {
+    $('current-budget-month').value = $('budget-month').value;
+  }
+  await loadBudgetComparison();
+  await loadCurrentBudgetComparison();
+  await loadBudgetTrends();
 }
 
 // ─── Init ───
@@ -1370,6 +1621,8 @@ async function loadIncomeSavings() {
   await loadOverview();
   await loadImportHistory();
   await populateMonthFilter();
+  $('budget-month').value = new Date().toISOString().slice(0, 7);
+  $('current-budget-month').value = $('budget-month').value;
 })();
 </script>
 

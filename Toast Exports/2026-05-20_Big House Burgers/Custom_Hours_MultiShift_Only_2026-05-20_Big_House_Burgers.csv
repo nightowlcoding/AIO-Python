@@ -1,0 +1,5 @@
+"Employee","StartDateTime","EndDateTime","StartTimeForToast","EndTimeForToast","StartTime24","EndTime24","StartHour12","StartMinute","StartMeridiem","EndHour12","EndMinute","EndMeridiem","ShiftLabel"
+"Clarissa Cantu","5/20/26 10:30 AM","5/20/26 4:41 PM","10:30 AM","4:41 PM","10:30","16:41","10","30","AM","4","41","PM","Morning"
+"Clarissa Cantu","5/20/26 4:46 PM","5/20/26 4:46 PM","4:46 PM","4:46 PM","16:46","16:46","4","46","PM","4","46","PM","Night"
+"Lariah Saenz","5/20/26 10:30 AM","5/20/26 1:41 PM","10:30 AM","1:41 PM","10:30","13:41","10","30","AM","1","41","PM","Morning"
+"Lariah Saenz","5/20/26 4:44 PM","5/20/26 10:20 PM","4:44 PM","10:20 PM","16:44","22:20","4","44","PM","10","20","PM","Night"

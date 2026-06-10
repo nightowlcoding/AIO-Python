@@ -10,11 +10,29 @@
 </head>
 <body>
   {% set active_endpoint = request.endpoint or '' %}
+  {% set compact_nav_endpoints = ['restaurant_setup', 'select_restaurant', 'select_restaurant_post'] %}
+  {% set fullnav_arg = request.args.get('fullnav') %}
+  {% if fullnav_arg is not none %}
+    {% set show_full_nav = fullnav_arg|lower in ['1', 'true', 'yes'] %}
+  {% elif current_user.is_authenticated %}
+    {% set show_full_nav = (current_user.nav_mode or 'compact') == 'full' %}
+  {% else %}
+    {% set show_full_nav = session.get('pm_nav_mode') == 'full' %}
+  {% endif %}
+  {% set hide_top_nav_items = active_endpoint in compact_nav_endpoints and not show_full_nav %}
   <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
     <div class="container-fluid">
       <a class="navbar-brand" href="{{ url_for('home') }}">
         <i class="bi bi-clipboard2-data-fill me-2"></i>Product Mix Restaurant DB
       </a>
+      {% if active_endpoint in compact_nav_endpoints %}
+        {% if hide_top_nav_items %}
+        <a class="btn btn-sm btn-outline-light ms-auto" href="{{ request.path }}?fullnav=1">Show Full Menu</a>
+        {% else %}
+        <a class="btn btn-sm btn-outline-light ms-2" href="{{ request.path }}?fullnav=0">Use Compact Header</a>
+        {% endif %}
+      {% endif %}
+      {% if not hide_top_nav_items %}
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -64,6 +82,7 @@
           {% endif %}
         </ul>
       </div>
+      {% endif %}
     </div>
   </nav>
 

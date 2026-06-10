@@ -1341,7 +1341,8 @@ HTML_TEMPLATE = '''
 '''
 
 if __name__ == '__main__':
+    port = int(os.environ.get('SORTER_PORT', '5081'))
     print("🚀 Starting AIO File Organizer Web Server...")
-    print("📂 Access at: http://localhost:5003")
-    print("🌐 For mobile access, use ngrok: ngrok http 5003")
-    app.run(debug=True, host='0.0.0.0', port=5003)
+    print(f"📂 Access at: http://localhost:{port}")
+    print(f"🌐 For mobile access, use ngrok: ngrok http {port}")
+    app.run(debug=True, host='0.0.0.0', port=port)

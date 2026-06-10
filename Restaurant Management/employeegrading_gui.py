@@ -511,6 +511,10 @@ class EmployeeGradingGUI:
         
         df['Grade'] = df.apply(assign_grade, axis=1)
         
+        # Update Weighted Score to reflect final grade
+        grade_to_score = {'A': 0.95, 'B': 0.85, 'C': 0.75, 'D': 0.65, 'F': 0.55, 'N/A': 0.0}
+        df['Weighted Score'] = df['Grade'].map(grade_to_score)
+        
         # Create results sorted by grade then score
         grade_order = {'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5, 'N/A': 6}
         df['Grade_Order'] = df['Grade'].map(grade_order)

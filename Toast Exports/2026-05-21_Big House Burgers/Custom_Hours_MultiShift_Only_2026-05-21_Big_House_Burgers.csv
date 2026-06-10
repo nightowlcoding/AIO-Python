@@ -1,0 +1,5 @@
+"Employee","StartDateTime","EndDateTime","StartTimeForToast","EndTimeForToast","StartTime24","EndTime24","StartHour12","StartMinute","StartMeridiem","EndHour12","EndMinute","EndMeridiem","ShiftLabel"
+"Isabel Garcia","5/21/26 10:19 AM","5/21/26 2:50 PM","10:19 AM","2:50 PM","10:19","14:50","10","19","AM","2","50","PM","Morning"
+"Isabel Garcia","5/21/26 4:01 PM","5/21/26 11:23 PM","4:01 PM","11:23 PM","16:01","23:23","4","01","PM","11","23","PM","Night"
+"Lariah Saenz","5/21/26 10:30 AM","5/21/26 4:04 PM","10:30 AM","4:04 PM","10:30","16:04","10","30","AM","4","04","PM","Morning"
+"Lariah Saenz","5/21/26 4:47 PM","5/21/26 11:43 PM","4:47 PM","11:43 PM","16:47","23:43","4","47","PM","11","43","PM","Night"

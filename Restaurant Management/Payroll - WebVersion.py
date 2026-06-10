@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 import os
 import pandas as pd
+from datetime import date, datetime
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side
 from werkzeug.utils import secure_filename
@@ -15,7 +16,7 @@ RESULTS_FOLDER = os.path.join(BASE_DIR, 'results')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
-def process_payroll(csv_path):
+def process_payroll(csv_path, include_kingsville_only_row=False):
     df = pd.read_csv(csv_path)
     columns_to_extract = [
         'Employee', 'Job Title', 'Regular Hours', 'Overtime Hours',
@@ -58,7 +59,28 @@ def process_payroll(csv_path):
         'Non-Cash Tips': 0,
         'Total Tips': 0
     }
-    extracted_data = pd.concat([extracted_data, pd.DataFrame([new_row, new_row2])], ignore_index=True)
+    new_row3 = {
+        'Employee': 'Lesli Rodriguez',
+        'Job Title': 'Media Admin',
+        'Regular Hours': 15,
+        'Overtime Hours': 0,
+        'Declared Tips': 0,
+        'Non-Cash Tips': 0,
+        'Total Tips': 0
+    }
+    new_row4 = {
+        'Employee': 'Maria Julia Martinez Villalta',
+        'Job Title': '',
+        'Regular Hours': 0,
+        'Overtime Hours': 0,
+        'Declared Tips': 0,
+        'Non-Cash Tips': 0,
+        'Total Tips': 0
+    }
+    custom_rows = [new_row, new_row2, new_row3]
+    if include_kingsville_only_row:
+        custom_rows.append(new_row4)
+    extracted_data = pd.concat([extracted_data, pd.DataFrame(custom_rows)], ignore_index=True)
 
     # Calculate totals
     totals = extracted_data.iloc[:, 2:].sum()
@@ -94,7 +116,6 @@ def save_to_excel(df, out_path):
     ws = wb.active
     max_row = ws.max_row
     max_col = ws.max_column
-    thick = Side(border_style="thick", color="000000")
     thin = Side(border_style="thin", color="000000")
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     bold_font = Font(bold=True)
@@ -117,16 +138,11 @@ def save_to_excel(df, out_path):
     for row in range(1, max_row + 1):
         for col in range(1, max_col + 1):
             cell = ws.cell(row=row, column=col)
-            # Only style cells with text
-            if cell.value not in (None, ""):
-                # All borders (thick for outside, thin for inside)
-                border = Border(
-                    left=thick if col == 1 else thin,
-                    right=thick if col == max_col else thin,
-                    top=thick if row == 1 else thin,
-                    bottom=thick if row == max_row else thin
-                )
-                cell.border = border
+            value = cell.value
+            is_text = isinstance(value, str) and value.strip() != ""
+            is_date = isinstance(value, (date, datetime))
+            if is_text or is_date:
+                cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
                 cell.alignment = Alignment(horizontal="center", vertical="center")
     # Fit to one page when printing
     ws.page_setup.fitToWidth = 1
@@ -149,7 +165,7 @@ def process():
         filename1 = secure_filename(file1.filename)
         path1 = os.path.join(UPLOAD_FOLDER, filename1)
         file1.save(path1)
-        reg1, ot1, total1, pct1, df1 = process_payroll(path1)
+        reg1, ot1, total1, pct1, df1 = process_payroll(path1, include_kingsville_only_row=True)
         summary1 = f"Total hours for the BHB Kingsville for the week is {total1:.2f} of which {ot1:.2f} or {pct1:.2%} is considered overtime."
         summary_row1 = pd.DataFrame([{col: "" for col in df1.columns}])
         summary_row1.iloc[0, 0] = summary1
@@ -164,7 +180,7 @@ def process():
         filename2 = secure_filename(file2.filename)
         path2 = os.path.join(UPLOAD_FOLDER, filename2)
         file2.save(path2)
-        reg2, ot2, total2, pct2, df2 = process_payroll(path2)
+        reg2, ot2, total2, pct2, df2 = process_payroll(path2, include_kingsville_only_row=False)
         summary2 = f"Total hours for the BHB Alice for the week is {total2:.2f} of which {ot2:.2f} or {pct2:.2%} is considered overtime."
         summary_row2 = pd.DataFrame([{col: "" for col in df2.columns}])
         summary_row2.iloc[0, 0] = summary2

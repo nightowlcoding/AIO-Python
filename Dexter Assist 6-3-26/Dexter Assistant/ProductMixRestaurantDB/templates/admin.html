@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+{% set kpi_meta = {
+  'restaurants': ('bi-shop', True),
+  'users':        ('bi-people', False),
+  'uploads':      ('bi-cloud-arrow-up', False),
+  'tracked_items':('bi-list-ul', False),
+  'dated_records':('bi-calendar3', False)
+} %}
+<div class="row g-3 mb-4">
+  {% for k, v in (summary or {}).items() %}
+  {% set icon, is_accent = kpi_meta.get(k, ('bi-bar-chart', False)) %}
+  <div class="col-6 col-lg-2">
+    <div class="dx-kpi{% if is_accent %} dx-kpi--accent{% endif %}">
+      <div class="dx-kpi__label"><i class="bi {{ icon }} me-1"></i>{{ k.replace('_', ' ').title() }}</div>
+      <div class="dx-kpi__value">{{ v }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<div class="card">
+  <div class="card-header gradient-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-shield-check me-2"></i>Admin Summary</span>
+    <span class="small opacity-75">System overview</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover table-striped mb-0">
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>
+        {% for k, v in (summary or {}).items() %}
+          <tr><td>{{ k.replace('_', ' ').title() }}</td><td>{{ v }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

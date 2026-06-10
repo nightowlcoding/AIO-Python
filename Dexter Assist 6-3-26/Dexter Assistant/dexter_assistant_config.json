@@ -1,0 +1,42 @@
+{
+  "front_door": {
+    "host": "127.0.0.1",
+    "port": 5080,
+    "auto_open_browser": true,
+    "open_path": "/portal/managerapp",
+    "session_hours": 8,
+    "registration_open": false
+  },
+  "apps": {
+    "productmix": {
+      "display_name": "ProductMixRestaurantDB",
+      "cwd": "ProductMixRestaurantDB",
+      "entrypoint": "app.py",
+      "base_url": "http://127.0.0.1:5050",
+      "health_path": "/health",
+      "env": {
+        "PM_DEBUG": "0",
+        "PM_OPEN_BROWSER": "0"
+      }
+    },
+    "ic3": {
+      "display_name": "Inventory Control 3",
+      "cwd": "Inventory Control 3",
+      "entrypoint": "app.py",
+      "base_url": "http://127.0.0.1:5003",
+      "health_path": "/",
+      "env": {
+        "IC3_FORCE_PROD": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "managerapp": {
+      "display_name": "Daily Log",
+      "cwd": "Manager App",
+      "entrypoint": "manager_app.py",
+      "base_url": "http://127.0.0.1:8000",
+      "health_path": "/",
+      "env": {}
+    }
+  }
+}

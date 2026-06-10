@@ -324,7 +324,7 @@ output_filename = f"employee_grades_{datetime.now().strftime('%Y%m%d_%H%M%S')}.c
 output_path = os.path.expanduser(f"~/Documents/AIO Python/{output_filename}")
 
 # Save to CSV with grading summary at the bottom
-with open(output_path, 'w', newline='') as f:
+with open(output_path, 'w', newline='', encoding='utf-8') as f:
     # Write the main data
     grading_results.to_csv(f, index=False)
     

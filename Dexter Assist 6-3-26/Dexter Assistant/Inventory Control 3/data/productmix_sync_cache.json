@@ -1,0 +1,18 @@
+{
+  "source_url": "http://127.0.0.1:5050/api/categories",
+  "synced_at_utc": "2026-05-25T19:44:52Z",
+  "status": "ok",
+  "restaurant": {
+    "address": "",
+    "city": "Kingsville",
+    "created_at": "2026-04-23 07:15:32",
+    "id": 2,
+    "location": "Kingsville",
+    "name": "Big House Burgers",
+    "phone": "",
+    "state": "TX",
+    "zip_code": ""
+  },
+  "categories": [],
+  "category_count": 0
+}

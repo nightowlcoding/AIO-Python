@@ -266,35 +266,44 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function sortRows(key, direction, sortType) {
-      var rows = Array.from(tbody.querySelectorAll('tr')).filter(function (row) {
-        var cells = row.querySelectorAll('td');
-        return cells.length >= 6 && !row.querySelector('td[colspan]');
+      // Build groups: preserve header rows in place, sort only within each group
+      var allRows = Array.from(tbody.querySelectorAll('tr'));
+      var groups = [];
+      var currentGroup = null;
+      allRows.forEach(function (row) {
+        if (row.querySelector('td[colspan]')) {
+          currentGroup = { header: row, rows: [] };
+          groups.push(currentGroup);
+        } else if (currentGroup) {
+          currentGroup.rows.push(row);
+        }
       });
 
-      if (!rows.length) {
+      if (!groups.length) {
         return;
       }
 
-      rows.sort(function (a, b) {
-        var aCell = a.querySelector('td[data-sort-key="' + key + '"]');
-        var bCell = b.querySelector('td[data-sort-key="' + key + '"]');
-        var aValue = parseSortValue(aCell ? aCell.getAttribute('data-sort-value') : '', sortType);
-        var bValue = parseSortValue(bCell ? bCell.getAttribute('data-sort-value') : '', sortType);
+      groups.forEach(function (group) {
+        group.rows.sort(function (a, b) {
+          var aCell = a.querySelector('td[data-sort-key="' + key + '"]');
+          var bCell = b.querySelector('td[data-sort-key="' + key + '"]');
+          var aValue = parseSortValue(aCell ? aCell.getAttribute('data-sort-value') : '', sortType);
+          var bValue = parseSortValue(bCell ? bCell.getAttribute('data-sort-value') : '', sortType);
 
-        if (aValue < bValue) {
-          return direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return direction === 'asc' ? 1 : -1;
-        }
+          if (aValue < bValue) {
+            return direction === 'asc' ? -1 : 1;
+          }
+          if (aValue > bValue) {
+            return direction === 'asc' ? 1 : -1;
+          }
 
-        var aId = parseInt((a.querySelector('td') || {}).textContent || '0', 10) || 0;
-        var bId = parseInt((b.querySelector('td') || {}).textContent || '0', 10) || 0;
-        return direction === 'asc' ? aId - bId : bId - aId;
-      });
+          var aId = parseInt((a.querySelector('td') || {}).textContent || '0', 10) || 0;
+          var bId = parseInt((b.querySelector('td') || {}).textContent || '0', 10) || 0;
+          return direction === 'asc' ? aId - bId : bId - aId;
+        });
 
-      rows.forEach(function (row) {
-        tbody.appendChild(row);
+        tbody.appendChild(group.header);
+        group.rows.forEach(function (row) { tbody.appendChild(row); });
       });
     }
 
@@ -336,25 +345,79 @@ document.addEventListener('DOMContentLoaded', function () {
       updateSelectedFilesCount();
       if (!isSubmitting && bulkFolderInput.files && bulkFolderInput.files.length > 0 && form) {
         setSubmittingState(true);
-        form.submit();
+        submitWithCombinedFiles();
       }
+    });
+  }
+
+  function submitWithCombinedFiles() {
+    if (!form) return;
+    
+    var formData = new FormData();
+    
+    // Add CSRF token
+    var csrfInput = form.querySelector('input[name="csrf_token"]');
+    if (csrfInput) {
+      formData.append('csrf_token', csrfInput.value);
+    }
+    
+    // Add report date if present
+    if (reportDateInput && reportDateInput.value) {
+      formData.append('report_date', reportDateInput.value);
+    }
+    
+    // Add files from standard input
+    if (filesInput && filesInput.files) {
+      for (var i = 0; i < filesInput.files.length; i++) {
+        formData.append('files', filesInput.files[i]);
+      }
+    }
+    
+    // Add files from bulk folder input
+    if (bulkFolderInput && bulkFolderInput.files) {
+      for (var i = 0; i < bulkFolderInput.files.length; i++) {
+        formData.append('files', bulkFolderInput.files[i]);
+      }
+    }
+    
+    // Submit the form with combined data
+    fetch(form.action, {
+      method: 'POST',
+      body: formData
+    })
+    .then(function(response) {
+      if (response.redirected) {
+        window.location.href = response.url;
+        return;
+      }
+      return response.text();
+    })
+    .then(function(html) {
+      if (html) {
+        document.write(html);
+        document.close();
+      }
+    })
+    .catch(function(err) {
+      setSubmittingState(false);
+      alert('Upload error: ' + err);
     });
   }
 
   if (form) {
     form.addEventListener('submit', function (event) {
+      event.preventDefault();
       if (isSubmitting) {
-        event.preventDefault();
         return;
       }
       var hasStandardFiles = filesInput && filesInput.files && filesInput.files.length > 0;
       var hasFolderFiles = bulkFolderInput && bulkFolderInput.files && bulkFolderInput.files.length > 0;
       if (!hasStandardFiles && !hasFolderFiles) {
-        event.preventDefault();
         alert('Choose at least one Excel file or use Bulk Upload Folder.');
         return;
       }
       setSubmittingState(true);
+      submitWithCombinedFiles();
     });
   }
 

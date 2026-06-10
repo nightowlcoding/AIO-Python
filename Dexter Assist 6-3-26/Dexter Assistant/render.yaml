@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: dexter-assistant
+    env: python
+    buildCommand: pip install -r "Dexter Assistant/requirements_dexter_assistant.txt"
+    startCommand: gunicorn --chdir "Dexter Assistant" --workers 1 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT dexter_assistant:app
+    domains:
+      - dexterassist.com
+      - www.dexterassist.com
+    healthCheckPath: /api/health
+    disk:
+      name: dexter-data
+      mountPath: /dexter-data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.13
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PM_OPEN_BROWSER
+        value: "0"
+      - key: PM_DEBUG
+        value: "0"
+      - key: IC3_DATA_DIR
+        value: /dexter-data/ic3
+      - key: PM_DB_DIR
+        value: /dexter-data/pm
