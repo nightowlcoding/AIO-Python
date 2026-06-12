@@ -855,7 +855,7 @@ def sync_location_scope_from_dexter():
 def index():
     """Landing page"""
     if current_user.is_authenticated:
-        return redirect(url_for('daily_log'))
+        return redirect(url_for('dashboard'))
     return render_template('index.html')
 
 
@@ -864,7 +864,7 @@ def index():
 def login():
     """Login page"""
     if current_user.is_authenticated:
-        return redirect(url_for('daily_log'))
+        return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -905,7 +905,7 @@ def login():
                     return redirect(url_for('select_company'))
                 elif len(user.companies) == 1:
                     session['current_company_id'] = user.companies[0]['id']
-                    return redirect(url_for('daily_log'))
+                    return redirect(url_for('dashboard'))
                 else:
                     return redirect(url_for('create_company'))
             else:
@@ -1070,7 +1070,7 @@ def set_company(company_id):
     
     db.log_action(current_user.id, 'company_selected', company_id)
     
-    return redirect(url_for('daily_log'))
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/create-company', methods=['GET', 'POST'])
@@ -1992,9 +1992,13 @@ def api_employee_names():
     print("[DEBUG] api_employee_names called")
     """Get employee names for autocomplete"""
     try:
-        # Read employee roster from company data
+        # Read employee roster from company+location scoped data
         company_id = current_user.current_company_id
-        employee_file = f"company_data/{company_id}/employees.json"
+        location_id = _resolve_effective_location_id(_effective_location_options(company_id))
+        if location_id:
+            employee_file = f"company_data/{company_id}/locations/{location_id}/employees.json"
+        else:
+            employee_file = f"company_data/{company_id}/employees.json"
         print(f"[DEBUG] employee_file path: {employee_file}")
 
         employees = []

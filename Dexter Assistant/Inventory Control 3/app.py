@@ -408,10 +408,11 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
         }
     }
 
-    function applyToLocationRadios(restaurants) {
+    function applyToLocationRadios(restaurants, preferredValue) {
         if (!restaurants || !restaurants.length) return;
 
         const selected = (document.querySelector('input[name="location"][type="radio"]:checked') || {}).value || '';
+        const preferred = String(preferredValue || '').trim();
         const groups = Array.from(document.querySelectorAll('.location-selector'));
         if (!groups.length) return;
 
@@ -437,7 +438,10 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                 input.name = 'location';
                 input.value = locValue;
                 input.id = buildRadioId(groupIndex, optionIndex, locValue);
-                if (selected && selected === locValue) {
+                if (preferred && preferred === locValue) {
+                    input.checked = true;
+                    hasChecked = true;
+                } else if (selected && selected === locValue) {
                     input.checked = true;
                     hasChecked = true;
                 }
@@ -480,12 +484,15 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
         inFlight = true;
         try {
             let dexterCompanyName = '';
+            let dexterPreferredLocation = '';
             try {
                 const ctxRes = await fetch('/api/dexter/context');
                 const ctx = await ctxRes.json();
                 dexterCompanyName = String((ctx && ctx.company_name) || '').trim();
+                dexterPreferredLocation = String((ctx && ctx.restaurant_location) || '').trim();
             } catch (_ctxErr) {
                 dexterCompanyName = '';
+                dexterPreferredLocation = '';
             }
 
             const res = await fetch('/api/shared/restaurants');
@@ -518,7 +525,7 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
             for (const id of SELECT_IDS) {
                 const select = document.getElementById(id);
                 if (select && select.tagName === 'SELECT') {
-                    applyToSelect(select, restaurants);
+                    applyToSelect(select, restaurants, dexterPreferredLocation);
                 }
             }
 
@@ -542,7 +549,7 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
                 }
             });
 
-            applyToLocationRadios(restaurants);
+            applyToLocationRadios(restaurants, dexterPreferredLocation);
 
             lastAppliedSignature = signature || lastAppliedSignature;
 
@@ -3861,6 +3868,212 @@ def _install_shared_locations_failsafe_patch() -> None:
 _install_shared_locations_failsafe_patch()
 
 
+IC3_INVENTORY_OPPORTUNITY_SCRIPT = r"""
+<script>
+(function () {
+    if (window.__ic3InventoryOpportunityInstalled) return;
+    window.__ic3InventoryOpportunityInstalled = true;
+
+    function toNum(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function detectForecastPayload(payload) {
+        if (!payload || !Array.isArray(payload.results) || !payload.results.length) {
+            return null;
+        }
+        const sample = payload.results[0] || {};
+        const hasDemand = Object.prototype.hasOwnProperty.call(sample, 'predicted_demand');
+        const hasInventory = Object.prototype.hasOwnProperty.call(sample, 'current_inventory');
+        if (!hasDemand || !hasInventory) {
+            return null;
+        }
+        return payload;
+    }
+
+    function classifyOpportunity(row) {
+        const itemId = String(row.product_number || row.product_id || row.id || '').trim();
+        const itemName = String(row.description || row.product_name || itemId || 'Unknown item').trim();
+        const actual = Math.max(0, toNum(row.current_inventory));
+        const predicted = Math.max(0, toNum(row.predicted_demand));
+        const incoming = Math.max(0, toNum(row.recommended_order_rounded || row.recommended_order));
+
+        // Target inventory aims to cover the next cycle with a small safety buffer.
+        const target = Math.max(0.25, predicted * 1.15);
+        const projectedEnd = Math.max(0, actual + incoming - predicted);
+        const variance = actual - target;
+        const variancePct = target > 0 ? (variance / target) : 0;
+
+        let opportunity = 'watch';
+        if (predicted > 0 && actual <= 0) {
+            opportunity = 'missing-count';
+        } else if (variancePct <= -0.20) {
+            opportunity = 'understock';
+        } else if (variancePct >= 0.35) {
+            opportunity = 'overstock';
+        }
+
+        const impactScore = Math.abs(variancePct) * Math.max(predicted, 1);
+        return {
+            itemId: itemId,
+            itemName: itemName,
+            actual: actual,
+            predicted: predicted,
+            incoming: incoming,
+            projectedEnd: projectedEnd,
+            target: target,
+            variance: variance,
+            variancePct: variancePct,
+            opportunity: opportunity,
+            impactScore: impactScore,
+        };
+    }
+
+    function analyze(rows) {
+        const items = [];
+        let understock = 0;
+        let overstock = 0;
+        let missingCount = 0;
+
+        for (const row of (rows || [])) {
+            const modeled = classifyOpportunity(row || {});
+            items.push(modeled);
+            if (modeled.opportunity === 'understock') understock++;
+            if (modeled.opportunity === 'overstock') overstock++;
+            if (modeled.opportunity === 'missing-count') missingCount++;
+        }
+
+        items.sort(function (a, b) {
+            return b.impactScore - a.impactScore;
+        });
+
+        return {
+            total: items.length,
+            understock: understock,
+            overstock: overstock,
+            missingCount: missingCount,
+            topItems: items.slice(0, 12),
+        };
+    }
+
+    function badge(label, bg, fg) {
+        return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' + bg + ';color:' + fg + ';">' + label + '</span>';
+    }
+
+    function render(model) {
+        const host = document.getElementById('reportContent') || document.getElementById('content') || document.body;
+        if (!host) return;
+
+        let panel = document.getElementById('ic3OpportunityPanel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'ic3OpportunityPanel';
+            panel.style.margin = '14px 0';
+            panel.style.border = '1px solid #cbd5e1';
+            panel.style.borderRadius = '10px';
+            panel.style.padding = '12px';
+            panel.style.background = '#ffffff';
+            panel.style.boxShadow = '0 1px 3px rgba(15,23,42,0.08)';
+            if (host.firstChild) {
+                host.insertBefore(panel, host.firstChild);
+            } else {
+                host.appendChild(panel);
+            }
+        }
+
+        const rowsHtml = model.topItems.map(function (item) {
+            let label = badge('watch', '#e2e8f0', '#334155');
+            if (item.opportunity === 'understock') label = badge('understock', '#fee2e2', '#991b1b');
+            if (item.opportunity === 'overstock') label = badge('overstock', '#fef3c7', '#92400e');
+            if (item.opportunity === 'missing-count') label = badge('missing count', '#dbeafe', '#1e40af');
+
+            return '<tr>' +
+                '<td style="padding:6px 8px;border:1px solid #e2e8f0;">' + escapeHtml(item.itemId || '-') + '</td>' +
+                '<td style="padding:6px 8px;border:1px solid #e2e8f0;">' + escapeHtml(item.itemName) + '</td>' +
+                '<td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">' + item.actual.toFixed(2) + '</td>' +
+                '<td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">' + item.target.toFixed(2) + '</td>' +
+                '<td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">' + (item.variancePct * 100).toFixed(1) + '%</td>' +
+                '<td style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">' + label + '</td>' +
+                '</tr>';
+        }).join('');
+
+        panel.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
+                '<h4 style="margin:0;color:#0f172a;">Inventory Opportunity Signals (Estimated vs Actual)</h4>' +
+                '<div style="font-size:12px;color:#64748b;">Uses forecast demand + order plan + current inventory.</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
+                badge('understock: ' + model.understock, '#fee2e2', '#991b1b') +
+                badge('overstock: ' + model.overstock, '#fef3c7', '#92400e') +
+                badge('missing count: ' + model.missingCount, '#dbeafe', '#1e40af') +
+                badge('items analyzed: ' + model.total, '#e2e8f0', '#334155') +
+            '</div>' +
+            '<div style="overflow-x:auto;margin-top:10px;">' +
+                '<table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:auto;">' +
+                    '<thead><tr style="background:#f8fafc;">' +
+                        '<th style="padding:6px 8px;border:1px solid #e2e8f0;text-align:left;">Product #</th>' +
+                        '<th style="padding:6px 8px;border:1px solid #e2e8f0;text-align:left;">Description</th>' +
+                        '<th style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">Actual Inv</th>' +
+                        '<th style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">Target Inv</th>' +
+                        '<th style="padding:6px 8px;border:1px solid #e2e8f0;text-align:right;">Variance %</th>' +
+                        '<th style="padding:6px 8px;border:1px solid #e2e8f0;text-align:center;">Opportunity</th>' +
+                    '</tr></thead>' +
+                    '<tbody>' + rowsHtml + '</tbody>' +
+                '</table>' +
+            '</div>';
+    }
+
+    function processForecastPayload(payload) {
+        const candidate = detectForecastPayload(payload);
+        if (!candidate) return;
+        try {
+            const model = analyze(candidate.results || []);
+            if (model.total > 0) {
+                render(model);
+            }
+        } catch (_err) {
+            // Keep this non-blocking for IC3 runtime.
+        }
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = function () {
+        return originalFetch.apply(this, arguments).then(function (response) {
+            try {
+                const contentType = String((response.headers && response.headers.get('content-type')) || '').toLowerCase();
+                if (contentType.indexOf('application/json') === -1) {
+                    return response;
+                }
+                response.clone().json().then(function (payload) {
+                    processForecastPayload(payload);
+                }).catch(function () {});
+            } catch (_err) {}
+            return response;
+        });
+    };
+
+    // Fallback when compiled IC3 stores result data in a global.
+    setInterval(function () {
+        if (window.lastForecastData && window.lastForecastData !== window.__ic3LastForecastSeen) {
+            window.__ic3LastForecastSeen = window.lastForecastData;
+            processForecastPayload(window.lastForecastData);
+        }
+    }, 1200);
+})();
+</script>
+"""
+
+
 def _install_dexter_ui_patch() -> None:
     """Inject Dexter Assistant brand assets + theme JS into IC3 HTML responses.
 
@@ -4013,6 +4226,7 @@ def _install_dexter_ui_patch() -> None:
         'log("dx-debug ready");'
         '})();'
         '</script>'
+        + IC3_INVENTORY_OPPORTUNITY_SCRIPT +
         '<script src="/dexter-ui/theme.js" defer></script>'
         '<div class="dx-version-badge" aria-hidden="true">Dexter · IC3 · v0.9-demo</div>'
     )

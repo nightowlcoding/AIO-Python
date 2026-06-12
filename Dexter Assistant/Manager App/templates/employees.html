@@ -384,10 +384,10 @@ function updateEmployeeTable() {
         const daysEmployed = calculateDaysEmployed(emp.dateOfHire);
         const companyId = window.currentCompanyId || '';
         const empFileName = `${escapeHtml(emp.firstName)}_${escapeHtml(emp.lastName)}.json`;
-        const profileUrl = `/employee/${companyId}/${empFileName}`;
+        const profileUrl = `/app/managerapp/employee/${companyId}/${empFileName}`;
         const isSelected = selectedIds.includes(String(emp.id));
         return `
-            <tr class="employee-row" style="cursor:pointer" onclick="window.open('${profileUrl}', '_blank')">
+            <tr class="employee-row" style="cursor:pointer" onclick="window.location.href='${profileUrl}'">
             <td><input type="checkbox" class="employee-select" value="${emp.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); syncSelectAllState();"></td>
                 <td>${index + 1}</td>
                 <td>${escapeHtml(emp.firstName)}</td>
@@ -402,7 +402,7 @@ function updateEmployeeTable() {
                     <button class="btn btn-sm btn-warning me-1" onclick="event.stopPropagation(); archiveEmployee(${emp.id});" title="Archive employee">
                         <i class="bi bi-archive"></i> Archive
                     </button>
-                    <button class="btn btn-sm btn-primary" onclick="window.open('${profileUrl}', '_blank'); event.stopPropagation();">View Profile</button>
+                    <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); window.location.href='${profileUrl}';">View Profile</button>
                 </td>
             </tr>
         `;

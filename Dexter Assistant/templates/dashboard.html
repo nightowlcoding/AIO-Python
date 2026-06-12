@@ -629,12 +629,13 @@
                 <aside class="left-primary">
                         <div class="brand-row">
                         <div class="brand-mark">
-                            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+                            <img class="brand-logo" src="/branding/company-logo" alt="Company logo" />
                             <div class="brand">Dexter Ops</div>
                         </div>
                                 <button class="menu-btn" onclick="toggleCollapsed()" title="Collapse sidebar">||</button>
                         </div>
                         <nav id="primaryNav" class="primary-menu">
+                        <button type="button" data-short="DH" onclick="try{ if(window.top&&window.top!==window){ window.top.location.href='/portal?hub=1&t='+Date.now(); } else { window.location.href='/portal?hub=1&t='+Date.now(); } }catch(e){ window.location.href='/portal?hub=1&t='+Date.now(); }">Dexter Hub</button>
                         <button data-short="HM" data-section="home" class="active" onclick="openHome()">Home</button>
                         <button data-short="IC" data-section="inventory" onclick="setSection('inventory')">Inventory Control <span class="status-dot" id="dot-ic3"></span></button>
                         <button data-short="PM" data-section="productmix" onclick="setSection('productmix')">Product Mix <span class="status-dot" id="dot-productmix"></span></button>

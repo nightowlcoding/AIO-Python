@@ -1,11 +1,25 @@
 {
   "front_door": {
-    "host": "127.0.0.1",
+    "host": "0.0.0.0",
     "port": 5080,
     "auto_open_browser": true,
     "open_path": "/portal/managerapp",
     "session_hours": 8,
     "registration_open": false
+  },
+  "mail": {
+    "enabled": true,
+    "smtp_host": "smtp.office365.com",
+    "smtp_port": 587,
+    "smtp_username": "admin@dexterassist.com",
+    "from_email": "admin@dexterassist.com",
+    "from_name": "Dexter Assist",
+    "reply_to": "admin@dexterassist.com",
+    "use_starttls": true,
+    "use_ssl": false,
+    "public_base_url": "https://app.dexterassist.com",
+    "username_env": "DEXTER_SMTP_USERNAME",
+    "password_env": "DEXTER_SMTP_PASSWORD"
   },
   "apps": {
     "productmix": {

@@ -42,7 +42,7 @@
         }
         .brand { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: 0.2px; }
         .brand-wrap { display: flex; align-items: center; gap: 10px; }
-        .brand-logo { width: 26px; height: 26px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        .brand-logo { width: 156px; height: 156px; object-fit: contain; border-radius: 12px; background: #fff; border: 1px solid var(--edge); padding: 6px; }
         .nav { display: flex; gap: 8px; flex-wrap: wrap; }
         .nav a, .nav button {
             border: 1px solid var(--edge);
@@ -72,26 +72,139 @@
             font-weight: 700;
             line-height: 1;
         }
-        .nav-short { display: none; }
+        .nav-short { display: none !important; }
+        .nav-label { display: inline !important; }
         .nav a:hover, .nav button:hover { background: #f1f5f9; }
+        .nav .nav-action {
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: 12px;
+            letter-spacing: 0.2px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(15,23,42,0.08);
+            transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+        }
+        .nav .nav-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(15,23,42,0.14);
+            filter: brightness(1.02);
+        }
+        .nav .nav-action-home {
+            background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+            color: #fff;
+            border-color: #115e59;
+        }
+        .nav .nav-action-back {
+            background: linear-gradient(135deg, #334155 0%, #1f2937 100%);
+            color: #fff;
+            border-color: #1f2937;
+        }
+        .nav .nav-action-admin {
+            background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+            color: #fff;
+            border-color: #5b21b6;
+        }
+        .nav .nav-action .mini-ico {
+            background: rgba(255,255,255,0.16);
+            border-color: rgba(255,255,255,0.25);
+            color: #fff;
+        }
         .nav .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
         .nav .primary:hover { background: #c2410c; }
         .nav .danger { background: var(--bad); color: #fff; border-color: #7f1d1d; }
         .nav .danger:hover { background: #7f1d1d; }
         .nav button:disabled { opacity: 0.55; cursor: not-allowed; }
+        .scope-mini-bar {
+            display: flex;
+            gap: 6px;
+            padding: 6px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8fafc;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .scope-mini-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+            max-width: 46vw;
+            padding: 4px 7px;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+            white-space: nowrap;
+        }
+        .scope-mini-chip .k {
+            color: #64748b;
+            font-weight: 700;
+            flex: 0 0 auto;
+        }
+        .scope-mini-chip .v {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+        .scope-mini-chip-combined { display: none; max-width: 96vw; }
         .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 12px 24px; }
         h1 { margin: 0 0 4px; font-size: 27px; font-weight: 800; color: #111827; }
-        .subtitle { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
-        .banner {
-            border: 1px solid #fed7aa;
-            background: #fff7ed;
-            border-radius: var(--radius);
-            padding: 8px 10px;
-            color: #9a3412;
-            margin-bottom: 12px;
-            font-size: 12px;
-        }
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+        .scope-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .scope-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-top: 8px; }
+        .scope-row .field { flex: 1 1 220px; min-width: 0; }
+        .scope-row label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
+        .scope-row select {
+            width: 100%;
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            padding: 7px 10px;
+            font-size: 13px;
+            background: #fff;
+            color: var(--ink);
+        }
+        .scope-row button {
+            border: 1px solid #0c5b55;
+            background: var(--accent2);
+            color: #fff;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .scope-row button:hover { filter: brightness(0.96); }
+        .scope-row button:disabled { opacity: 0.55; cursor: not-allowed; }
+        .scope-help { margin-top: 8px; color: var(--muted); font-size: 12px; }
+        .scope-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+            margin-right: 6px;
+            margin-top: 4px;
+        }
+        .admin-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+        .admin-links a {
+            text-decoration: none;
+            border: 1px solid var(--edge);
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #0f172a;
+            background: #fff;
+        }
+        .admin-links a:hover { background: #f8fafc; }
         .card {
             background: var(--panel);
             border: 1px solid var(--edge);
@@ -128,33 +241,94 @@
             .cards { gap: 10px; }
             .card { padding: 12px; }
             .topbar { flex-wrap: wrap; gap: 8px; }
-            .nav-label { display: none; }
-            .nav-short { display: inline; }
+            .brand-logo { width: 156px; height: 156px; }
             .nav a, .nav button { padding: 5px 8px; }
+        }
+        @media (max-width: 480px) {
+            .scope-mini-bar { padding: 5px 8px; }
+            .scope-mini-chip { display: none; }
+            .scope-mini-chip-combined { display: inline-flex; }
         }
     </style>
 </head>
 <body>
     <div class="topbar">
         <div class="brand-wrap">
-            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+            <img class="brand-logo" src="/branding/company-logo" alt="Company logo" />
             <div class="brand">Dexter Ops Portal</div>
         </div>
         <div class="nav">
-            <a href="/"><span class="mini-ico">H</span><span class="nav-label">Home</span><span class="nav-short">HM</span></a>
-            <a href="/portal/productmix"><span class="mini-ico">P</span><span class="nav-label">ProductMix</span><span class="nav-short">PM</span></a>
-            <a href="/portal/ic3"><span class="mini-ico">I</span><span class="nav-label">Inventory Control 3</span><span class="nav-short">IC3</span></a>
-            <a href="/portal/managerapp"><span class="mini-ico">D</span><span class="nav-label">Daily Log</span><span class="nav-short">DL</span></a>
-            <button class="primary" id="btnStartAll" onclick="act('/api/start-all', this)">Start All</button>
-            <button class="danger" id="btnStopAll" onclick="act('/api/stop-all', this)">Stop All</button>
-            <a href="/auth/logout"><span class="mini-ico">L</span><span class="nav-label">Logout</span><span class="nav-short">Out</span></a>
+            <a class="nav-action nav-action-home" href="/portal" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
+            <a class="nav-action nav-action-admin" href="/admin"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
+            <button class="nav-action nav-action-back" type="button" onclick="goBack()"><span class="mini-ico">B</span><span class="nav-label">Back</span><span class="nav-short">BK</span></button>
         </div>
     </div>
     <div class="toast-wrap" id="toastWrap"></div>
+    <div class="scope-mini-bar" aria-label="Active scope">
+        <div class="scope-mini-chip"><span class="k">Co</span><span class="v">{{ selected_company_name or 'Not selected' }}</span></div>
+        <div class="scope-mini-chip"><span class="k">Loc</span><span class="v">{{ (selected_restaurant.label if selected_restaurant else 'Not selected') }}</span></div>
+        <div class="scope-mini-chip scope-mini-chip-combined"><span class="k">Scope</span><span class="v">{{ selected_company_name or 'Not selected' }} - {{ (selected_restaurant.label if selected_restaurant else 'Not selected') }}</span></div>
+    </div>
     <div class="wrap">
         <h1>Restaurant Management</h1>
-        <p class="subtitle">Run both systems under one portal and switch between them from shared navigation.</p>
-        <div class="banner">Both copied apps are hosted behind this portal. Original source folders remain untouched.</div>
+        <div class="scope-grid">
+            <div class="card">
+                <h2>Scope Controls</h2>
+                <p>Switch company and location context before opening any module.</p>
+                <div>
+                    <span class="scope-pill">Role: {{ role_name or 'User' }}</span>
+                    <span class="scope-pill">Company: {{ selected_company_name or 'Not selected' }}</span>
+                    <span class="scope-pill">Location: {{ (selected_restaurant.label if selected_restaurant else 'Not selected') }}</span>
+                </div>
+
+                {% if role_name == 'Super Admin' %}
+                <form class="scope-row" method="post" action="/admin/company-scope">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="next_path" value="/portal">
+                    <div class="field">
+                        <label for="portalCompanySelect">Company</label>
+                        <select id="portalCompanySelect" name="company_id" {% if not company_options %}disabled{% endif %}>
+                            {% for company in company_options %}
+                            <option value="{{ company.id }}" {% if selected_company_id and company.id == selected_company_id %}selected{% endif %}>{{ company.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" {% if not company_options %}disabled{% endif %}>Switch Company</button>
+                </form>
+                {% endif %}
+
+                <form class="scope-row" method="post" action="/admin/location-scope">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="next_path" value="/portal">
+                    <div class="field">
+                        <label for="portalLocationSelect">Location</label>
+                        <select id="portalLocationSelect" name="restaurant_id" {% if not location_options %}disabled{% endif %}>
+                            {% for location in location_options %}
+                            <option value="{{ location.id }}" {% if selected_restaurant_id and location.id == selected_restaurant_id %}selected{% endif %}>{{ location.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" {% if not location_options %}disabled{% endif %}>Switch Location</button>
+                </form>
+                <div class="scope-help">This updates context for ProductMix, IC3, and Daily Operations Log.</div>
+            </div>
+
+            <div class="card">
+                <h2>Admin Controls</h2>
+                <p>Open additional admin pages directly from the launcher.</p>
+                <div class="admin-links">
+                    <a href="/admin/users">Users and Roles</a>
+                    <a href="/admin/tasks">Tasks</a>
+                    <a href="/admin/email">Email Setup</a>
+                    <a href="/admin/audit-logs">Audit Logs</a>
+                    <a href="/admin/company-profile">Company Profile</a>
+                    {% if role_name == 'Super Admin' %}
+                    <a href="/admin/companies">Companies</a>
+                    <a href="/admin/company-health">Company Health</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
         <div class="cards">
             <div class="card">
                 <h2>ProductMixRestaurantDB</h2>
@@ -173,10 +347,10 @@
                 </div>
             </div>
             <div class="card">
-                <h2>Daily Log</h2>
+                <h2>Daily Operations Log</h2>
                 <p>Manager workflows for daily logs, employees, and operational reports.</p>
                 <div class="actions">
-                    <a class="primary" href="/portal/managerapp">Open Daily Log</a>
+                    <a class="primary" href="/portal/managerapp">Open Daily Operations Log</a>
                     <a class="secondary" href="/app/managerapp/" target="_blank" rel="noopener">Open Raw</a>
                 </div>
             </div>
@@ -196,21 +370,36 @@
                 setTimeout(function() { t.remove(); }, 300);
             }, 3200);
         }
-        async function act(url, btn) {
-            if (btn) { btn.disabled = true; var orig = btn.textContent; btn.textContent = '...'; }
+        function goBack() {
+            if (window.history.length > 1) {
+                window.history.back();
+                return;
+            }
+            window.location.href = '/portal';
+        }
+
+        function openDexterHub(evt) {
+            if (evt && evt.preventDefault) evt.preventDefault();
+            var target = '/portal?hub=1&t=' + Date.now();
             try {
-                var res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-                if (!res.ok) {
-                    var txt = await res.text();
-                    showToast('Action failed: ' + txt, 'error');
-                } else {
-                    showToast('Done.', 'ok');
+                if (window.top && window.top !== window) {
+                    window.top.location.href = target;
+                    return false;
                 }
             } catch (e) {
-                showToast('Request failed: ' + e.message, 'error');
-            } finally {
-                if (btn) { btn.disabled = false; btn.textContent = orig; }
+                // Fallback to same-window navigation if top cannot be accessed.
             }
+            window.location.href = target;
+            return false;
+        }
+
+        var switchedCompany = {{ 'true' if company_switched else 'false' }};
+        var switchedLocation = {{ 'true' if location_switched else 'false' }};
+        if (switchedCompany) {
+            showToast('Company scope updated.', 'ok');
+        }
+        if (switchedLocation) {
+            showToast('Location scope updated.', 'ok');
         }
     </script>
 </body>

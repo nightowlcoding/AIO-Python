@@ -1928,6 +1928,31 @@ def get_active_restaurant():
             method=request.method,
         )
         dexter_company_name = _clean_text(tenant_scope.get("company_name", ""), 120).strip()
+
+        # Prefer explicit Dexter location scope when present so embedded ProductMix
+        # stays aligned with Dexter's active location across company switches.
+        dexter_restaurant_raw = _clean_text(request.headers.get("X-Dexter-Restaurant-Id", ""), 40).strip().lower()
+        if dexter_restaurant_raw.startswith("pm_"):
+            dexter_restaurant_raw = dexter_restaurant_raw[3:]
+        dexter_restaurant_id = int(dexter_restaurant_raw) if dexter_restaurant_raw.isdigit() else None
+        if dexter_restaurant_id is not None:
+            conn = get_db_connection()
+            try:
+                if dexter_company_name:
+                    row = conn.execute(
+                        "SELECT * FROM restaurants WHERE id = ? AND name = ? LIMIT 1",
+                        (int(dexter_restaurant_id), dexter_company_name),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT * FROM restaurants WHERE id = ? LIMIT 1",
+                        (int(dexter_restaurant_id),),
+                    ).fetchone()
+            finally:
+                conn.close()
+            if row:
+                return dict(row)
+
         if dexter_company_name:
             conn = get_db_connection()
             try:
@@ -5061,15 +5086,6 @@ def home():
 @login_required
 def index():
     restaurant = get_active_restaurant()
-    location_options = _get_accessible_restaurant_switch_options()
-    accessible_restaurant_ids = [
-        int(opt["id"])
-        for opt in location_options
-        if str(opt.get("id", "")).isdigit()
-    ]
-    if not accessible_restaurant_ids and restaurant and str(restaurant.get("id", "")).isdigit():
-        accessible_restaurant_ids = [int(restaurant["id"])]
-
     load_upload_id_raw = (request.args.get("load_upload_id") or "").strip()
     load_upload_id = int(load_upload_id_raw) if load_upload_id_raw.isdigit() else None
     start_date = _normalize_report_date_filter(request.args.get("start_date")) or ""
@@ -5077,7 +5093,6 @@ def index():
     recent_uploads = _get_recent_product_mix_uploads(
         restaurant=restaurant,
         limit=None,
-        restaurant_ids=accessible_restaurant_ids,
     )
 
     uploads_by_location = {}

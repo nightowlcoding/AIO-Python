@@ -7,22 +7,8 @@
     <div class="daily-log-header d-flex justify-content-between align-items-start align-items-md-center gap-3 mb-4 flex-column flex-md-row">
         <h1><i class="bi bi-calendar-check"></i> Daily Operations Log</h1>
         <div class="daily-log-toolbar d-flex gap-2 flex-wrap justify-content-start justify-content-md-end">
-            {% if locations %}
-            <select class="form-select daily-log-context-select" id="locationSelector" onchange="changeLocation(this.value)">
-                <option value="">Select Location</option>
-                {% for location in locations %}
-                <option value="{{ location.id }}" {% if location.id == selected_location_id %}selected{% endif %}>
-                    {{ location.name }}
-                </option>
-                {% endfor %}
-            </select>
-            {% endif %}
                  <input type="date" id="dateSelector" class="form-control daily-log-context-input" value="{{ date }}"
                    onchange="changeDateAndLocation()">
-            <button type="button" class="btn btn-secondary daily-log-context-button" onclick="document.getElementById('csvImport').click()">
-                <i class="bi bi-file-earmark-spreadsheet"></i> Import Excel File
-            </button>
-            <input type="file" id="csvImport" accept=".csv,.xlsx" multiple style="display: none;" onchange="importCSV(event)">
         </div>
         <div class="daily-log-draft-status text-muted small text-end mt-2" id="dailyLogDraftStatus">Draft sync off</div>
     </div>
@@ -54,17 +40,6 @@
         </div>
     </div>
     
-    {% if not selected_location_id and locations %}
-    <div class="alert alert-warning">
-        <i class="bi bi-exclamation-triangle"></i>
-        <strong>Please select a location</strong> to view or enter daily log data.
-    </div>
-    {% elif not locations %}
-    <div class="alert alert-info">
-        <i class="bi bi-info-circle"></i>
-        <strong>No locations found.</strong> Please <a href="{{ url_for('locations') }}">add a location</a> first.
-    </div>
-    {% else %}
     <form method="POST" action="{{ url_for('daily_log') }}" id="dailyLogForm">
         <input type="hidden" name="date" value="{{ date }}">
         <input type="hidden" name="location_id" value="{{ selected_location_id }}">
@@ -74,186 +49,134 @@
             <!-- Employee Entry Form -->
             <div class="col-12">
                 <div class="card border-primary">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="bi bi-person-plus"></i> Add Employee Entry</h5>
-                        <button type="button" class="btn btn-light btn-sm" onclick="toggleBulkEntry()" title="Add employees in bulk">
-                            <i class="bi bi-chevron-double-down" id="bulkEntryIcon"></i>
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <!-- Bulk Entry Section (Hidden by default) -->
-                        <div id="bulkEntrySection" style="display: none;">
-                            <div class="card bg-light border-info mb-3">
-                                <div class="card-body">
-                                    <h6 class="card-title"><i class="bi bi-info-circle text-info"></i> Bulk Entry Mode</h6>
-                                    <p class="card-text mb-2">Enter multiple employees at once. Use Tab to move between fields. Maximum 20 employees per bulk entry.</p>
-                                    <div class="mt-2">
-                                        <button type="button" class="btn btn-sm btn-secondary" onclick="document.getElementById('bulkCsvImport').click()">
-                                            <i class="bi bi-file-earmark-spreadsheet"></i> Import Excel File
+                    <details id="employeeEntryDetails">
+                        <summary class="card-header bg-primary text-white d-flex justify-content-between align-items-center" style="list-style: none; cursor: pointer;">
+                            <h5 class="mb-0"><i class="bi bi-person-plus"></i> Add Employee Entry</h5>
+                            <span class="btn btn-light btn-sm" aria-hidden="true">
+                                <i class="bi bi-chevron-down"></i>
+                            </span>
+                        </summary>
+                        <div class="card-body">
+                            <!-- Basic Info -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label small">Name</label>
+                                    <input type="text" class="form-control form-control-sm" id="emp_name" placeholder="Employee Name" list="employeeNameList" autocomplete="off" oninput="syncEmployeeQuickAdd()" onchange="syncEmployeeQuickAdd()">
+                                    <datalist id="employeeNameList">
+                                        <!-- Populated by JavaScript -->
+                                    </datalist>
+                                    <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                                        <button type="button" class="btn btn-outline-primary btn-sm d-none" id="employeeQuickAddBtn" onclick="quickAddEmployeeFromForm()">
+                                            <i class="bi bi-plus-circle"></i> Add as New Employee
                                         </button>
-                                        <input type="file" id="bulkCsvImport" accept=".csv,.xlsx" multiple style="display: none;" onchange="importBulkCSV(event)">
-                                        <small class="text-muted ms-2">Import data directly into bulk entry table</small>
+                                        <small class="text-muted" id="employeeQuickAddHint"></small>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label small">Shift</label>
+                                    <select class="form-select form-select-sm" id="emp_shift">
+                                        <option value="Day">Day</option>
+                                        <option value="Night">Night</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label small">Area</label>
+                                    <select class="form-select form-select-sm" id="emp_area">
+                                        <option value="Dining">Dining</option>
+                                        <option value="Bar">Bar</option>
+                                        <option value="To Go">To Go</option>
+                                    </select>
+                                </div>
+                            </div>
+                        
+                            <!-- Cash & Tips -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label small">Cash ($)</label>
+                                    <input type="number" class="form-control form-control-sm" id="emp_cash" step="0.01" value="0.00" oninput="updateCashDifference()">
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label small">CC Tips ($)</label>
+                                    <input type="number" class="form-control form-control-sm" id="emp_cc_tips" step="0.01" value="0.00" oninput="updateCashDifference()">
+                                </div>
+                            </div>
+                        
+                            <!-- Cash Difference -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-12">
+                                    <label class="form-label small">Cash Difference ($)</label>
+                                    <input type="number" class="form-control form-control-sm" id="emp_cash_diff" step="0.01" value="0.00" readonly>
+                                    <small class="text-muted">Cash - CC Tips</small>
+                                </div>
+                            </div>
+                        
+                            <!-- Credit Cards -->
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Credit Cards</label>
+                                <div class="row g-2">
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Visa ($)</label>
+                                        <input type="number" class="form-control form-control-sm credit-card" id="emp_visa" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Mastercard ($)</label>
+                                        <input type="number" class="form-control form-control-sm credit-card" id="emp_mastercard" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Amex ($)</label>
+                                        <input type="number" class="form-control form-control-sm credit-card" id="emp_amex" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Discover ($)</label>
+                                        <input type="number" class="form-control form-control-sm credit-card" id="emp_discover" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
+                                    </div>
+                                </div>
+                                <div class="alert alert-info mt-2 mb-0 py-1 px-2">
+                                    <small>Credit Total: $<span id="emp_credit_total">0.00</span></small>
+                                </div>
+                            </div>
+                        
+                            <!-- Sales -->
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Sales</label>
+                                <div class="row g-2">
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Beer ($)</label>
+                                        <input type="number" class="form-control form-control-sm" id="emp_beer" step="0.01" value="0.00">
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Liquor ($)</label>
+                                        <input type="number" class="form-control form-control-sm" id="emp_liquor" step="0.01" value="0.00">
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Wine ($)</label>
+                                        <input type="number" class="form-control form-control-sm" id="emp_wine" step="0.01" value="0.00">
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label small">Food ($)</label>
+                                        <input type="number" class="form-control form-control-sm" id="emp_food" step="0.01" value="0.00">
                                     </div>
                                 </div>
                             </div>
-                            <div class="table-responsive bulk-entry-table-wrap mb-3" style="max-height: 400px; overflow: auto;">
-                                <table class="table table-sm table-bordered" style="min-width: 1800px;">
-                                    <thead class="table-light sticky-top">
-                                        <tr>
-                                            <th style="min-width: 150px;">Name</th>
-                                            <th style="min-width: 220px;">File Name</th>
-                                            <th style="min-width: 80px;">Shift</th>
-                                            <th style="min-width: 80px;">Area</th>
-                                            <th style="min-width: 100px;">Cash</th>
-                                            <th style="min-width: 100px;">CC Tips</th>
-                                            <th style="min-width: 100px;">Visa</th>
-                                            <th style="min-width: 100px;">MC</th>
-                                            <th style="min-width: 100px;">Amex</th>
-                                            <th style="min-width: 100px;">Disc</th>
-                                            <th style="min-width: 100px;">Beer</th>
-                                            <th style="min-width: 100px;">Liquor</th>
-                                            <th style="min-width: 100px;">Wine</th>
-                                            <th style="min-width: 100px;">Food</th>
-                                            <th style="min-width: 100px;">Voids</th>
-                                            <th style="min-width: 60px;">OK</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="bulkEntryRows">
-                                        <!-- Rows will be added dynamically -->
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="bulkEntryMobileCards" class="bulk-entry-mobile-cards mb-3"></div>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-sm btn-success" onclick="addBulkRow()">
-                                    <i class="bi bi-plus"></i> Add Row
-                                </button>
-                                <button type="button" class="btn btn-sm btn-warning" onclick="clearBulkEntries()">
-                                    <i class="bi bi-trash"></i> Clear All
-                                </button>
-                                <button type="button" class="btn btn-sm btn-primary" onclick="saveBulkEntries()">
-                                    <i class="bi bi-check-lg"></i> Save All Entries
-                                </button>
-                                <button type="button" class="btn btn-sm btn-secondary" onclick="toggleBulkEntry()">
-                                    <i class="bi bi-x"></i> Cancel
-                                </button>
-                            </div>
-                            <hr class="my-3">
-                        </div>
-
-                        <!-- Basic Info -->
-                        <div class="row g-2 mb-3">
-                            <div class="col-12 col-md-4">
-                                <label class="form-label small">Name</label>
-                                <input type="text" class="form-control form-control-sm" id="emp_name" placeholder="Employee Name" list="employeeNameList" autocomplete="off">
-                                <datalist id="employeeNameList">
-                                    <!-- Populated by JavaScript -->
-                                </datalist>
-                            </div>
-                            <div class="col-12 col-md-4">
-                                <label class="form-label small">Shift</label>
-                                <select class="form-select form-select-sm" id="emp_shift">
-                                    <option value="Day">Day</option>
-                                    <option value="Night">Night</option>
-                                </select>
-                            </div>
-                            <div class="col-12 col-md-4">
-                                <label class="form-label small">Area</label>
-                                <select class="form-select form-select-sm" id="emp_area">
-                                    <option value="Dining">Dining</option>
-                                    <option value="Bar">Bar</option>
-                                    <option value="To Go">To Go</option>
-                                </select>
-                            </div>
-                        </div>
                         
-                        <!-- Cash & Tips -->
-                        <div class="row g-2 mb-3">
-                            <div class="col-12 col-md-6">
-                                <label class="form-label small">Cash</label>
-                                <input type="number" class="form-control form-control-sm" id="emp_cash" step="0.01" value="0.00" oninput="updateCashDifference()">
+                            <!-- Voids -->
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Voids ($)</label>
+                                <input type="number" class="form-control form-control-sm" id="emp_voids" step="0.01" value="0.00">
                             </div>
-                            <div class="col-12 col-md-6">
-                                <label class="form-label small">CC Tips</label>
-                                <input type="number" class="form-control form-control-sm" id="emp_cc_tips" step="0.01" value="0.00" oninput="updateCashDifference()">
-                            </div>
-                        </div>
                         
-                        <!-- Cash Difference -->
-                        <div class="row g-2 mb-3">
-                            <div class="col-12">
-                                <label class="form-label small">Cash Difference</label>
-                                <input type="number" class="form-control form-control-sm" id="emp_cash_diff" step="0.01" value="0.00" readonly>
-                                <small class="text-muted">Cash - CC Tips</small>
-                            </div>
-                        </div>
-                        
-                        <!-- Credit Cards -->
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Credit Cards</label>
-                            <div class="row g-2">
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Visa</label>
-                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_visa" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Mastercard</label>
-                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_mastercard" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Amex</label>
-                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_amex" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Discover</label>
-                                    <input type="number" class="form-control form-control-sm credit-card" id="emp_discover" step="0.01" value="0.00" onchange="updateEmpCreditTotal()">
-                                </div>
-                            </div>
-                            <div class="alert alert-info mt-2 mb-0 py-1 px-2">
-                                <small>Credit Total: $<span id="emp_credit_total">0.00</span></small>
-                            </div>
-                        </div>
-                        
-                        <!-- Sales -->
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Sales</label>
-                            <div class="row g-2">
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Beer</label>
-                                    <input type="number" class="form-control form-control-sm" id="emp_beer" step="0.01" value="0.00">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Liquor</label>
-                                    <input type="number" class="form-control form-control-sm" id="emp_liquor" step="0.01" value="0.00">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Wine</label>
-                                    <input type="number" class="form-control form-control-sm" id="emp_wine" step="0.01" value="0.00">
-                                </div>
-                                <div class="col-12 col-sm-6">
-                                    <label class="form-label small">Food</label>
-                                    <input type="number" class="form-control form-control-sm" id="emp_food" step="0.01" value="0.00">
+                            <div id="formButtons" class="employee-form-actions">
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
+                                        <i class="bi bi-save"></i> Save Entry
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success w-100" onclick="addEmployeeEntry(true)">
+                                        <i class="bi bi-plus-circle"></i> Save & Add Another
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Voids -->
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold">Voids</label>
-                            <input type="number" class="form-control form-control-sm" id="emp_voids" step="0.01" value="0.00">
-                        </div>
-                        
-                        <div id="formButtons" class="employee-form-actions">
-                            <div class="d-grid gap-2">
-                                <button type="button" class="btn btn-success w-100" onclick="addEmployeeEntry()">
-                                    <i class="bi bi-save"></i> Save Entry
-                                </button>
-                                <button type="button" class="btn btn-outline-success w-100" onclick="addEmployeeEntry(true)">
-                                    <i class="bi bi-plus-circle"></i> Save & Add Another
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    </details>
                 </div>
             </div>
             
@@ -266,17 +189,9 @@
                                 <i class="bi bi-people"></i> Employee Entries <span class="badge bg-light text-dark" id="employeeCount">0</span>
                             </h5>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <select class="form-select form-select-sm" id="shiftFilter" onchange="filterEmployeesByShift()" style="width: auto; background-color: white;">
-                                <option value="All">All Shifts</option>
-                                <option value="Day">Day Only</option>
-                                <option value="Night">Night Only</option>
-                                <option value="Full">Full Day</option>
-                            </select>
-                            <i class="bi bi-chevron-up" id="employeeListIcon" style="cursor: pointer;" onclick="toggleSection('employeeListBody')"></i>
-                        </div>
+                        <i class="bi bi-chevron-up" id="employeeListIcon" style="cursor: pointer;" onclick="toggleSection('employeeListBody')"></i>
                     </div>
-                    <div class="card-body p-0" id="employeeListBody" style="max-height: 600px; overflow-y: auto;">
+                    <div class="card-body p-0" id="employeeListBody" style="display: none; max-height: 600px; overflow-y: auto;">
                         <div id="employeeList">
                             <p class="text-muted text-center p-3">No employees added yet</p>
                         </div>
@@ -412,73 +327,6 @@
                                 <strong>Total Cash Deductions:</strong> $<span id="totalCashDeductions">0.00</span>
                             </div>
                         </div>
-                    </div>
-                </div>
-                
-                <!-- Revenue Centers Section -->
-                <div class="card mt-3">
-                    <div class="card-header bg-success text-white" style="cursor: pointer;" onclick="toggleSection('revenueCentersBody')">
-                        <h6 class="mb-0">
-                            <i class="bi bi-shop"></i> Revenue Centers
-                            <i class="bi bi-chevron-down float-end" id="revenueCentersIcon"></i>
-                        </h6>
-                    </div>
-                    <div class="card-body" id="revenueCentersBody" style="display: none;">
-                        <p class="text-muted small mb-3">
-                            <i class="bi bi-info-circle"></i> Automatically calculated from employee entries
-                        </p>
-                        
-                        <!-- Day Shift -->
-                        <h6 class="text-primary mb-2"><i class="bi bi-brightness-high"></i> Day Shift</h6>
-                        <table class="table table-bordered">
-                            <tr>
-                                <td><strong>Bar:</strong></td>
-                                <td class="text-end"><h4 class="mb-0">$<span id="dayBar">0.00</span></h4></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Dining:</strong></td>
-                                <td class="text-end"><h4 class="mb-0">$<span id="dayDining">0.00</span></h4></td>
-                            </tr>
-                            <tr>
-                                <td><strong>To Go:</strong></td>
-                                <td class="text-end"><h4 class="mb-0">$<span id="dayToGo">0.00</span></h4></td>
-                            </tr>
-                        </table>
-                        
-                        <!-- Night Shift -->
-                        <h6 class="text-dark mb-2"><i class="bi bi-moon-stars"></i> Night Shift</h6>
-                        <table class="table table-bordered">
-                            <tr>
-                                <td><strong>Bar:</strong></td>
-                                <td class="text-end"><h4 class="mb-0">$<span id="nightBar">0.00</span></h4></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Dining:</strong></td>
-                                <td class="text-end"><h4 class="mb-0">$<span id="nightDining">0.00</span></h4></td>
-                            </tr>
-                            <tr>
-                                <td><strong>To Go:</strong></td>
-                                <td class="text-end"><h4 class="mb-0">$<span id="nightToGo">0.00</span></h4></td>
-                            </tr>
-                        </table>
-                        
-                        <!-- Combined Totals -->
-                        <hr>
-                        <h6 class="text-success mb-2"><i class="bi bi-calculator"></i> Combined Totals</h6>
-                        <table class="table table-bordered table-success">
-                            <tr>
-                                <td><strong>Total Bar:</strong></td>
-                                <td class="text-end"><h3 class="mb-0 text-success">$<span id="totalBar">0.00</span></h3></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Total Dining:</strong></td>
-                                <td class="text-end"><h3 class="mb-0 text-success">$<span id="totalDining">0.00</span></h3></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Total To Go:</strong></td>
-                                <td class="text-end"><h3 class="mb-0 text-success">$<span id="totalToGo">0.00</span></h3></td>
-                            </tr>
-                        </table>
                     </div>
                 </div>
                 
@@ -794,7 +642,6 @@
             <button type="button" class="btn btn-sm btn-light" onclick="dismissUndoEmployee()" aria-label="Dismiss undo">Dismiss</button>
         </div>
     </form>
-    {% endif %}
     
     <!-- Print-Only Summary -->
     <div id="printSummary" class="print-only">
@@ -976,8 +823,9 @@ let dailyLogDraftReady = false;
 let dailyLogLiveVersion = null;
 let dailyLogLivePollTimer = null;
 let dailyLogHasUnsavedChanges = false;
-const DAILY_LOG_DEFAULTS_KEY = 'dx_daily_log_defaults';
-const DAILY_LOG_RECENT_NAMES_KEY = 'dx_daily_log_recent_names';
+const DAILY_LOG_SCOPE_KEY = '{{ current_user.current_company_id }}:{{ selected_location_id or "none" }}';
+const DAILY_LOG_DEFAULTS_KEY = `dx_daily_log_defaults:${DAILY_LOG_SCOPE_KEY}`;
+const DAILY_LOG_RECENT_NAMES_KEY = `dx_daily_log_recent_names:${DAILY_LOG_SCOPE_KEY}`;
 const DAILY_LOG_LIVE_POLL_MS = 10000;
 
 function getDailyLogDefaults() {
@@ -1109,14 +957,14 @@ function applyNumericKeyboardHints(scope = document) {
             input.addEventListener('focus', () => {
                 const rawValue = String(input.value || '').replace(/[$,\s]/g, '');
                 const numericValue = parseFloat(rawValue);
-                if (!rawValue || !Number.isFinite(numericValue) || numericValue <= 0) {
+                if (!rawValue || !Number.isFinite(numericValue)) {
                     input.value = '';
                 }
             });
             input.addEventListener('blur', () => {
                 const rawValue = String(input.value || '').replace(/[$,\s]/g, '');
                 const numericValue = parseFloat(rawValue);
-                input.value = Number.isFinite(numericValue) && numericValue > 0 ? numericValue.toFixed(2) : '';
+                input.value = Number.isFinite(numericValue) && numericValue >= 0 ? numericValue.toFixed(2) : '0.00';
             });
         }
     });
@@ -1471,12 +1319,12 @@ function restoreDailyLogDraft() {
 
 function changeLocation(locationId) {
     const date = document.getElementById('dateSelector').value;
-    window.location.href = '{{ url_for("daily_log") }}?date=' + date + '&location_id=' + locationId;
+    window.location.href = '{{ url_for("daily_log") }}?date=' + date + (locationId ? '&location_id=' + locationId : '');
 }
 
 function changeDateAndLocation() {
     const date = document.getElementById('dateSelector').value;
-    const locationId = document.getElementById('locationSelector').value;
+    const locationId = document.getElementById('locationSelector')?.value || '';
     window.location.href = '{{ url_for("daily_log") }}?date=' + date + (locationId ? '&location_id=' + locationId : '');
 }
 
@@ -1485,12 +1333,12 @@ function toggleSection(sectionId) {
     const iconId = sectionId.replace('Body', 'Icon');
     const icon = document.getElementById(iconId);
     
-    if (section.style.display === 'none') {
-        section.style.display = 'block';
+    if (section.hidden) {
+        section.hidden = false;
         icon.classList.remove('bi-chevron-down');
         icon.classList.add('bi-chevron-up');
     } else {
-        section.style.display = 'none';
+        section.hidden = true;
         icon.classList.remove('bi-chevron-up');
         icon.classList.add('bi-chevron-down');
     }
@@ -1501,9 +1349,14 @@ function isBulkMobileView() {
 }
 
 function getBulkEntryContainer() {
+    const table = document.getElementById('bulkEntryRows');
+    const cards = document.getElementById('bulkEntryMobileCards');
+    if (!table && !cards) {
+        return null;
+    }
     return isBulkMobileView()
-        ? document.getElementById('bulkEntryMobileCards')
-        : document.getElementById('bulkEntryRows');
+        ? cards
+        : table;
 }
 
 function getBulkEmployeeDataFromElement(element) {
@@ -1562,7 +1415,7 @@ function buildBulkEmployeeMarkup(rowId, empData, mode) {
     const area = empData.area || defaults.area;
     const toCurrencyInputValue = (value) => {
         const numeric = Number(value) || 0;
-        return numeric > 0 ? numeric.toFixed(2) : '';
+        return numeric >= 0 ? numeric.toFixed(2) : '0.00';
     };
     const cash = toCurrencyInputValue(empData.cash);
     const ccTips = toCurrencyInputValue(empData.cc_tips);
@@ -1677,6 +1530,9 @@ function syncBulkEntryPresentation() {
     const table = document.getElementById('bulkEntryRows');
     const cards = document.getElementById('bulkEntryMobileCards');
     const target = getBulkEntryContainer();
+    if (!target) {
+        return;
+    }
     const source = isBulkMobileView() ? table : cards;
 
     if (!target || !source || source.children.length === 0 || target.children.length > 0) {
@@ -1787,6 +1643,45 @@ function addEmployeeEntry(keepAdding = false) {
     }
 }
 
+function isRecognizedEmployeeName(name) {
+    const normalized = (name || '').trim().toLowerCase();
+    if (!normalized) {
+        return false;
+    }
+
+    const list = document.getElementById('employeeNameList');
+    if (!list) {
+        return false;
+    }
+
+    return Array.from(list.options || []).some(option => (option.value || '').trim().toLowerCase() === normalized);
+}
+
+function syncEmployeeQuickAdd() {
+    const nameInput = document.getElementById('emp_name');
+    const button = document.getElementById('employeeQuickAddBtn');
+    const hint = document.getElementById('employeeQuickAddHint');
+    if (!nameInput || !button || !hint) {
+        return;
+    }
+
+    const name = nameInput.value.trim();
+    const recognized = isRecognizedEmployeeName(name);
+    button.classList.toggle('d-none', recognized || !name);
+    hint.textContent = !name ? '' : recognized ? 'Matched from employee list.' : 'Not found in the list. You can add this as a new employee entry.';
+}
+
+function quickAddEmployeeFromForm() {
+    const name = document.getElementById('emp_name')?.value?.trim() || '';
+    if (!name) {
+        alert('Enter an employee name first.');
+        return;
+    }
+
+    addEmployeeEntry(false);
+    syncEmployeeQuickAdd();
+}
+
 function clearEmployeeForm(preserveDefaults = false) {
     const defaults = preserveDefaults ? getDailyLogDefaults() : { shift: 'Day', area: 'Dining' };
     const fields = [
@@ -1813,6 +1708,8 @@ function clearEmployeeForm(preserveDefaults = false) {
             element.value = field.value;
         }
     });
+
+    syncEmployeeQuickAdd();
     
     updateEmpCreditTotal();
     clearEmployeeValidationStates();
@@ -2376,19 +2273,6 @@ function updateEmployeeList() {
         document.getElementById('employeeCount').textContent = employees.length;
         syncDailyLogSummary();
         
-        // Check if filter is active and use filter function instead
-        const filterSelect = document.getElementById('shiftFilter');
-        if (filterSelect && filterSelect.value !== 'All') {
-            filterEmployeesByShift();
-            
-            // Update hidden field with JSON data
-            const hiddenField = document.getElementById('employee_data');
-            if (hiddenField) {
-                hiddenField.value = JSON.stringify(employees);
-            }
-            return;
-        }
-        
         if (employees.length === 0) {
             list.innerHTML = '<p class="text-muted text-center p-3">No employees added yet</p>';
             return;
@@ -2556,136 +2440,7 @@ function updateEmployeeArea(index, newArea) {
 }
 
 function filterEmployeesByShift() {
-    const filterValue = document.getElementById('shiftFilter').value;
-    const list = document.getElementById('employeeList');
-    
-    if (employees.length === 0) {
-        list.innerHTML = '<p class="text-muted text-center p-3">No employees added yet</p>';
-        return;
-    }
-    
-    let displayEmployees = [];
-    
-    if (filterValue === 'Full') {
-        // Aggregate employees who worked both shifts into "Full" entries
-        const employeeMap = {};
-        
-        employees.forEach(emp => {
-            if (!employeeMap[emp.name]) {
-                employeeMap[emp.name] = {
-                    name: emp.name,
-                    shift: 'Full',
-                    area: emp.area,
-                    cash: 0,
-                    cc_tips: 0,
-                    visa: 0,
-                    mastercard: 0,
-                    amex: 0,
-                    discover: 0,
-                    beer: 0,
-                    liquor: 0,
-                    wine: 0,
-                    food: 0,
-                    voids: 0,
-                    shifts: []
-                };
-            }
-            
-            // Aggregate values
-            employeeMap[emp.name].cash += emp.cash;
-            employeeMap[emp.name].cc_tips += emp.cc_tips;
-            employeeMap[emp.name].visa += emp.visa;
-            employeeMap[emp.name].mastercard += emp.mastercard;
-            employeeMap[emp.name].amex += emp.amex;
-            employeeMap[emp.name].discover += emp.discover;
-            employeeMap[emp.name].beer += emp.beer;
-            employeeMap[emp.name].liquor += emp.liquor;
-            employeeMap[emp.name].wine += emp.wine;
-            employeeMap[emp.name].food += emp.food;
-            employeeMap[emp.name].voids += (emp.voids || 0);
-            employeeMap[emp.name].shifts.push(emp.shift);
-        });
-        
-        displayEmployees = Object.values(employeeMap).sort((a, b) => {
-            if (a.area !== b.area) return a.area.localeCompare(b.area);
-            return a.name.localeCompare(b.name);
-        });
-    } else if (filterValue === 'All') {
-        // Show all employees, sorted
-        displayEmployees = [...employees].sort((a, b) => {
-            if (a.shift !== b.shift) return a.shift === 'Day' ? -1 : 1;
-            if (a.area !== b.area) return a.area.localeCompare(b.area);
-            return a.name.localeCompare(b.name);
-        });
-    } else {
-        // Filter by specific shift (Day or Night)
-        displayEmployees = employees.filter(emp => emp.shift === filterValue).sort((a, b) => {
-            if (a.area !== b.area) return a.area.localeCompare(b.area);
-            return a.name.localeCompare(b.name);
-        });
-    }
-    
-    if (displayEmployees.length === 0) {
-        list.innerHTML = `<p class="text-muted text-center p-3">No ${filterValue === 'All' ? '' : filterValue} employees found</p>`;
-        return;
-    }
-    
-    // Create table view
-    list.innerHTML = `
-        <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-                <thead class="table-light sticky-top">
-                    <tr>
-                        <th style="width: 120px;">Name</th>
-                        <th style="width: 50px;" class="text-center">Shift</th>
-                        <th style="width: 60px;" class="text-center">Area</th>
-                        <th style="width: 70px;" class="text-end">Cash</th>
-                        <th style="width: 70px;" class="text-end">CC Tips</th>
-                        <th style="width: 70px;" class="text-end">Credit</th>
-                        <th style="width: 70px;" class="text-end">Sales</th>
-                        <th style="width: 70px;" class="text-end">Voids</th>
-                        ${filterValue !== 'Full' ? '<th style="width: 50px;"></th>' : ''}
-                    </tr>
-                </thead>
-                <tbody>
-                    ${displayEmployees.map((emp, index) => {
-                        const creditTotal = emp.visa + emp.mastercard + emp.amex + emp.discover;
-                        const salesTotal = emp.beer + emp.liquor + emp.wine + emp.food;
-                        const shiftBadge = emp.shift === 'Day' ? 'primary' : (emp.shift === 'Night' ? 'dark' : 'success');
-                        const shiftLabel = emp.shift === 'Full' ? `Full (${emp.shifts.join('+')})` : emp.shift;
-                        
-                        // For non-Full view, find original index for delete button
-                        const originalIndex = filterValue !== 'Full' ? employees.findIndex(e => e === emp) : -1;
-                        
-                        return `
-                        <tr>
-                            <td>
-                                <strong class="small">${emp.name}</strong>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge bg-${shiftBadge} badge-sm" title="${shiftLabel}">${emp.shift || 'Day'}</span>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge bg-secondary badge-sm">${emp.area}</span>
-                            </td>
-                            <td class="text-end small">${emp.cash.toFixed(2)}</td>
-                            <td class="text-end small">${emp.cc_tips.toFixed(2)}</td>
-                            <td class="text-end small" title="V: $${emp.visa.toFixed(2)}, MC: $${emp.mastercard.toFixed(2)}, AX: $${emp.amex.toFixed(2)}, DS: $${emp.discover.toFixed(2)}">${creditTotal.toFixed(2)}</td>
-                            <td class="text-end small" title="Beer: $${emp.beer.toFixed(2)}, Liquor: $${emp.liquor.toFixed(2)}, Wine: $${emp.wine.toFixed(2)}, Food: $${emp.food.toFixed(2)}">${salesTotal.toFixed(2)}</td>
-                            <td class="text-end small">${(emp.voids || 0).toFixed(2)}</td>
-                            ${filterValue !== 'Full' ? `
-                            <td class="text-center">
-                                <button type="button" class="btn btn-sm btn-danger btn-sm py-0 px-1" onclick="removeEmployee(${originalIndex})" title="Delete">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </td>` : ''}
-                        </tr>
-                        `;
-                    }).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
+    updateEmployeeList();
 }
 
 function updateTotals() {
@@ -3357,6 +3112,16 @@ document.getElementById('dailyLogForm').addEventListener('submit', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     dailyLogDraftReady = true;
 
+    const employeeEntryDetails = document.getElementById('employeeEntryDetails');
+    const employeeEntryChevron = document.querySelector('#employeeEntryDetails summary i.bi');
+    if (employeeEntryDetails) {
+        employeeEntryDetails.open = false;
+    }
+    if (employeeEntryChevron) {
+        employeeEntryChevron.classList.remove('bi-chevron-up');
+        employeeEntryChevron.classList.add('bi-chevron-down');
+    }
+
     // Load existing employees if any
     if (employees.length > 0) {
         updateEmployeeList();
@@ -3430,15 +3195,8 @@ function loadEmployeeNames() {
 // Fallback to localStorage
 function loadEmployeeNamesFromLocalStorage() {
     try {
-        const stored = localStorage.getItem('employees');
-        if (stored) {
-            const employees = JSON.parse(stored);
-            console.log('Loaded', employees.length, 'employees from localStorage');
-            populateEmployeeNameList(employees, employees);
-        } else {
-            console.log('No employees in localStorage either');
-            populateEmployeeNameList([], employees);
-        }
+        console.log('No scoped backend employees found; using scoped recent names only.');
+        populateEmployeeNameList([], []);
     } catch (e) {
         console.error('Error loading from localStorage:', e);
     }
@@ -3598,8 +3356,16 @@ function preparePrintSummary() {
     background-color: #f8f9fa !important;
 }
 
+#employeeEntryDetails:not([open]) > .card-body {
+    display: none !important;
+}
+
 .print-only {
     display: none;
+}
+
+#employeeEntryBody[hidden] {
+    display: none !important;
 }
 
 @media print {

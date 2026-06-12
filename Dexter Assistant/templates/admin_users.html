@@ -72,6 +72,23 @@
     <button type="submit">Create User</button>
   </form>
 
+  <form method="post" action="/admin/users/invite" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <input name="email" type="email" placeholder="Invite email" required />
+    <select name="role_name">
+      <option>Employee</option>
+      <option>Manager</option>
+      <option>Super Admin</option>
+    </select>
+        <select name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
+            {% for loc in available_locations %}
+            <option value="{{ loc.id }}">{{ loc.label }}</option>
+            {% endfor %}
+        </select>
+        <span class="muted">Creates an email-based account and sends a password setup link. {% if mail_status.ready %}SMTP is ready.{% else %}SMTP is not ready yet. <a href="/admin/email">Finish email setup</a>.{% endif %}</span>
+    <button type="submit">Send Invite</button>
+  </form>
+
   <div class="table-card">
   <table>
     <thead>
@@ -113,6 +130,12 @@
             <input type="hidden" name="is_active" value="{{ 0 if u.is_active else 1 }}" />
             <button type="submit">{{ 'Deactivate' if u.is_active else 'Activate' }}</button>
           </form>
+                    {% if '@' in (u.username or '') %}
+                    <form method="post" action="/admin/users/{{ u.id }}/resend-invite" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                        <button type="submit">Resend Invite</button>
+                    </form>
+                    {% endif %}
                     {% if u.role_name != 'Super Admin' %}
                     <form method="post" action="/admin/users/{{ u.id }}/locations" class="inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Email Setup - Dexter Ops</title>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;font-weight:700;margin:0 0 8px}.sub{color:var(--muted);margin:0 0 14px}.row{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;width:100%}.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}input,select{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem;background:#fff;color:var(--ink)}input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(234,88,12,.15)}button[type=submit]{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff;transition:opacity .15s}button[type=submit]:hover{opacity:.88}.msg{padding:9px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid}.ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}.err{background:#fee2e2;color:#991b1b;border-color:#fecaca}.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:600}.pill-on{background:#dcfce7;color:#166534}.pill-off{background:#fee2e2;color:#991b1b}.meta{font-size:.85rem;color:var(--muted)}code{background:#f8fafc;border:1px solid var(--edge);padding:2px 6px;border-radius:6px}</style>
+</head><body>
+<h1>Email Setup</h1>
+<p class="sub">Verify SMTP delivery for password resets, invitations, and future nightly email features.</p>
+{% if message %}<div class="msg ok">{{ message }}</div>{% endif %}
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+{% if is_super_admin %}
+<form method="post" action="/admin/company-scope" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <input type="hidden" name="next_path" value="/admin/email" />
+    <select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    <button type="submit">Switch Company</button>
+</form>
+{% endif %}
+
+<div class="row">
+  <div class="grid">
+    <div class="field"><label>Status</label><div>{% if mail_status.ready %}<span class="pill pill-on">Ready</span>{% else %}<span class="pill pill-off">Needs Attention</span>{% endif %}</div></div>
+    <div class="field"><label>SMTP Host</label><input value="{{ mail_status.settings.smtp_host }}" readonly /></div>
+    <div class="field"><label>SMTP Port</label><input value="{{ mail_status.settings.smtp_port }}" readonly /></div>
+    <div class="field"><label>SMTP Username</label><input value="{{ mail_status.settings.username }}" readonly /></div>
+    <div class="field"><label>From Email</label><input value="{{ mail_status.settings.from_email }}" readonly /></div>
+    <div class="field"><label>Reply-To</label><input value="{{ mail_status.settings.reply_to }}" readonly /></div>
+    <div class="field"><label>Encryption</label><input value="{% if mail_status.settings.use_ssl %}SSL{% elif mail_status.settings.use_starttls %}STARTTLS{% else %}None{% endif %}" readonly /></div>
+    <div class="field"><label>Public Base URL</label><input value="{{ public_base_url }}" readonly /></div>
+  </div>
+  {% if mail_status.problems %}<div class="meta" style="width:100%">{{ mail_status.problems | join(' ') }}</div>{% endif %}
+  <div class="meta" style="width:100%">Store the mailbox password in the environment variable <code>{{ mail_status.settings.password_env }}</code>, not in JSON.</div>
+</div>
+
+<form method="post" action="/admin/email/settings" class="row">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+  <div class="grid">
+    <div class="field">
+      <label>Email Enabled For This Company</label>
+      <select name="email_enabled">
+        <option value="1" {% if company_mail.email_enabled %}selected{% endif %}>Enabled</option>
+        <option value="0" {% if not company_mail.email_enabled %}selected{% endif %}>Disabled</option>
+      </select>
+    </div>
+    <div class="field"><label>Company From Name</label><input name="email_from_name" value="{{ company_mail.email_from_name }}" placeholder="Dexter Assist" /></div>
+    <div class="field"><label>Company Reply-To</label><input name="email_reply_to" type="email" value="{{ company_mail.email_reply_to }}" placeholder="admin@dexterassist.com" /></div>
+    <div class="field">
+      <label>Daily Log Email</label>
+      <select name="daily_log_email_enabled">
+        <option value="1" {% if company_mail.daily_log_email_enabled %}selected{% endif %}>Enabled</option>
+        <option value="0" {% if not company_mail.daily_log_email_enabled %}selected{% endif %}>Disabled</option>
+      </select>
+    </div>
+    <div class="field"><label>Daily Log Recipients</label><input name="daily_log_email_recipients" value="{{ company_mail.daily_log_email_recipients }}" placeholder="ops@example.com; manager@example.com" /></div>
+    <div class="field"><label>Daily Log Send Time</label><input name="daily_log_email_time" type="time" value="{{ company_mail.daily_log_email_time or '01:00' }}" /></div>
+  </div>
+  <div class="meta" style="width:100%">These settings are company-specific. Daily-log emails send for the previous day after the configured time, and only when the log contains meaningful text content.</div>
+  <button type="submit">Save Company Email Settings</button>
+</form>
+
+<form method="post" action="/admin/email/test" class="row">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+  <input name="target_email" type="email" value="{{ preferred_target }}" placeholder="recipient@example.com" required />
+  <button type="submit">Send Test Email</button>
+</form>
+</body></html>

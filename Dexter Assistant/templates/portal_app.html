@@ -41,7 +41,7 @@
         }
         .brand { font-size: 16px; font-weight: 800; color: #0f172a; }
         .brand-wrap { display: flex; align-items: center; gap: 9px; }
-        .brand-logo { width: 24px; height: 24px; object-fit: contain; border-radius: 7px; background: #fff; border: 1px solid var(--edge); padding: 2px; }
+        .brand-logo { width: 144px; height: 144px; object-fit: contain; border-radius: 12px; background: #fff; border: 1px solid var(--edge); padding: 6px; }
         .nav { display: flex; gap: 7px; flex-wrap: wrap; }
         .nav a, .nav button {
             border: 1px solid var(--edge);
@@ -71,24 +71,83 @@
             font-weight: 700;
             line-height: 1;
         }
-        .nav-short { display: none; }
+        .nav-short { display: none !important; }
+        .nav-label { display: inline !important; }
         .nav a:hover, .nav button:hover { background: #f1f5f9; }
+        .nav .nav-action {
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: 12px;
+            letter-spacing: 0.2px;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(15,23,42,0.08);
+            transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+        }
+        .nav .nav-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(15,23,42,0.14);
+            filter: brightness(1.02);
+        }
+        .nav .nav-action-home {
+            background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+            color: #fff;
+            border-color: #115e59;
+        }
+        .nav .nav-action-back {
+            background: linear-gradient(135deg, #334155 0%, #1f2937 100%);
+            color: #fff;
+            border-color: #1f2937;
+        }
+        .nav .nav-action-admin {
+            background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+            color: #fff;
+            border-color: #5b21b6;
+        }
+        .nav .nav-action .mini-ico {
+            background: rgba(255,255,255,0.16);
+            border-color: rgba(255,255,255,0.25);
+            color: #fff;
+        }
         .nav .primary { background: var(--accent); color: #fff; border-color: #c2410c; }
         .nav .primary:hover { background: #c2410c; }
         .nav .secondary { background: var(--accent2); color: #fff; border-color: #0c5b55; }
         .nav button:disabled { opacity: 0.55; cursor: not-allowed; }
-        .subbar {
+        .scope-mini-bar {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--edge);
-            background: #f9fafb;
+            gap: 6px;
             padding: 6px 12px;
-            color: var(--muted);
-            font-size: 11px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8fafc;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
-        .subbar a { color: var(--accent2); font-weight: 600; text-decoration: none; }
-        .subbar a:hover { text-decoration: underline; }
+        .scope-mini-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+            max-width: 46vw;
+            padding: 4px 7px;
+            border-radius: 999px;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+            white-space: nowrap;
+        }
+        .scope-mini-chip .k {
+            color: #64748b;
+            font-weight: 700;
+            flex: 0 0 auto;
+        }
+        .scope-mini-chip .v {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+        .scope-mini-chip-combined { display: none; max-width: 96vw; }
         .switch-banner {
             margin: 10px 12px 0;
             padding: 10px 12px;
@@ -114,30 +173,35 @@
             .topbar { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
             .brand { font-size: 1rem; }
             .nav { gap: 4px; }
-            .nav-label { display: none; }
-            .nav-short { display: inline; }
+            .brand-logo { width: 144px; height: 144px; }
             .nav a, .nav button { padding: 5px 8px; }
+            .scope-mini-chip { max-width: 45vw; font-size: 10px; }
+        }
+        @media (max-width: 480px) {
+            .scope-mini-bar { padding: 5px 8px; }
+            .scope-mini-chip { display: none; }
+            .scope-mini-chip-combined { display: inline-flex; }
         }
     </style>
 </head>
 <body>
     <div class="topbar" id="topbar">
         <div class="brand-wrap">
-            <img class="brand-logo" src="/branding/logo" alt="Dexter logo" />
+            <img class="brand-logo" src="/branding/company-logo" alt="Company logo" />
             <div class="brand">{{ app_title }}</div>
         </div>
         <div class="nav">
-            <a href="/"><span class="mini-ico">H</span><span class="nav-label">Home</span><span class="nav-short">HM</span></a>
-            <a href="/portal/productmix"><span class="mini-ico">P</span><span class="nav-label">ProductMix</span><span class="nav-short">PM</span></a>
-            <a href="/portal/ic3"><span class="mini-ico">I</span><span class="nav-label">IC3</span><span class="nav-short">IC3</span></a>
-            <a href="/portal/managerapp"><span class="mini-ico">D</span><span class="nav-label">Daily Log</span><span class="nav-short">DL</span></a>
-            <button class="primary" id="btnRestart" onclick="doRestart(this)">Restart App</button>
-            <a href="/auth/logout"><span class="mini-ico">L</span><span class="nav-label">Logout</span><span class="nav-short">Out</span></a>
+            <a class="nav-action nav-action-home" href="/portal" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
+            <a class="nav-action nav-action-admin" href="/admin"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
+            {% if show_shell_nav %}
+            <button class="nav-action nav-action-back" type="button" onclick="goBack()"><span class="mini-ico">B</span><span class="nav-label">Back</span><span class="nav-short">BK</span></button>
+            {% endif %}
         </div>
     </div>
-    <div class="subbar" id="subbar">
-        <span>Embedded via Dexter Ops portal routing &mdash; {{ app_title }}</span>
-        <a href="{{ raw_url }}" target="_blank" rel="noopener">Open Raw &rarr;</a>
+    <div class="scope-mini-bar" aria-label="Active scope">
+        <div class="scope-mini-chip"><span class="k">Co</span><span class="v">{{ selected_company_name or 'Not selected' }}</span></div>
+        <div class="scope-mini-chip"><span class="k">Loc</span><span class="v">{{ current_location_name or 'Not selected' }}</span></div>
+        <div class="scope-mini-chip scope-mini-chip-combined"><span class="k">Scope</span><span class="v">{{ selected_company_name or 'Not selected' }} - {{ current_location_name or 'Not selected' }}</span></div>
     </div>
     {% if switch_notice %}
     <div class="switch-banner">{{ switch_notice }}</div>
@@ -157,12 +221,32 @@
                 setTimeout(function() { t.remove(); }, 300);
             }, 3200);
         }
+        function goBack() {
+            if (window.history.length > 1) {
+                window.history.back();
+                return;
+            }
+            window.location.href = '/portal';
+        }
+        function openDexterHub(evt) {
+            if (evt && evt.preventDefault) evt.preventDefault();
+            var target = '/portal?hub=1&t=' + Date.now();
+            try {
+                if (window.top && window.top !== window) {
+                    window.top.location.href = target;
+                    return false;
+                }
+            } catch (e) {
+                // Fallback to same-window navigation if top cannot be accessed.
+            }
+            window.location.href = target;
+            return false;
+        }
         function setFrameHeight() {
             var frame = document.getElementById('appFrame');
             if (!frame) return;
             var tb = document.getElementById('topbar');
-            var sb = document.getElementById('subbar');
-            var used = (tb ? tb.offsetHeight : 0) + (sb ? sb.offsetHeight : 0);
+            var used = (tb ? tb.offsetHeight : 0);
             var vh = window.innerHeight - used;
             var isMobile = window.innerWidth <= 820;
             if (isMobile) {
@@ -234,26 +318,6 @@
             }
             setInterval(setFrameHeight, 1500);
         })();
-        async function doRestart(btn) {
-            btn.disabled = true;
-            var orig = btn.textContent;
-            btn.textContent = '...';
-            try {
-                var res = await fetch('/api/apps/{{ app_key }}/restart', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-                if (!res.ok) {
-                    var txt = await res.text();
-                    showToast('Restart failed: ' + txt, 'error');
-                } else {
-                    showToast('Restarting...', 'ok');
-                    setTimeout(function() { window.location.reload(); }, 1400);
-                }
-            } catch (e) {
-                showToast('Request error: ' + e.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = orig;
-            }
-        }
     </script>
 </body>
 </html>
