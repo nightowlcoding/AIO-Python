@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import inspect
 import os
 import re
 import sqlite3
 import socket
-import smtplib
 import secrets
-import ssl
 import subprocess
 import sys
 import threading
 import time
 import webbrowser
 from datetime import datetime, timedelta
-from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -137,13 +133,6 @@ CREATE TABLE IF NOT EXISTS migration_meta (
 CREATE TABLE IF NOT EXISTS company_profiles (
     company_id INTEGER PRIMARY KEY,
     contact_email TEXT,
-    email_enabled INTEGER NOT NULL DEFAULT 1,
-    email_from_name TEXT,
-    email_reply_to TEXT,
-    daily_log_email_enabled INTEGER NOT NULL DEFAULT 0,
-    daily_log_email_recipients TEXT,
-    daily_log_email_time TEXT,
-    daily_log_email_last_sent_for TEXT,
     contact_phone TEXT,
     website TEXT,
     address_line1 TEXT,
@@ -416,13 +405,6 @@ def migrate_add_company_profiles_v1() -> None:
             CREATE TABLE IF NOT EXISTS company_profiles (
                 company_id INTEGER PRIMARY KEY,
                 contact_email TEXT,
-                email_enabled INTEGER NOT NULL DEFAULT 1,
-                email_from_name TEXT,
-                email_reply_to TEXT,
-                daily_log_email_enabled INTEGER NOT NULL DEFAULT 0,
-                daily_log_email_recipients TEXT,
-                daily_log_email_time TEXT,
-                daily_log_email_last_sent_for TEXT,
                 contact_phone TEXT,
                 website TEXT,
                 address_line1 TEXT,
@@ -453,48 +435,6 @@ def migrate_add_company_profiles_v1() -> None:
             """
         )
 
-        _mark_migration_complete(conn, migration_key)
-        conn.commit()
-    finally:
-        conn.close()
-
-def migrate_add_company_email_settings_v1() -> None:
-    migration_key = "company_email_settings_v1"
-    conn = get_rbac_db_connection()
-    try:
-        if _is_migration_complete(conn, migration_key):
-            return
-        try:
-            conn.execute("ALTER TABLE company_profiles ADD COLUMN email_enabled INTEGER NOT NULL DEFAULT 1")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE company_profiles ADD COLUMN email_from_name TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE company_profiles ADD COLUMN email_reply_to TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE company_profiles ADD COLUMN daily_log_email_enabled INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE company_profiles ADD COLUMN daily_log_email_recipients TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE company_profiles ADD COLUMN daily_log_email_time TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE company_profiles ADD COLUMN daily_log_email_last_sent_for TEXT")
-        except Exception:
-            pass
-        conn.execute("UPDATE company_profiles SET email_enabled = COALESCE(email_enabled, 1)")
-        conn.execute("UPDATE company_profiles SET daily_log_email_enabled = COALESCE(daily_log_email_enabled, 0)")
-        conn.execute("UPDATE company_profiles SET daily_log_email_time = COALESCE(NULLIF(TRIM(daily_log_email_time), ''), '01:00')")
         _mark_migration_complete(conn, migration_key)
         conn.commit()
     finally:
@@ -1255,9 +1195,7 @@ def get_company_profile(company_id: int) -> dict[str, Any] | None:
         row = conn.execute(
             """
             SELECT c.id, c.name, c.slug, c.is_active,
-                   cp.contact_email, cp.email_enabled, cp.email_from_name, cp.email_reply_to,
-                     cp.daily_log_email_enabled, cp.daily_log_email_recipients, cp.daily_log_email_time, cp.daily_log_email_last_sent_for,
-                   cp.contact_phone, cp.website,
+                   cp.contact_email, cp.contact_phone, cp.website,
                    cp.address_line1, cp.address_line2, cp.city, cp.state_region,
                    cp.postal_code, cp.country, cp.tax_id, cp.notes,
                    cp.logo_rel_path, cp.updated_at
@@ -1277,13 +1215,6 @@ def get_company_profile(company_id: int) -> dict[str, Any] | None:
             "company_slug": str(row["slug"]),
             "is_active": int(row["is_active"]),
             "contact_email": str(row["contact_email"] or ""),
-            "email_enabled": int(row["email_enabled"] if row["email_enabled"] is not None else 1),
-            "email_from_name": str(row["email_from_name"] or ""),
-            "email_reply_to": str(row["email_reply_to"] or ""),
-            "daily_log_email_enabled": int(row["daily_log_email_enabled"] if row["daily_log_email_enabled"] is not None else 0),
-            "daily_log_email_recipients": str(row["daily_log_email_recipients"] or ""),
-            "daily_log_email_time": str(row["daily_log_email_time"] or "01:00"),
-            "daily_log_email_last_sent_for": str(row["daily_log_email_last_sent_for"] or ""),
             "contact_phone": str(row["contact_phone"] or ""),
             "website": str(row["website"] or ""),
             "address_line1": str(row["address_line1"] or ""),
@@ -1303,13 +1234,6 @@ def get_company_profile(company_id: int) -> dict[str, Any] | None:
 def upsert_company_profile(company_id: int, profile_data: dict[str, Any]) -> None:
     cleaned = {
         "contact_email": str(profile_data.get("contact_email") or "").strip(),
-        "email_enabled": 1 if str(profile_data.get("email_enabled", "1")).strip() in {"1", "true", "yes", "on"} else 0,
-        "email_from_name": str(profile_data.get("email_from_name") or "").strip(),
-        "email_reply_to": str(profile_data.get("email_reply_to") or "").strip(),
-        "daily_log_email_enabled": 1 if str(profile_data.get("daily_log_email_enabled", "0")).strip() in {"1", "true", "yes", "on"} else 0,
-        "daily_log_email_recipients": str(profile_data.get("daily_log_email_recipients") or "").strip(),
-        "daily_log_email_time": str(profile_data.get("daily_log_email_time") or "01:00").strip() or "01:00",
-        "daily_log_email_last_sent_for": str(profile_data.get("daily_log_email_last_sent_for") or "").strip(),
         "contact_phone": str(profile_data.get("contact_phone") or "").strip(),
         "website": str(profile_data.get("website") or "").strip(),
         "address_line1": str(profile_data.get("address_line1") or "").strip(),
@@ -1328,21 +1252,13 @@ def upsert_company_profile(company_id: int, profile_data: dict[str, Any]) -> Non
         conn.execute(
             """
             INSERT INTO company_profiles (
-                company_id, contact_email, email_enabled, email_from_name, email_reply_to, contact_phone, website,
-                daily_log_email_enabled, daily_log_email_recipients, daily_log_email_time, daily_log_email_last_sent_for,
+                company_id, contact_email, contact_phone, website,
                 address_line1, address_line2, city, state_region,
                 postal_code, country, tax_id, notes, logo_rel_path, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             ON CONFLICT(company_id) DO UPDATE SET
                 contact_email = excluded.contact_email,
-                email_enabled = excluded.email_enabled,
-                email_from_name = excluded.email_from_name,
-                email_reply_to = excluded.email_reply_to,
-                daily_log_email_enabled = excluded.daily_log_email_enabled,
-                daily_log_email_recipients = excluded.daily_log_email_recipients,
-                daily_log_email_time = excluded.daily_log_email_time,
-                daily_log_email_last_sent_for = excluded.daily_log_email_last_sent_for,
                 contact_phone = excluded.contact_phone,
                 website = excluded.website,
                 address_line1 = excluded.address_line1,
@@ -1359,13 +1275,6 @@ def upsert_company_profile(company_id: int, profile_data: dict[str, Any]) -> Non
             (
                 int(company_id),
                 cleaned["contact_email"],
-                cleaned["email_enabled"],
-                cleaned["email_from_name"],
-                cleaned["email_reply_to"],
-                cleaned["daily_log_email_enabled"],
-                cleaned["daily_log_email_recipients"],
-                cleaned["daily_log_email_time"],
-                cleaned["daily_log_email_last_sent_for"],
                 cleaned["contact_phone"],
                 cleaned["website"],
                 cleaned["address_line1"],
@@ -1382,27 +1291,6 @@ def upsert_company_profile(company_id: int, profile_data: dict[str, Any]) -> Non
         conn.commit()
     finally:
         conn.close()
-
-def _company_email_preferences(company_id: int | None) -> dict[str, Any]:
-    normalized_company_id = _normalize_company_id(company_id)
-    if normalized_company_id is None:
-        return {
-            "email_enabled": True,
-            "email_from_name": "",
-            "email_reply_to": "",
-            "contact_email": "",
-        }
-    profile = get_company_profile(int(normalized_company_id)) or {}
-    return {
-        "email_enabled": bool(int(profile.get("email_enabled", 1) or 0)),
-        "email_from_name": str(profile.get("email_from_name") or "").strip(),
-        "email_reply_to": str(profile.get("email_reply_to") or "").strip(),
-        "contact_email": str(profile.get("contact_email") or "").strip(),
-        "daily_log_email_enabled": bool(int(profile.get("daily_log_email_enabled", 0) or 0)),
-        "daily_log_email_recipients": str(profile.get("daily_log_email_recipients") or "").strip(),
-        "daily_log_email_time": str(profile.get("daily_log_email_time") or "01:00").strip() or "01:00",
-        "daily_log_email_last_sent_for": str(profile.get("daily_log_email_last_sent_for") or "").strip(),
-    }
 
 def _save_company_logo(company_id: int, uploaded_file) -> tuple[bool, str, str]:
     filename = str(getattr(uploaded_file, "filename", "") or "").strip()
@@ -2126,163 +2014,6 @@ def load_config() -> dict[str, Any]:
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         return json.load(f)
 
-def _env_text(name: str, default: str = "") -> str:
-    return str(os.environ.get(name, default) or "").strip()
-
-def _is_email_like(value: str) -> bool:
-    return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", str(value or "").strip()))
-
-def _mail_settings() -> dict[str, Any]:
-    mail_cfg = CONFIG.get("mail", {}) if isinstance(CONFIG.get("mail", {}), dict) else {}
-    username_env = str(mail_cfg.get("username_env") or "DEXTER_SMTP_USERNAME").strip() or "DEXTER_SMTP_USERNAME"
-    password_env = str(mail_cfg.get("password_env") or "DEXTER_SMTP_PASSWORD").strip() or "DEXTER_SMTP_PASSWORD"
-
-    smtp_port_raw = _env_text("DEXTER_SMTP_PORT", str(mail_cfg.get("smtp_port") or "587"))
-    try:
-        smtp_port = int(smtp_port_raw)
-    except (TypeError, ValueError):
-        smtp_port = 587
-
-    use_ssl = _env_flag("DEXTER_SMTP_USE_SSL", default=bool(mail_cfg.get("use_ssl", False)))
-    use_starttls = _env_flag("DEXTER_SMTP_USE_STARTTLS", default=bool(mail_cfg.get("use_starttls", not use_ssl)))
-    if use_ssl:
-        use_starttls = False
-
-    return {
-        "enabled": _env_flag("DEXTER_SMTP_ENABLED", default=bool(mail_cfg.get("enabled", False))),
-        "smtp_host": _env_text("DEXTER_SMTP_HOST", str(mail_cfg.get("smtp_host") or "")),
-        "smtp_port": smtp_port,
-        "use_ssl": use_ssl,
-        "use_starttls": use_starttls,
-        "username_env": username_env,
-        "password_env": password_env,
-        "username": _env_text(username_env),
-        "password": _env_text(password_env),
-        "from_email": _env_text("DEXTER_MAIL_FROM_EMAIL", str(mail_cfg.get("from_email") or "admin@dexterassist.com")),
-        "from_name": _env_text("DEXTER_MAIL_FROM_NAME", str(mail_cfg.get("from_name") or "Dexter Assist")),
-        "reply_to": _env_text("DEXTER_MAIL_REPLY_TO", str(mail_cfg.get("reply_to") or "admin@dexterassist.com")),
-        "public_base_url": _env_text("DEXTER_PUBLIC_BASE_URL", str(mail_cfg.get("public_base_url") or "")),
-    }
-
-def _mail_delivery_status() -> dict[str, Any]:
-    settings = _mail_settings()
-    problems: list[str] = []
-    if not settings["enabled"]:
-        problems.append("SMTP delivery is disabled.")
-    if not settings["smtp_host"]:
-        problems.append("SMTP host is not configured.")
-    if not settings["from_email"] or not _is_email_like(settings["from_email"]):
-        problems.append("From email is missing or invalid.")
-    if not settings["username"]:
-        problems.append(f"SMTP username env var {settings['username_env']} is empty.")
-    if not settings["password"]:
-        problems.append(f"SMTP password env var {settings['password_env']} is empty.")
-    return {
-        "ready": not problems,
-        "problems": problems,
-        "settings": settings,
-    }
-
-def _public_base_url() -> str:
-    configured = str(_mail_settings().get("public_base_url") or "").strip().rstrip("/")
-    if configured:
-        return configured
-    if request.headers.get("X-Forwarded-Proto") and request.headers.get("Host"):
-        proto = str(request.headers.get("X-Forwarded-Proto") or "http").split(",", 1)[0].strip()
-        host = str(request.headers.get("Host") or "").strip()
-        if proto and host:
-            return f"{proto}://{host}".rstrip("/")
-    return request.host_url.rstrip("/")
-
-def send_email_message(
-    to_addresses: list[str],
-    subject: str,
-    text_body: str,
-    html_body: str | None = None,
-    company_id: int | None = None,
-) -> tuple[bool, str]:
-    status = _mail_delivery_status()
-    if not status["ready"]:
-        return False, " ".join(status["problems"])
-
-    company_mail = _company_email_preferences(company_id)
-    if not company_mail["email_enabled"]:
-        return False, "Email is disabled for the selected company."
-
-    recipients = [str(item or "").strip() for item in to_addresses if str(item or "").strip()]
-    if not recipients:
-        return False, "No recipient email address provided."
-
-    settings = status["settings"]
-    message = EmailMessage()
-    from_name = str(company_mail.get("email_from_name") or settings.get("from_name") or "").strip()
-    from_email = str(settings.get("from_email") or "").strip()
-    message["Subject"] = str(subject or "Dexter Assist Notification")
-    message["From"] = f"{from_name} <{from_email}>" if from_name else from_email
-    message["To"] = ", ".join(recipients)
-    reply_to = str(company_mail.get("email_reply_to") or settings.get("reply_to") or "").strip()
-    if reply_to:
-        message["Reply-To"] = reply_to
-    message.set_content(str(text_body or ""))
-    if html_body:
-        message.add_alternative(str(html_body), subtype="html")
-
-    try:
-        if settings["use_ssl"]:
-            with smtplib.SMTP_SSL(settings["smtp_host"], int(settings["smtp_port"]), timeout=20, context=ssl.create_default_context()) as smtp:
-                smtp.login(settings["username"], settings["password"])
-                smtp.send_message(message)
-        else:
-            with smtplib.SMTP(settings["smtp_host"], int(settings["smtp_port"]), timeout=20) as smtp:
-                smtp.ehlo()
-                if settings["use_starttls"]:
-                    smtp.starttls(context=ssl.create_default_context())
-                    smtp.ehlo()
-                smtp.login(settings["username"], settings["password"])
-                smtp.send_message(message)
-    except Exception as exc:
-        return False, f"Email send failed: {exc}"
-
-    return True, "Email sent."
-
-def _password_reset_email_payload(username: str, reset_url: str) -> tuple[str, str, str]:
-    clean_username = str(username or "user").strip() or "user"
-    clean_url = str(reset_url or "").strip()
-    subject = "Dexter Assist password reset"
-    text_body = (
-        f"Hello {clean_username},\n\n"
-        "A Dexter Assist password reset was requested for your account.\n"
-        f"Use this link to set a new password: {clean_url}\n\n"
-        "This link expires in 1 hour. If you did not request this, you can ignore this email.\n"
-    )
-    html_body = (
-        "<p>Hello {user},</p>"
-        "<p>A Dexter Assist password reset was requested for your account.</p>"
-        "<p><a href=\"{url}\">Set a new password</a></p>"
-        "<p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>"
-    ).format(user=clean_username, url=clean_url)
-    return subject, text_body, html_body
-
-def _account_invite_email_payload(username: str, role_name: str, reset_url: str) -> tuple[str, str, str]:
-    clean_username = str(username or "user").strip() or "user"
-    clean_role = str(role_name or "Employee").strip() or "Employee"
-    clean_url = str(reset_url or "").strip()
-    subject = "You have been invited to Dexter Assist"
-    text_body = (
-        f"Hello {clean_username},\n\n"
-        f"An account has been created for you in Dexter Assist with the role {clean_role}.\n"
-        "Use the link below to set your password and finish setup:\n"
-        f"{clean_url}\n\n"
-        "This setup link expires in 48 hours.\n"
-    )
-    html_body = (
-        "<p>Hello {user},</p>"
-        "<p>An account has been created for you in Dexter Assist with the role <strong>{role}</strong>.</p>"
-        "<p><a href=\"{url}\">Set your password and finish setup</a></p>"
-        "<p>This setup link expires in 48 hours.</p>"
-    ).format(user=clean_username, role=clean_role, url=clean_url)
-    return subject, text_body, html_body
-
 def load_auth_users() -> dict[str, Any]:
     if not AUTH_USERS_PATH.exists():
         return {}
@@ -2314,222 +2045,6 @@ def ensure_default_admin_user() -> None:
             "email": admin_username,
         }
         save_auth_users(users)
-
-def _parse_email_recipients(raw_value: str) -> list[str]:
-    parts = re.split(r"[;,\n]+", str(raw_value or ""))
-    recipients: list[str] = []
-    seen: set[str] = set()
-    for part in parts:
-        email = str(part or "").strip().lower()
-        if not _is_email_like(email) or email in seen:
-            continue
-        seen.add(email)
-        recipients.append(email)
-    return recipients
-
-def _parse_hhmm(raw_value: str, default_hour: int = 1, default_minute: int = 0) -> tuple[int, int]:
-    text = str(raw_value or "").strip()
-    if not re.fullmatch(r"\d{2}:\d{2}", text):
-        return default_hour, default_minute
-    hour = int(text[:2])
-    minute = int(text[3:5])
-    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-        return default_hour, default_minute
-    return hour, minute
-
-def _manager_app_company_root(company_id: int) -> Path:
-    primary = ROOT / "Manager App" / "company_data" / str(int(company_id))
-    if primary.exists():
-        return primary
-    return ROOT.parent / "company_data" / str(int(company_id))
-
-def _parse_daily_log_csv(file_path: Path) -> dict[str, Any] | None:
-    if not file_path.exists() or not file_path.is_file():
-        return None
-    try:
-        with file_path.open("r", encoding="utf-8", newline="") as handle:
-            rows = list(csv.reader(handle))
-    except Exception:
-        return None
-
-    parsed: dict[str, Any] = {
-        "date": "",
-        "shift": "",
-        "notes": "",
-        "employees": [],
-        "deductions": [],
-        "deposit_amount": "",
-        "file_name": file_path.name,
-    }
-    section = ""
-    for row in rows:
-        if not row:
-            continue
-        key = str(row[0] or "").strip()
-        if key == "Date" and len(row) > 1:
-            parsed["date"] = str(row[1] or "").strip()
-            continue
-        if key == "Shift" and len(row) > 1:
-            parsed["shift"] = str(row[1] or "").strip()
-            continue
-        if key == "Notes" and len(row) > 1:
-            parsed["notes"] = str(row[1] or "").strip()
-            continue
-        if key == "Employee Entries":
-            section = "employees"
-            continue
-        if key == "Cash Deductions":
-            section = "deductions"
-            continue
-        if key == "Deposit Summary":
-            section = "deposit"
-            continue
-        if key == "Cash Drawer Count":
-            section = "drawer"
-            continue
-        if section == "employees":
-            if key == "Name":
-                continue
-            if key:
-                parsed["employees"].append(key)
-            continue
-        if section == "deductions":
-            if key:
-                parsed["deductions"].append(key)
-            continue
-        if section == "deposit" and key == "DEPOSIT AMOUNT" and len(row) > 1:
-            parsed["deposit_amount"] = str(row[1] or "").strip()
-            continue
-    return parsed
-
-def _daily_log_has_meaningful_text(entry: dict[str, Any]) -> bool:
-    if str(entry.get("notes") or "").strip():
-        return True
-    if any(str(name or "").strip() for name in entry.get("employees") or []):
-        return True
-    if any(str(desc or "").strip() for desc in entry.get("deductions") or []):
-        return True
-    return False
-
-def _collect_daily_log_entries_for_company(company_id: int, target_date: str) -> list[dict[str, Any]]:
-    company_root = _manager_app_company_root(int(company_id))
-    if not company_root.exists():
-        return []
-
-    target_prefix = target_date.replace("-", "") + "_"
-    location_label_map = {
-        int(item["id"]): str(item.get("label") or item.get("name") or f"Location {item['id']}")
-        for item in _list_restaurants_for_company_id(int(company_id))
-    }
-    entries: list[dict[str, Any]] = []
-    candidate_dirs = [company_root / "daily_logs"]
-    locations_root = company_root / "locations"
-    if locations_root.exists():
-        for child in locations_root.iterdir():
-            candidate_dirs.append(child / "daily_logs")
-
-    for directory in candidate_dirs:
-        if not directory.exists() or not directory.is_dir():
-            continue
-        for file_path in sorted(directory.glob(f"{target_prefix}*.csv")):
-            parsed = _parse_daily_log_csv(file_path)
-            if not parsed or not _daily_log_has_meaningful_text(parsed):
-                continue
-            location_label = "Company Default"
-            path_parts = file_path.parts
-            if "locations" in path_parts:
-                loc_index = path_parts.index("locations")
-                if loc_index + 1 < len(path_parts):
-                    raw_location_id = path_parts[loc_index + 1]
-                    if str(raw_location_id).isdigit():
-                        location_label = location_label_map.get(int(raw_location_id), f"Location {raw_location_id}")
-            parsed["location_label"] = location_label
-            entries.append(parsed)
-    return entries
-
-def _daily_log_email_payload(company_name: str, target_date: str, entries: list[dict[str, Any]]) -> tuple[str, str, str]:
-    subject = f"{company_name} daily operations log - {target_date}"
-    text_lines = [f"Daily operations log for {company_name}", f"Date: {target_date}", ""]
-    html_sections = [f"<p><strong>Daily operations log for {company_name}</strong><br>Date: {target_date}</p>"]
-
-    for entry in entries:
-        shift = str(entry.get("shift") or "").strip() or "Unknown shift"
-        location_label = str(entry.get("location_label") or "Company Default").strip()
-        notes = str(entry.get("notes") or "").strip()
-        employees = [str(name).strip() for name in (entry.get("employees") or []) if str(name).strip()]
-        deductions = [str(desc).strip() for desc in (entry.get("deductions") or []) if str(desc).strip()]
-        deposit_amount = str(entry.get("deposit_amount") or "").strip()
-
-        text_lines.append(f"Location: {location_label}")
-        text_lines.append(f"Shift: {shift}")
-        if notes:
-            text_lines.append(f"Notes: {notes}")
-        if employees:
-            text_lines.append("Employees: " + ", ".join(employees))
-        if deductions:
-            text_lines.append("Deductions: " + ", ".join(deductions))
-        if deposit_amount:
-            text_lines.append(f"Deposit Amount: {deposit_amount}")
-        text_lines.append("")
-
-        html = [f"<h3 style=\"margin-bottom:4px\">{location_label}</h3>", f"<p><strong>Shift:</strong> {shift}</p>"]
-        if notes:
-            html.append(f"<p><strong>Notes:</strong> {notes}</p>")
-        if employees:
-            html.append(f"<p><strong>Employees:</strong> {', '.join(employees)}</p>")
-        if deductions:
-            html.append(f"<p><strong>Deductions:</strong> {', '.join(deductions)}</p>")
-        if deposit_amount:
-            html.append(f"<p><strong>Deposit Amount:</strong> {deposit_amount}</p>")
-        html_sections.append("".join(html))
-
-    return subject, "\n".join(text_lines).strip(), "<html><body style=\"font-family:Segoe UI,Trebuchet MS,sans-serif;color:#1f2937\">" + "".join(html_sections) + "</body></html>"
-
-def _mark_daily_log_email_sent(company_id: int, target_date: str) -> None:
-    profile = get_company_profile(int(company_id)) or {}
-    if not profile:
-        return
-    payload = dict(profile)
-    payload["daily_log_email_last_sent_for"] = str(target_date)
-    upsert_company_profile(int(company_id), payload)
-
-def _run_daily_log_email_scheduler_once() -> None:
-    now = datetime.now()
-    target_date = (now.date() - timedelta(days=1)).isoformat()
-    for company in list_companies(active_only=True):
-        company_id = int(company["id"])
-        prefs = _company_email_preferences(company_id)
-        if not prefs.get("email_enabled") or not prefs.get("daily_log_email_enabled"):
-            continue
-        recipients = _parse_email_recipients(str(prefs.get("daily_log_email_recipients") or ""))
-        if not recipients:
-            recipients = _parse_email_recipients(str(prefs.get("contact_email") or ""))
-        if not recipients:
-            continue
-        send_hour, send_minute = _parse_hhmm(str(prefs.get("daily_log_email_time") or "01:00"))
-        if (now.hour, now.minute) < (send_hour, send_minute):
-            continue
-        if str(prefs.get("daily_log_email_last_sent_for") or "") == target_date:
-            continue
-        entries = _collect_daily_log_entries_for_company(company_id, target_date)
-        if not entries:
-            continue
-        subject, text_body, html_body = _daily_log_email_payload(str(company.get("name") or f"Company {company_id}"), target_date, entries)
-        sent, _message = send_email_message(recipients, subject, text_body, html_body, company_id=company_id)
-        if sent:
-            _mark_daily_log_email_sent(company_id, target_date)
-
-def start_daily_log_email_scheduler(interval_seconds: int = 60) -> None:
-    def _watch() -> None:
-        while True:
-            try:
-                _run_daily_log_email_scheduler_once()
-            except Exception:
-                pass
-            time.sleep(max(30, int(interval_seconds)))
-
-    t = threading.Thread(target=_watch, name="dexter-daily-log-email", daemon=True)
-    t.start()
 
 def save_auth_users(users: dict[str, Any]) -> None:
     with AUTH_USERS_PATH.open("w", encoding="utf-8") as f:
@@ -3002,7 +2517,6 @@ migrate_add_task_fields_v1()
 migrate_add_password_reset_fields_v1()
 migrate_add_company_scope_v1()
 migrate_add_company_profiles_v1()
-migrate_add_company_email_settings_v1()
 migrate_add_login_lockout_fields_v1()
 migrate_add_user_location_assignments_v1()
 ensure_default_super_admin_user()
@@ -3166,7 +2680,6 @@ def auth_forgot_password() -> Response:
 
     error = ""
     reset_url = None
-    success_message = ""
 
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
@@ -3187,17 +2700,8 @@ def auth_forgot_password() -> Response:
                         (token, expires, int(row["id"])),
                     )
                     conn.commit()
-                    base_url = _public_base_url()
+                    base_url = request.host_url.rstrip("/")
                     reset_url = f"{base_url}/auth/reset-password/{token}"
-                    if _is_email_like(username):
-                        subject, text_body, html_body = _password_reset_email_payload(username, reset_url)
-                        user_company_id = int(row["company_id"]) if row["company_id"] is not None else None
-                        sent, send_message = send_email_message([username], subject, text_body, html_body, company_id=user_company_id)
-                        if sent:
-                            success_message = f"Password reset email sent to {username}."
-                            reset_url = None
-                        else:
-                            error = f"Email could not be sent automatically. {send_message}"
                 else:
                     error = "If that username exists, a reset link has been generated. Ask an admin."
             finally:
@@ -3208,7 +2712,6 @@ def auth_forgot_password() -> Response:
             "forgot_password.html",
             error=error,
             reset_url=reset_url,
-            success_message=success_message,
         )
     )
 
@@ -3406,10 +2909,6 @@ def admin_company_scope_switch() -> Response:
         company_id=int(target_company["id"]),
     )
 
-    next_path = str(request.form.get("next_path") or "").strip()
-    if next_path.startswith("/") and not next_path.startswith("//"):
-        separator = "&" if "?" in next_path else "?"
-        return redirect(f"{next_path}{separator}company_switched=1")
     return redirect(default_company_switch_path())
 
 @app.route("/api/admin/company-scope", methods=["PATCH"])
@@ -3623,116 +3122,6 @@ def admin_company_health_page() -> Response:
     }
     return Response(render_template("admin_company_health.html", companies=companies, summary=summary))
 
-@app.route("/admin/email")
-@login_required
-@role_required("Super Admin", "Manager")
-def admin_email_page() -> Response:
-    is_super_admin = current_role_name() == "Super Admin"
-    companies = list_companies(active_only=True) if is_super_admin else []
-    selected_company_id = _effective_company_scope()
-    if is_super_admin and selected_company_id is None and companies:
-        selected_company_id = int(companies[0]["id"])
-
-    preferred_target = ""
-    if selected_company_id is not None:
-        profile = get_company_profile(int(selected_company_id)) or {}
-        preferred_target = str(profile.get("contact_email") or "").strip()
-
-    session_username = str((session.get(SESSION_USER_KEY) or {}).get("username") or "").strip()
-    if not preferred_target and _is_email_like(session_username):
-        preferred_target = session_username
-    company_mail = _company_email_preferences(selected_company_id)
-
-    return Response(
-        render_template(
-            "admin_email.html",
-            is_super_admin=is_super_admin,
-            companies=companies,
-            selected_company_id=selected_company_id,
-            preferred_target=preferred_target,
-            mail_status=_mail_delivery_status(),
-            company_mail=company_mail,
-            public_base_url=_public_base_url(),
-            message=request.args.get("message", ""),
-            error=request.args.get("error", ""),
-        )
-    )
-
-@app.route("/admin/email/settings", methods=["POST"])
-@login_required
-@role_required("Super Admin", "Manager")
-def admin_email_settings_save() -> Response:
-    actor_id = current_user_id()
-    if actor_id is None:
-        return redirect("/admin/email?error=Session+expired")
-
-    selected_company_id, scope_error = _strict_company_scope_for_mutation()
-    if scope_error:
-        return redirect(f"/admin/email?error={requests.utils.quote(scope_error)}")
-    if selected_company_id is None:
-        return redirect("/admin/email?error=No+active+company+scope+is+selected")
-
-    existing_profile = get_company_profile(int(selected_company_id))
-    if not existing_profile:
-        return redirect("/admin/email?error=Company+profile+is+not+available")
-
-    profile_payload = dict(existing_profile)
-    profile_payload.update(
-        {
-            "email_enabled": request.form.get("email_enabled", "0"),
-            "email_from_name": request.form.get("email_from_name", ""),
-            "email_reply_to": request.form.get("email_reply_to", ""),
-            "daily_log_email_enabled": request.form.get("daily_log_email_enabled", "0"),
-            "daily_log_email_recipients": request.form.get("daily_log_email_recipients", ""),
-            "daily_log_email_time": request.form.get("daily_log_email_time", "01:00"),
-        }
-    )
-    upsert_company_profile(int(selected_company_id), profile_payload)
-    add_audit_log(
-        int(actor_id),
-        "update_company_email_settings",
-        "companies",
-        int(selected_company_id),
-        json.dumps(
-            {
-                "email_enabled": 1 if str(request.form.get("email_enabled", "0")).strip() in {"1", "true", "yes", "on"} else 0,
-                "email_from_name": str(request.form.get("email_from_name", "") or "").strip(),
-                "email_reply_to": str(request.form.get("email_reply_to", "") or "").strip(),
-                "daily_log_email_enabled": 1 if str(request.form.get("daily_log_email_enabled", "0")).strip() in {"1", "true", "yes", "on"} else 0,
-                "daily_log_email_recipients": str(request.form.get("daily_log_email_recipients", "") or "").strip(),
-                "daily_log_email_time": str(request.form.get("daily_log_email_time", "01:00") or "01:00").strip(),
-            }
-        ),
-        company_id=int(selected_company_id),
-    )
-    return redirect("/admin/email?message=Company+email+settings+saved")
-
-@app.route("/admin/email/test", methods=["POST"])
-@login_required
-@role_required("Super Admin", "Manager")
-def admin_email_test() -> Response:
-    target_email = str(request.form.get("target_email") or "").strip()
-    if not _is_email_like(target_email):
-        return redirect("/admin/email?error=Enter+a+valid+recipient+email")
-
-    selected_company_id = _effective_company_scope()
-
-    public_url = _public_base_url()
-    subject = "Dexter Assist email test"
-    text_body = (
-        "This is a test email from Dexter Assist.\n\n"
-        f"Base URL: {public_url}\n"
-        f"Triggered at: {datetime.now().isoformat(timespec='seconds')}\n"
-    )
-    html_body = (
-        "<p>This is a test email from Dexter Assist.</p>"
-        f"<p><strong>Base URL:</strong> {public_url}<br>"
-        f"<strong>Triggered at:</strong> {datetime.now().isoformat(timespec='seconds')}</p>"
-    )
-    sent, message = send_email_message([target_email], subject, text_body, html_body, company_id=selected_company_id)
-    key = "message" if sent else "error"
-    return redirect(f"/admin/email?{key}={requests.utils.quote(message)}")
-
 @app.route("/admin/company-profile")
 @login_required
 @role_required("Super Admin", "Manager")
@@ -3864,130 +3253,10 @@ def admin_users_page() -> Response:
             companies=companies,
             selected_company_id=selected_company_id,
             available_locations=available_locations,
-            mail_status=_mail_delivery_status(),
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
         )
     )
-
-@app.route("/admin/users/invite", methods=["POST"])
-@login_required
-@role_required("Super Admin", "Manager")
-def admin_users_invite() -> Response:
-    actor_id = current_user_id()
-    if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
-
-    invite_email = str(request.form.get("email") or "").strip().lower()
-    role_name = str(request.form.get("role_name") or "Employee").strip()
-    if not _is_email_like(invite_email):
-        return redirect("/admin/users?error=Enter+a+valid+email+address")
-
-    selected_company_id, scope_error = _strict_company_scope_for_mutation()
-    if scope_error:
-        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
-
-    temp_password = secrets.token_urlsafe(18)
-    ok, msg = create_user_account(
-        actor_user_id=actor_id,
-        username=invite_email,
-        password=temp_password,
-        role_name=role_name,
-        company_id=selected_company_id,
-        assigned_restaurant_ids=request.form.getlist("restaurant_ids"),
-    )
-    if not ok:
-        return redirect(f"/admin/users?error={requests.utils.quote(msg)}")
-
-    conn = get_rbac_db_connection()
-    try:
-        row = conn.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", (invite_email,)).fetchone()
-        if not row:
-            return redirect("/admin/users?error=User+created+but+invite+token+could+not+be+prepared")
-        token = secrets.token_urlsafe(32)
-        expires = (datetime.now() + timedelta(hours=48)).isoformat(timespec="seconds")
-        conn.execute(
-            "UPDATE users SET password_reset_token = ?, password_reset_expires = ?, updated_at = datetime('now') WHERE id = ?",
-            (token, expires, int(row["id"])),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    setup_url = f"{_public_base_url()}/auth/reset-password/{token}"
-    subject, text_body, html_body = _account_invite_email_payload(invite_email, role_name, setup_url)
-    sent, send_message = send_email_message([invite_email], subject, text_body, html_body, company_id=selected_company_id)
-    if sent:
-        return redirect(f"/admin/users?message={requests.utils.quote(f'Invitation sent to {invite_email}.')}")
-    return redirect(
-        f"/admin/users?error={requests.utils.quote(f'User created, but invite email could not be sent. {send_message}')}"
-    )
-
-@app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
-@login_required
-@role_required("Super Admin", "Manager")
-def admin_users_resend_invite(user_id: int) -> Response:
-    actor_id = current_user_id()
-    if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
-
-    selected_company_id, scope_error = _strict_company_scope_for_mutation()
-    if scope_error:
-        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
-
-    conn = get_rbac_db_connection()
-    try:
-        row = conn.execute(
-            """
-            SELECT
-                u.id,
-                u.username,
-                u.is_active,
-                COALESCE(r.name, 'Employee') AS role_name,
-                u.company_id
-            FROM users u
-            LEFT JOIN roles r ON r.id = u.role_id
-            WHERE u.id = ?
-            LIMIT 1
-            """,
-            (int(user_id),),
-        ).fetchone()
-        if not row:
-            return redirect("/admin/users?error=User+not+found")
-
-        target_company_id = int(row["company_id"]) if row["company_id"] is not None else None
-        if current_role_name() == "Super Admin":
-            scope_error = _ensure_target_in_super_admin_scope(target_company_id, "user")
-            if scope_error:
-                return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
-        elif target_company_id is not None and selected_company_id is not None and int(target_company_id) != int(selected_company_id):
-            return redirect("/admin/users?error=You+can+only+resend+invites+for+the+selected+company")
-
-        invite_email = str(row["username"] or "").strip().lower()
-        if not _is_email_like(invite_email):
-            return redirect("/admin/users?error=This+user+does+not+have+an+email+login+for+invites")
-
-        if int(row["is_active"] or 0) != 1:
-            return redirect("/admin/users?error=Activate+the+user+before+sending+an+invite")
-
-        token = secrets.token_urlsafe(32)
-        expires = (datetime.now() + timedelta(hours=48)).isoformat(timespec="seconds")
-        conn.execute(
-            "UPDATE users SET password_reset_token = ?, password_reset_expires = ?, updated_at = datetime('now') WHERE id = ?",
-            (token, expires, int(user_id)),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    role_name = str(row["role_name"] or "Employee").strip() or "Employee"
-    setup_url = f"{_public_base_url()}/auth/reset-password/{token}"
-    subject, text_body, html_body = _account_invite_email_payload(invite_email, role_name, setup_url)
-    send_company_id = target_company_id if target_company_id is not None else selected_company_id
-    sent, send_message = send_email_message([invite_email], subject, text_body, html_body, company_id=send_company_id)
-    if sent:
-        return redirect(f"/admin/users?message={requests.utils.quote(f'Invitation resent to {invite_email}.')}")
-    return redirect(f"/admin/users?error={requests.utils.quote(f'Invite could not be sent. {send_message}')}")
 
 @app.route("/admin/users/create", methods=["POST"])
 @login_required
@@ -4342,45 +3611,10 @@ def api_admin_company_file_download() -> Response:
 @login_required
 def portal_home() -> str:
     fd = CONFIG.get("front_door", {})
-    role_name = current_role_name()
-    selected_company_id = _effective_company_scope(require_active=True)
-    company_options: list[dict[str, Any]] = []
-    if role_name == "Super Admin":
-        company_options = list_companies(active_only=True)
-    elif selected_company_id is not None:
-        company = _get_company_by_id(int(selected_company_id), require_active=True)
-        if company:
-            company_options = [
-                {
-                    "id": int(company["id"]),
-                    "name": str(company["name"]),
-                    "slug": str(company["slug"]),
-                    "is_active": int(company["is_active"]),
-                }
-            ]
-
-    location_options = _effective_restaurant_options_for_scope(selected_company_id)
-    selected_restaurant_id = _effective_selected_restaurant_id_for_scope(selected_company_id, ensure_default=True)
-    selected_restaurant = None
-    if selected_restaurant_id is not None:
-        for option in location_options:
-            if int(option["id"]) == int(selected_restaurant_id):
-                selected_restaurant = option
-                break
-
     return render_template(
         "portal_home.html",
         host=fd.get("host", "127.0.0.1"),
         port=fd.get("port", 5080),
-        role_name=role_name,
-        company_options=company_options,
-        selected_company_id=selected_company_id,
-        location_options=location_options,
-        selected_restaurant_id=selected_restaurant_id,
-        selected_restaurant=selected_restaurant,
-        selected_company_name=str((session.get(SESSION_USER_KEY) or {}).get("company_name") or "").strip(),
-        company_switched=(request.args.get("company_switched") or "").strip().lower() in {"1", "true", "yes"},
-        location_switched=(request.args.get("location_switched") or "").strip().lower() in {"1", "true", "yes"},
     )
 
 @app.route("/portal/<name>")
@@ -4397,7 +3631,6 @@ def portal_app(name: str) -> Response:
     raw_url = "/app/managerapp/" if resolved_name == "managerapp" else f"/app/{resolved_name}/"
     show_shell_nav = resolved_name != "managerapp"
     selected_restaurant = _selected_restaurant_record_for_scope(_effective_company_scope(require_active=True))
-    selected_company_name = str((session.get(SESSION_USER_KEY) or {}).get("company_name") or "").strip()
     current_location_name = str(
         (selected_restaurant or {}).get("label")
         or (selected_restaurant or {}).get("name")
@@ -4423,8 +3656,6 @@ def portal_app(name: str) -> Response:
         raw_url=raw_url,
         switch_notice=switch_notice,
         show_shell_nav=show_shell_nav,
-        selected_company_name=selected_company_name,
-        current_location_name=current_location_name,
     )
 
 @app.route("/productmix")
@@ -5242,7 +4473,6 @@ if __name__ == "__main__":
         print("Dexter Assistant tenant scope audit warning:", tenant_scope_audit.get("warnings", []), file=sys.stderr)
 
     MANAGER.start_watchdog()
-    start_daily_log_email_scheduler()
 
     if auto_open_browser:
         startup_url = f"{scheme}://{host}:{port}{open_path}"
