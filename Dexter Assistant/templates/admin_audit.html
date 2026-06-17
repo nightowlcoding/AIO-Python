@@ -5,7 +5,7 @@
 </head><body>
 <h1>Audit Logs</h1>
 {% if is_super_admin %}
-<form method="post" action="{{ tenant_scoped_path('/admin/company-scope') }}" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><input type="hidden" name="next_path" value="/admin/audit-logs" /><select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select><button type="submit">Switch Company</button></form>
+<form method="post" action="/admin/company-scope" class="row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><input type="hidden" name="next_path" value="/admin/audit-logs" /><select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select><button type="submit">Switch Company</button></form>
 {% endif %}
 <div class="table-card"><table><thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th>At</th></tr></thead>
 <tbody>{% for row in logs %}<tr><td style="color:var(--muted);font-size:.8rem">{{ row.id }}</td><td><strong>{{ row.actor_username }}</strong></td><td><span class="pill pill-act">{{ row.action }}</span></td><td class="mono">{{ row.target_table }}{% if row.target_id %}#{{ row.target_id }}{% endif %}</td><td style="max-width:260px;word-break:break-word;color:var(--muted);font-size:.82rem">{{ row.details or '—' }}</td><td style="color:var(--muted);font-size:.82rem;white-space:nowrap">{{ row.created_at }}</td></tr>{% endfor %}</tbody></table></div>

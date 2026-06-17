@@ -9,7 +9,7 @@
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 
 {% if is_super_admin %}
-<form method="post" action="{{ tenant_scoped_path('/admin/company-scope') }}" class="row">
+<form method="post" action="/admin/company-scope" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <input type="hidden" name="next_path" value="/admin/company-profile" />
     <select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
@@ -17,7 +17,7 @@
 </form>
 {% endif %}
 
-<form method="post" action="{{ tenant_scoped_path('/admin/company-profile') }}" enctype="multipart/form-data" class="row">
+<form method="post" action="/admin/company-profile" enctype="multipart/form-data" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <div class="grid">
         <div class="field"><label>Company</label><input value="{{ profile.company_name }}" readonly /></div>
@@ -38,7 +38,7 @@
     <div class="field" style="width:100%"><label>Notes</label><textarea name="notes" placeholder="Any internal notes about this company profile">{{ profile.notes }}</textarea></div>
 
     <div class="logo-wrap" style="width:100%">
-        <div class="logo-box">{% if profile.logo_rel_path %}<img src="{{ tenant_scoped_path('/admin/company-profile/logo') }}?v={{ profile.updated_at }}" alt="Company logo" />{% else %}<span class="meta">No logo</span>{% endif %}</div>
+        <div class="logo-box">{% if profile.logo_rel_path %}<img src="/admin/company-profile/logo?v={{ profile.updated_at }}" alt="Company logo" />{% else %}<span class="meta">No logo</span>{% endif %}</div>
         <div class="field"><label>Upload Logo</label><input type="file" name="logo_file" accept=".png,.jpg,.jpeg,.webp" /></div>
         <div class="field"><label>Remove Existing Logo</label><select name="clear_logo"><option value="0" selected>No</option><option value="1">Yes</option></select></div>
     </div>

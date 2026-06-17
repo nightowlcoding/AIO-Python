@@ -280,32 +280,18 @@
 let employees = [];
 let removedEmployees = [];
 
-function employeeStorageScope() {
-    const companyId = String(window.currentCompanyId || 'global').trim() || 'global';
-    const locationId = String(window.selectedLocationId || 'none').trim() || 'none';
-    return `${companyId}::${locationId}`;
-}
-
-function employeesStorageKey() {
-    return `employees:${employeeStorageScope()}`;
-}
-
-function removedEmployeesStorageKey() {
-    return `removedEmployees:${employeeStorageScope()}`;
-}
-
 // Load from localStorage on startup
 try {
-    const stored = localStorage.getItem(employeesStorageKey());
+    const stored = localStorage.getItem('employees');
     if (stored) {
         employees = JSON.parse(stored);
-        console.log('Loaded', employees.length, 'employees from scoped localStorage');
+        console.log('Loaded', employees.length, 'employees from localStorage');
     }
     
-    const storedRemoved = localStorage.getItem(removedEmployeesStorageKey());
+    const storedRemoved = localStorage.getItem('removedEmployees');
     if (storedRemoved) {
         removedEmployees = JSON.parse(storedRemoved);
-        console.log('Loaded', removedEmployees.length, 'removed employees from scoped localStorage');
+        console.log('Loaded', removedEmployees.length, 'removed employees from localStorage');
     }
 } catch (e) {
     console.error('Error loading from localStorage:', e);
@@ -398,8 +384,7 @@ function updateEmployeeTable() {
         const daysEmployed = calculateDaysEmployed(emp.dateOfHire);
         const companyId = window.currentCompanyId || '';
         const empFileName = `${escapeHtml(emp.firstName)}_${escapeHtml(emp.lastName)}.json`;
-        const selectedLocationId = encodeURIComponent(window.selectedLocationId || '');
-        const profileUrl = `/app/managerapp/employee/${companyId}/${empFileName}?location_id=${selectedLocationId}`;
+        const profileUrl = `/app/managerapp/employee/${companyId}/${empFileName}`;
         const isSelected = selectedIds.includes(String(emp.id));
         return `
             <tr class="employee-row" style="cursor:pointer" onclick="window.location.href='${profileUrl}'">
@@ -974,8 +959,8 @@ function saveAllData() {
 
     // Save to localStorage immediately
     try {
-        localStorage.setItem(employeesStorageKey(), JSON.stringify(employees));
-        localStorage.setItem(removedEmployeesStorageKey(), JSON.stringify(removedEmployees));
+        localStorage.setItem('employees', JSON.stringify(employees));
+        localStorage.setItem('removedEmployees', JSON.stringify(removedEmployees));
         console.log('Auto-saved:', employees.length, 'active and', removedEmployees.length, 'removed employees');
     } catch (e) {
         console.error('Error saving to localStorage:', e);
@@ -1017,15 +1002,16 @@ function loadEmployeesFromBackend() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Always replace local arrays (including empty lists) to avoid cross-location bleed.
-                employees = Array.isArray(data.employees) ? data.employees : [];
-                removedEmployees = Array.isArray(data.removedEmployees) ? data.removedEmployees : [];
-
-                localStorage.setItem(employeesStorageKey(), JSON.stringify(employees));
-                localStorage.setItem(removedEmployeesStorageKey(), JSON.stringify(removedEmployees));
-
-                console.log('Loaded', employees.length, 'employees from backend');
-                console.log('Loaded', removedEmployees.length, 'removed employees from backend');
+                if (data.employees && data.employees.length > 0) {
+                    employees = data.employees;
+                    localStorage.setItem('employees', JSON.stringify(employees));
+                    console.log('Loaded', employees.length, 'employees from backend');
+                }
+                if (data.removedEmployees && data.removedEmployees.length > 0) {
+                    removedEmployees = data.removedEmployees;
+                    localStorage.setItem('removedEmployees', JSON.stringify(removedEmployees));
+                    console.log('Loaded', removedEmployees.length, 'removed employees from backend');
+                }
                 updateEmployeeTable();
                 updateRemovedEmployeeTable();
             } else {

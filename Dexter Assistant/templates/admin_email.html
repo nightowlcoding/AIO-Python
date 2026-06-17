@@ -9,7 +9,7 @@
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 
 {% if is_super_admin %}
-<form method="post" action="{{ tenant_scoped_path('/admin/company-scope') }}" class="row">
+<form method="post" action="/admin/company-scope" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <input type="hidden" name="next_path" value="/admin/email" />
     <select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
@@ -32,7 +32,7 @@
   <div class="meta" style="width:100%">Store the mailbox password in the environment variable <code>{{ mail_status.settings.password_env }}</code>, not in JSON.</div>
 </div>
 
-<form method="post" action="{{ tenant_scoped_path('/admin/email/settings') }}" class="row">
+<form method="post" action="/admin/email/settings" class="row">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
   <div class="grid">
     <div class="field">
@@ -58,7 +58,7 @@
   <button type="submit">Save Company Email Settings</button>
 </form>
 
-<form method="post" action="{{ tenant_scoped_path('/admin/email/test') }}" class="row">
+<form method="post" action="/admin/email/test" class="row">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
   <input name="target_email" type="email" value="{{ preferred_target }}" placeholder="recipient@example.com" required />
   <button type="submit">Send Test Email</button>

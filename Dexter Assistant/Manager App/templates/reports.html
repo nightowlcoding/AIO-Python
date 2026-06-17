@@ -82,6 +82,15 @@
         </div>
     </div>
     
+    <!-- Employee Roster (visible for reference) -->
+    <div class="card mb-3" id="employeeRosterCard">
+        <div class="card-header bg-info text-white">
+            <h6 class="mb-0"><i class="bi bi-people"></i> Employee Roster</h6>
+        </div>
+        <div class="card-body">
+            <ul id="employeeRosterList" class="mb-0" style="columns:2;-webkit-columns:2;-moz-columns:2;"></ul>
+        </div>
+    </div>
     <!-- Report Results -->
     <div class="card" id="reportContainer" style="display: none;">
         <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
@@ -120,6 +129,29 @@ let currentReportData = [];
 // Load employee names on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadEmployeeNames();
+    // Also populate the Employee Roster list visually from employees.json only
+    fetch('/api/employee-names')
+        .then(response => response.json())
+        .then(data => {
+            let names = [];
+            if (Array.isArray(data.employees) && data.employees.length > 0) {
+                names = data.employees.map(emp => {
+                    if (emp.firstName && emp.lastName) {
+                        return emp.firstName + ' ' + emp.lastName;
+                    } else if (emp.first_name && emp.last_name) {
+                        return emp.first_name + ' ' + emp.last_name;
+                    } else if (emp.name) {
+                        return emp.name;
+                    } else {
+                        return '';
+                    }
+                }).filter(n => n);
+            }
+            const rosterList = document.getElementById('employeeRosterList');
+            if (rosterList) {
+                rosterList.innerHTML = names.map(n => `<li>${n}</li>`).join('');
+            }
+        });
 });
 
 // Load employee names from backend for autocomplete
@@ -208,8 +240,6 @@ function generateReport() {
     } else if (reportType === 'cash') {
         fetchCashDeductions(startDate, endDate);
     }
-}
-
 function fetchCashDeductions(startDate, endDate) {
     fetch(`/api/reports/cash-deductions?start_date=${startDate}&end_date=${endDate}`)
         .then(response => response.json())
@@ -256,6 +286,7 @@ function displayCashDeductions(data) {
     `;
     document.getElementById('reportContainer').style.display = 'block';
     document.getElementById('reportTitle').innerHTML = '<i class="bi bi-cash-coin"></i> Cash Deductions Report';
+}
 }
 
 function fetchDailySummary(startDate, endDate, shiftFilter) {
@@ -724,6 +755,10 @@ function exportToCSV() {
     window.URL.revokeObjectURL(url);
 }
 
+// Load employee names when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadEmployeeNames();
+});
 </script>
 
 <style>

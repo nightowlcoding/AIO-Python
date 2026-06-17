@@ -34,8 +34,6 @@ This setup deploys Dexter Assistant as one Render web service that starts the tw
    - PYTHONUNBUFFERED=1
    - PM_OPEN_BROWSER=0
    - PM_DEBUG=0
-   - DEXTER_TENANT_BASE_DOMAIN=app.dexterassist.com
-   - DEXTER_TENANT_PATH_MODE=0 (set to 1 for development path-mode fallback)
 
 7. Deploy.
 
@@ -54,5 +52,3 @@ After Render provides your public app URL:
 
 - The service uses local loopback ports (127.0.0.1:5050 and 127.0.0.1:5003) internally inside one Render instance.
 - Keep Gunicorn worker count at 1 unless app management logic is redesigned for multi-worker process coordination.
-- Production tenant model should resolve by subdomain (`<tenant>.app.dexterassist.com`).
-- Development fallback can resolve tenants by path (`/t/<tenant>/...`) when `DEXTER_TENANT_PATH_MODE=1`.

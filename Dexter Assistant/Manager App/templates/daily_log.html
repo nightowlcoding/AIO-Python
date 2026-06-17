@@ -49,11 +49,14 @@
             <!-- Employee Entry Form -->
             <div class="col-12">
                 <div class="card border-primary">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center" style="cursor: pointer;" id="employeeEntryHeader" role="button" tabindex="0" aria-controls="employeeEntryBody" aria-expanded="false">
-                        <h5 class="mb-0"><i class="bi bi-person-plus"></i> Add Employee Entry</h5>
-                        <i class="bi bi-chevron-down" id="employeeEntryIcon"></i>
-                    </div>
-                    <div class="card-body" id="employeeEntryBody" style="display: none;">
+                    <details id="employeeEntryDetails">
+                        <summary class="card-header bg-primary text-white d-flex justify-content-between align-items-center" style="list-style: none; cursor: pointer;">
+                            <h5 class="mb-0"><i class="bi bi-person-plus"></i> Add Employee Entry</h5>
+                            <span class="btn btn-light btn-sm" aria-hidden="true">
+                                <i class="bi bi-chevron-down"></i>
+                            </span>
+                        </summary>
+                        <div class="card-body">
                             <!-- Basic Info -->
                             <div class="row g-2 mb-3">
                                 <div class="col-12 col-md-4">
@@ -62,7 +65,6 @@
                                     <datalist id="employeeNameList">
                                         <!-- Populated by JavaScript -->
                                     </datalist>
-                                    <small class="text-muted">Use format: First Last (middle name optional).</small>
                                     <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
                                         <button type="button" class="btn btn-outline-primary btn-sm d-none" id="employeeQuickAddBtn" onclick="quickAddEmployeeFromForm()">
                                             <i class="bi bi-plus-circle"></i> Add as New Employee
@@ -173,7 +175,8 @@
                                     </button>
                                 </div>
                             </div>
-                    </div>
+                        </div>
+                    </details>
                 </div>
             </div>
             
@@ -628,7 +631,7 @@
             <button type="button" class="btn btn-outline-secondary btn-lg flex-fill flex-md-grow-0" onclick="clearForm()">
                 <i class="bi bi-x-circle"></i> Clear
             </button>
-            <button type="button" class="btn btn-outline-info btn-lg flex-fill flex-md-grow-0" onclick="printDailyLogSummary()">
+            <button type="button" class="btn btn-outline-info btn-lg flex-fill flex-md-grow-0" onclick="preparePrintSummary(); setTimeout(() => window.print(), 200)">
                 <i class="bi bi-printer"></i> Print
             </button>
         </div>
@@ -643,17 +646,12 @@
     <!-- Print-Only Summary -->
     <div id="printSummary" class="print-only">
         <div class="print-header">
-            <div class="print-header-inner">
-                <img id="print_logo" class="print-logo" src="" alt="" />
-                <div class="print-header-text">
-                    <h2>Daily Operations Log</h2>
-                    <p><strong>Date:</strong> <span id="print_date"></span></p>
-                </div>
-            </div>
+            <h2>Daily Operations Log</h2>
+            <p><strong>Date:</strong> <span id="print_date"></span></p>
         </div>
         
         <!-- Employee Entries -->
-        <div class="print-section" id="printEmployeesSection">
+        <div class="print-section">
             <h3>Employee Entries</h3>
             <table class="print-table">
                 <thead>
@@ -676,7 +674,7 @@
         </div>
         
         <!-- Totals -->
-        <div class="print-section" id="printTotalsSection">
+        <div class="print-section">
             <h3>Totals</h3>
             <table class="print-table">
                 <thead>
@@ -731,7 +729,7 @@
         </div>
         
         <!-- Revenue Centers -->
-        <div class="print-section" id="printRevenueSection">
+        <div class="print-section">
             <h3>Revenue Centers</h3>
             <table class="print-table">
                 <thead>
@@ -766,7 +764,7 @@
         </div>
         
         <!-- Cash Deductions -->
-        <div class="print-section" id="printDeductionsSection">
+        <div class="print-section">
             <h3>Cash Deductions</h3>
             <table class="print-table">
                 <thead>
@@ -788,7 +786,7 @@
         </div>
         
         <!-- Deposit -->
-        <div class="print-section" id="printDepositSection">
+        <div class="print-section">
             <h3>Deposit</h3>
             <table class="print-table">
                 <tbody>
@@ -972,64 +970,6 @@ function applyNumericKeyboardHints(scope = document) {
     });
 }
 
-function getDailyLogEditableFields() {
-    return Array.from(document.querySelectorAll('#dailyLogForm input[type="text"], #dailyLogForm input[type="number"], #dailyLogForm select, #dailyLogForm textarea'))
-        .filter(field => {
-            if (!field || field.disabled || field.readOnly) return false;
-            if (field.tagName === 'INPUT' && String(field.type || '').toLowerCase() === 'hidden') return false;
-            if (field.id === 'dateSelector') return false;
-            if (field.offsetParent === null) return false;
-            return true;
-        });
-}
-
-function installDailyLogInputAcceleration(scope = document) {
-    const editable = Array.from(scope.querySelectorAll('input[type="text"], input[type="number"], select, textarea'));
-    editable.forEach(field => {
-        if (!field || field.disabled || field.readOnly) return;
-        if (field.tagName === 'INPUT' && String(field.type || '').toLowerCase() === 'hidden') return;
-        if (!field.closest('#dailyLogForm')) return;
-
-        if (field.dataset.dxSelectAllBound !== '1' && (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA')) {
-            field.dataset.dxSelectAllBound = '1';
-            field.addEventListener('focus', function () {
-                if (!this.value) return;
-                // Delay allows iOS/Android to finish focus before select().
-                window.setTimeout(() => {
-                    try { this.select(); } catch (_err) {}
-                }, 0);
-            });
-            field.addEventListener('pointerup', function (event) {
-                if (!this.value) return;
-                // Prevent tap placing caret in middle; keep full selection for quick overwrite.
-                event.preventDefault();
-                try { this.select(); } catch (_err) {}
-            });
-        }
-
-        if (field.dataset.dxNextFieldBound !== '1') {
-            field.dataset.dxNextFieldBound = '1';
-            field.addEventListener('keydown', function (event) {
-                if (event.key !== 'Enter') return;
-                if (this.tagName === 'TEXTAREA') return;
-
-                const fields = getDailyLogEditableFields();
-                const currentIndex = fields.indexOf(this);
-                if (currentIndex < 0) return;
-
-                const nextField = fields[currentIndex + 1];
-                if (!nextField) return;
-
-                event.preventDefault();
-                try { nextField.focus(); } catch (_err) {}
-                if ((nextField.tagName === 'INPUT' || nextField.tagName === 'TEXTAREA') && nextField.value) {
-                    try { nextField.select(); } catch (_err) {}
-                }
-            });
-        }
-    });
-}
-
 function getDailyLogDraftKey() {
     const date = document.getElementById('dateSelector')?.value || '{{ date }}';
     const locationId = document.getElementById('locationSelector')?.value || '{{ selected_location_id or "" }}';
@@ -1155,25 +1095,6 @@ function clearEmployeeValidationStates() {
     ].forEach(fieldId => setFieldValidationState(fieldId, true));
 }
 
-function parseDailyLogNameParts(name) {
-    const cleaned = String(name || '').trim().replace(/\s+/g, ' ');
-    const parts = cleaned ? cleaned.split(' ') : [];
-    if (parts.length < 2) {
-        return null;
-    }
-
-    const firstName = parts[0];
-    const middleName = parts.length > 2 ? parts[1] : '';
-    const lastName = parts.length > 2 ? parts.slice(2).join(' ') : parts[1];
-
-    return {
-        normalized: cleaned,
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName
-    };
-}
-
 function validateEmployeeForm() {
     clearEmployeeValidationStates();
 
@@ -1182,12 +1103,6 @@ function validateEmployeeForm() {
     if (!name) {
         setFieldValidationState('emp_name', false);
         setDailyLogDraftStatus('Enter a name before saving the entry.', 'warning');
-        return false;
-    }
-
-    if (!parseDailyLogNameParts(name)) {
-        setFieldValidationState('emp_name', false);
-        setDailyLogDraftStatus('Use First Last format (middle name optional).', 'warning');
         return false;
     }
 
@@ -1417,63 +1332,16 @@ function toggleSection(sectionId) {
     const section = document.getElementById(sectionId);
     const iconId = sectionId.replace('Body', 'Icon');
     const icon = document.getElementById(iconId);
-
-    if (!section) {
-        return;
-    }
-
-    const collapsed = section.hidden || window.getComputedStyle(section).display === 'none';
-    if (collapsed) {
+    
+    if (section.hidden) {
         section.hidden = false;
-        section.style.display = '';
-        if (window.getComputedStyle(section).display === 'none') {
-            section.style.display = 'block';
-        }
-        if (icon) {
-            icon.classList.remove('bi-chevron-down');
-            icon.classList.add('bi-chevron-up');
-        }
+        icon.classList.remove('bi-chevron-down');
+        icon.classList.add('bi-chevron-up');
     } else {
         section.hidden = true;
-        section.style.display = 'none';
-        if (icon) {
-            icon.classList.remove('bi-chevron-up');
-            icon.classList.add('bi-chevron-down');
-        }
+        icon.classList.remove('bi-chevron-up');
+        icon.classList.add('bi-chevron-down');
     }
-}
-
-function toggleEmployeeEntryDropdown() {
-    const body = document.getElementById('employeeEntryBody');
-    const icon = document.getElementById('employeeEntryIcon');
-    const header = document.getElementById('employeeEntryHeader');
-    if (!body || !icon) {
-        return;
-    }
-
-    const isHidden = body.style.display === 'none' || !body.style.display;
-    body.style.display = isHidden ? 'block' : 'none';
-    icon.classList.toggle('bi-chevron-down', !isHidden);
-    icon.classList.toggle('bi-chevron-up', isHidden);
-    if (header) {
-        header.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
-    }
-}
-
-function initEmployeeEntryDropdownBindings() {
-    const header = document.getElementById('employeeEntryHeader');
-    if (!header || header.dataset.dxDropdownBound === '1') {
-        return;
-    }
-
-    header.dataset.dxDropdownBound = '1';
-    header.addEventListener('click', () => toggleEmployeeEntryDropdown());
-    header.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggleEmployeeEntryDropdown();
-        }
-    });
 }
 
 function isBulkMobileView() {
@@ -1655,7 +1523,6 @@ function renderBulkEntryRow(rowId, empData) {
     container.appendChild(rowElement);
     if (rowElement) {
         applyNumericKeyboardHints(rowElement);
-        installDailyLogInputAcceleration(rowElement);
     }
 }
 
@@ -1721,9 +1588,7 @@ function addEmployeeEntry(keepAdding = false) {
             return;
         }
 
-        const rawName = document.getElementById('emp_name').value.trim();
-        const parsedName = parseDailyLogNameParts(rawName);
-        const name = parsedName ? parsedName.normalized : rawName;
+        const name = document.getElementById('emp_name').value.trim();
         if (!name) {
             alert('Please enter employee name');
             return;
@@ -3247,16 +3112,15 @@ document.getElementById('dailyLogForm').addEventListener('submit', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     dailyLogDraftReady = true;
 
-    const employeeEntryBody = document.getElementById('employeeEntryBody');
-    const employeeEntryIcon = document.getElementById('employeeEntryIcon');
-    if (employeeEntryBody) {
-        employeeEntryBody.style.display = 'none';
+    const employeeEntryDetails = document.getElementById('employeeEntryDetails');
+    const employeeEntryChevron = document.querySelector('#employeeEntryDetails summary i.bi');
+    if (employeeEntryDetails) {
+        employeeEntryDetails.open = false;
     }
-    if (employeeEntryIcon) {
-        employeeEntryIcon.classList.remove('bi-chevron-up');
-        employeeEntryIcon.classList.add('bi-chevron-down');
+    if (employeeEntryChevron) {
+        employeeEntryChevron.classList.remove('bi-chevron-up');
+        employeeEntryChevron.classList.add('bi-chevron-down');
     }
-    initEmployeeEntryDropdownBindings();
 
     // Load existing employees if any
     if (employees.length > 0) {
@@ -3272,7 +3136,6 @@ document.addEventListener('DOMContentLoaded', function() {
     applyDailyLogDefaults();
     syncBulkEntryPresentation();
     applyNumericKeyboardHints();
-    installDailyLogInputAcceleration();
 
     const nameField = document.getElementById('emp_name');
     if (nameField) {
@@ -3362,18 +3225,7 @@ function populateEmployeeNameList(employeeList, recentNames = []) {
 function preparePrintSummary() {
     // Ensure revenue centers are calculated before printing
     calculateRevenueCenters();
-
-    // Set company logo
-    const logoEl = document.getElementById('print_logo');
-    if (logoEl) {
-        try {
-            const origin = window.location.origin || '';
-            logoEl.src = origin + '/branding/company-logo';
-        } catch (e) {
-            logoEl.src = '/branding/company-logo';
-        }
-    }
-
+    
     // Set date
     const dateSelector = document.getElementById('dateSelector');
     if (dateSelector) {
@@ -3400,14 +3252,6 @@ function preparePrintSummary() {
         `;
         employeesBody.appendChild(row);
     });
-
-    const setPrintSectionHidden = (sectionId, hidden) => {
-        const section = document.getElementById(sectionId);
-        if (!section) {
-            return;
-        }
-        section.classList.toggle('print-hidden', Boolean(hidden));
-    };
     
     // Helper function to safely get text content
     const getText = (id) => {
@@ -3461,23 +3305,19 @@ function preparePrintSummary() {
         const totalBar = getText('totalBar');
         const totalDining = getText('totalDining');
         const totalToGo = getText('totalToGo');
-
+        
         document.getElementById('print_day_bar').textContent = dayBar;
         document.getElementById('print_day_dining').textContent = dayDining;
         document.getElementById('print_day_togo').textContent = dayToGo;
-
+        
         document.getElementById('print_night_bar').textContent = nightBar;
         document.getElementById('print_night_dining').textContent = nightDining;
         document.getElementById('print_night_togo').textContent = nightToGo;
-
+        
         document.getElementById('print_total_bar').textContent = totalBar;
         document.getElementById('print_total_dining').textContent = totalDining;
         document.getElementById('print_total_togo').textContent = totalToGo;
-
-        const revenueValues = [dayBar, dayDining, dayToGo, nightBar, nightDining, nightToGo, totalBar, totalDining, totalToGo]
-            .map(value => Math.abs(parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0));
-        setPrintSectionHidden('printRevenueSection', revenueValues.every(value => value === 0));
-
+        
         console.log('Revenue centers populated');
     }, 100);
     
@@ -3502,7 +3342,6 @@ function preparePrintSummary() {
         }
     });
     document.getElementById('print_total_deductions').textContent = totalDeductions.toFixed(2);
-    setPrintSectionHidden('printDeductionsSection', totalDeductions === 0 && deductionsBody.children.length === 0);
     
     // Populate expected deposit
     document.getElementById('print_deposit_cash').textContent = getText('deposit_total_cash');
@@ -3510,88 +3349,19 @@ function preparePrintSummary() {
     document.getElementById('print_deposit_deductions').textContent = getText('deposit_cash_deductions');
     document.getElementById('print_expected_deposit').textContent = getText('expected_deposit');
 }
-
-function printDailyLogSummary() {
-    preparePrintSummary();
-    window.setTimeout(function() {
-        var summary = document.getElementById('printSummary');
-        if (!summary) {
-            alert('Print summary not ready. Try again.');
-            return;
-        }
-
-        var pw = window.open('', '_blank', 'width=900,height=1100');
-        if (!pw) {
-            alert('Allow popups for this page to print the Daily Log.');
-            return;
-        }
-
-        var doc = pw.document;
-        doc.title = 'Daily Log Print';
-
-        var meta = doc.createElement('meta');
-        meta.setAttribute('charset', 'utf-8');
-        doc.head.appendChild(meta);
-
-        var srcStyle = document.getElementById('dxDailyLogPrintCss');
-        var style = doc.createElement('style');
-        style.textContent = srcStyle ? srcStyle.textContent : '';
-        doc.head.appendChild(style);
-
-        var container = doc.createElement('div');
-        container.id = 'printSummary';
-        container.innerHTML = summary.innerHTML;
-        doc.body.style.cssText = 'margin:0;padding:0;background:#fff;';
-        doc.body.appendChild(container);
-
-        pw.focus();
-        pw.print();
-        pw.addEventListener('afterprint', function() { pw.close(); });
-    }, 250);
-}
 </script>
-
-<style id="dxDailyLogPrintCss" type="text/css">
-@page { size: letter portrait; margin: 0.14in; }
-body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe UI, Trebuchet MS, sans-serif; font-size: 6.5pt; line-height: 1.1; }
-#printSummary { display: grid; grid-template-columns: 1fr; gap: 0.04in; width: 100%; box-sizing: border-box; }
-.print-hidden { display: none !important; }
-.print-header { margin: 0; padding-bottom: 0.03in; border-bottom: 2px solid #000; }
-.print-header-inner { display: flex; align-items: center; gap: 0.1in; }
-.print-logo { height: 44px; width: auto; object-fit: contain; flex-shrink: 0; }
-.print-header-text { flex: 1; text-align: center; }
-.print-header h2 { margin: 0; font-size: 11pt; font-weight: 700; }
-.print-header p { margin: 0.01in 0 0; font-size: 6.5pt; }
-.print-section { margin: 0; break-inside: avoid; page-break-inside: avoid; }
-.print-section h3 { font-size: 6.5pt; font-weight: 700; margin: 0 0 0.025in; border-bottom: 1px solid #333; padding-bottom: 1px; }
-.print-table { width: 100%; border-collapse: collapse; margin: 0; font-size: 4.9pt; table-layout: fixed; }
-.print-table th, .print-table td { border: 1px solid #555; padding: 1px 1px; text-align: left; vertical-align: middle; overflow: hidden; }
-.print-table th { background: #e8e8e8; font-weight: 700; font-size: 4.7pt; }
-.print-table .total-row { background: #f0f0f0; font-weight: 700; }
-.print-table .text-danger { color: #000 !important; }
-#print_employees th:nth-child(1), #print_employees td:nth-child(1) { width: 17%; }
-#print_employees th:nth-child(2), #print_employees td:nth-child(2) { width: 7%; }
-#print_employees th:nth-child(3), #print_employees td:nth-child(3) { width: 7%; }
-#print_employees th:nth-child(4), #print_employees td:nth-child(4) { width: 8%; }
-#print_employees th:nth-child(5), #print_employees td:nth-child(5) { width: 8%; }
-#print_employees th:nth-child(6), #print_employees td:nth-child(6) { width: 9%; }
-#print_employees th:nth-child(7), #print_employees td:nth-child(7) { width: 9%; }
-#print_employees th:nth-child(8), #print_employees td:nth-child(8) { width: 7%; }
-#print_employees th:nth-child(9), #print_employees td:nth-child(9) { width: 10%; }
-#print_employees th:nth-child(10), #print_employees td:nth-child(10) { width: 10%; }
-</style>
 
 <style>
 .employee-row:hover {
     background-color: #f8f9fa !important;
 }
 
-.print-only {
-    display: none;
+#employeeEntryDetails:not([open]) > .card-body {
+    display: none !important;
 }
 
-.print-hidden {
-    display: none !important;
+.print-only {
+    display: none;
 }
 
 #employeeEntryBody[hidden] {
@@ -3599,147 +3369,98 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
 }
 
 @media print {
-    @page {
-        size: letter portrait;
-        margin: 0.16in;
-    }
-
-    html,
-    body {
-        margin: 0 !important;
-        padding: 0 !important;
-        font-size: 7pt;
-        line-height: 1.1;
-        background: #fff !important;
-    }
-
-    .print-only,
-    #printSummary {
-        display: block !important;
-    }
-
-    #printSummary {
-        display: grid !important;
-        grid-template-columns: 1fr;
-        grid-template-areas:
-            'header header'
-            'employees employees'
-            'totals totals'
-            'revenue revenue'
-            'deductions deductions'
-            'deposit deposit';
-        gap: 0.05in;
-        padding: 0;
-        margin: 0;
-        width: 100%;
-        box-sizing: border-box;
-    }
-
-    form,
-    .container-fluid,
-    .container-fluid > *:not(#printSummary),
-    nav,
-    footer,
-    header,
-    aside {
+    /* Hide all interactive elements and cards */
+    .btn, .card-header, .form-control, .form-select, 
+    input[type="date"], input[type="file"], form, 
+    .card, .container-fluid > .d-flex, .bi-chevron-down, 
+    .bi-chevron-up, nav, footer {
         display: none !important;
     }
-
-    .print-header {
-        grid-area: header;
-        text-align: center;
-        margin: 0;
-        padding-bottom: 0.03in;
-        border-bottom: 1px solid #000;
+    
+    /* Show print summary */
+    .print-only {
+        display: block !important;
     }
-
+    
+    /* Print layout - optimized for single page */
+    body {
+        font-size: 8pt;
+        line-height: 1.2;
+    }
+    
+    .print-header {
+        text-align: center;
+        margin-bottom: 10px;
+        border-bottom: 2px solid #000;
+        padding-bottom: 5px;
+    }
+    
     .print-header h2 {
         margin: 0;
-        font-size: 11pt;
-        font-weight: 700;
+        font-size: 14pt;
+        font-weight: bold;
     }
-
+    
     .print-header p {
-        margin: 0.02in 0 0;
-        font-size: 6.5pt;
+        margin: 2px 0 0 0;
+        font-size: 9pt;
     }
-
-    #printEmployeesSection {
-        grid-area: employees;
-    }
-
-    #printTotalsSection {
-        grid-area: totals;
-    }
-
-    #printRevenueSection {
-        grid-area: revenue;
-    }
-
-    #printDeductionsSection {
-        grid-area: deductions;
-    }
-
-    #printDepositSection {
-        grid-area: deposit;
-    }
-
+    
     .print-section {
-        margin: 0;
-        break-inside: avoid;
+        margin-bottom: 12px;
         page-break-inside: avoid;
     }
-
+    
     .print-section h3 {
-        font-size: 7pt;
-        font-weight: 700;
-        margin: 0 0 0.03in;
+        font-size: 10pt;
+        font-weight: bold;
+        margin: 0 0 4px 0;
         border-bottom: 1px solid #333;
-        padding-bottom: 1px;
+        padding-bottom: 2px;
     }
-
+    
     .print-table {
         width: 100%;
         border-collapse: collapse;
-        margin: 0;
-        font-size: 5.35pt;
-        table-layout: fixed;
+        margin-bottom: 5px;
+        font-size: 7pt;
     }
-
+    
     .print-table th,
     .print-table td {
         border: 1px solid #333;
-        padding: 1px;
+        padding: 3px 4px;
         text-align: left;
-        vertical-align: middle;
-        word-break: break-word;
     }
-
+    
     .print-table th {
-        background: #efefef !important;
-        font-weight: 700;
-        font-size: 5.2pt;
+        background-color: #e8e8e8;
+        font-weight: bold;
+        font-size: 7pt;
     }
-
+    
     .print-table .total-row {
-        background: #f5f5f5 !important;
-        font-weight: 700;
+        background-color: #f0f0f0;
+        font-weight: bold;
+        border-top: 2px solid #000;
     }
-
+    
     .print-table .text-danger {
         color: #000 !important;
     }
-
-    #print_employees tr td,
-    #print_employees tr th {
-        padding: 1px;
+    
+    /* Compact specific sections */
+    #print_employees tr td {
+        padding: 2px 3px;
     }
-
-    #print_employees td:first-child,
-    #print_employees th:first-child {
-        width: 22%;
+    
+    /* Page setup */
+    @page {
+        size: letter;
+        margin: 0.3in 0.4in;
     }
-
+    
+    /* Force compact layout */
     * {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;

@@ -1,14 +1,11 @@
-﻿from flask import Response, jsonify, request
+from flask import jsonify, request
 from pathlib import Path
-import csv
-import io
 import json
 import marshal
 import logging
 import os
 import re
 import sys
-import uuid
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from datetime import date, datetime, timedelta
@@ -41,7 +38,7 @@ if _IC3_DATA_DIR:
         _committed_data.symlink_to(_ic3_data_path)
         print(f"[ic3] data/ -> {_ic3_data_path}")
     elif not _committed_data.exists():
-        # data/ was removed but symlink missing â€” recreate symlink.
+        # data/ was removed but symlink missing — recreate symlink.
         _committed_data.symlink_to(_ic3_data_path)
         print(f"[ic3] Recreated symlink: data/ -> {_ic3_data_path}")
     # If data/ is already a symlink from a previous restart, nothing to do.
@@ -58,10 +55,6 @@ ICON_CANDIDATES = (
 )
 
 ORDER_CSV_DATE_PREFIX = re.compile(r"^(\d{4})(\d{2})(\d{2})\d+\.csv$", re.IGNORECASE)
-INVENTORY_SETS_PATH = ROOT / "data" / "inventory_sets.json"
-INVENTORY_REGISTRY_VERSION = 1
-PRODUCT_NICKNAMES_PATH = ROOT / "data" / "product_nicknames.json"
-PRODUCT_NICKNAMES_VERSION = 1
 
 
 def _read_productmix_sync_cache() -> dict:
@@ -455,7 +448,7 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
 
                 const text = document.createElement('label');
                 text.setAttribute('for', input.id);
-                text.textContent = 'Location: ' + label;
+                text.textContent = '📍 ' + label;
 
                 input.addEventListener('change', function () {
                     if (!input.checked) return;
@@ -1586,92 +1579,6 @@ OVERRIDE_SCRIPT = r"""
 </script>
 """
 
-DISPLAYPRODUCTS_GUARD_SCRIPT = r"""
-<script>
-(function () {
-    if (window.__ic3DisplayProductsGuardInstalled) return;
-    window.__ic3DisplayProductsGuardInstalled = true;
-
-    // Ensure all required DOM elements exist with safe defaults
-    function ensureControlsExist() {
-        // viewMode dropdown
-        let viewMode = document.getElementById('viewMode');
-        if (!viewMode) {
-            const container = document.createElement('div');
-            container.style.display = 'none';
-            viewMode = document.createElement('select');
-            viewMode.id = 'viewMode';
-            viewMode.value = 'categorized';
-            const opt1 = document.createElement('option');
-            opt1.value = 'categorized';
-            opt1.text = 'By Category';
-            viewMode.appendChild(opt1);
-            container.appendChild(viewMode);
-            document.body.appendChild(container);
-        }
-        
-        // sortBy dropdown
-        let sortBy = document.getElementById('sortBy');
-        if (!sortBy) {
-            const container = document.createElement('div');
-            container.style.display = 'none';
-            sortBy = document.createElement('select');
-            sortBy.id = 'sortBy';
-            sortBy.value = 'csv-order';
-            const opt1 = document.createElement('option');
-            opt1.value = 'csv-order';
-            opt1.text = 'CSV Order';
-            sortBy.appendChild(opt1);
-            container.appendChild(sortBy);
-            document.body.appendChild(container);
-        }
-        
-        // showEditButtons checkbox
-        let showEdit = document.getElementById('showEditButtons');
-        if (!showEdit) {
-            const container = document.createElement('div');
-            container.style.display = 'none';
-            showEdit = document.createElement('input');
-            showEdit.id = 'showEditButtons';
-            showEdit.type = 'checkbox';
-            showEdit.checked = false;
-            container.appendChild(showEdit);
-            document.body.appendChild(container);
-        }
-    }
-
-    // Original displayProducts function reference
-    const origDisplayProducts = window.displayProducts;
-
-    // Wrapper that ensures controls exist before calling original
-    window.displayProducts = function() {
-        try {
-            ensureControlsExist();
-        } catch (e) {
-            console.warn('[IC3 Guard] Error ensuring controls:', e);
-        }
-        
-        // Call original if it exists
-        if (origDisplayProducts && typeof origDisplayProducts === 'function') {
-            try {
-                return origDisplayProducts.apply(this, arguments);
-            } catch (e) {
-                console.error('[IC3 Guard] displayProducts error:', e);
-                throw e;
-            }
-        }
-    };
-
-    // Ensure controls exist on page load
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', ensureControlsExist);
-    } else {
-        ensureControlsExist();
-    }
-})();
-</script>
-"""
-
 PRODUCT_DETAIL_SCRIPT = r"""
 <script>
 (function () {
@@ -1684,20 +1591,7 @@ PRODUCT_DETAIL_SCRIPT = r"""
         location: '',
         locationScope: 'current',
         detailPayload: null,
-        nicknames: {},
-        nicknameProducts: [],
-        nicknameApplying: false,
     };
-
-    function canonicalProductNumber(value) {
-        const raw = String(value || '').trim();
-        if (!raw) return '';
-        if (/^\d+\.0+$/.test(raw)) {
-            const parsed = Number(raw);
-            if (!Number.isNaN(parsed)) return String(Math.trunc(parsed));
-        }
-        return raw;
-    }
 
     function escapeHtml(value) {
         return String(value || '')
@@ -1842,460 +1736,6 @@ PRODUCT_DETAIL_SCRIPT = r"""
                 cell.dataset.ic3ProductLinked = '1';
             });
         });
-    }
-
-    function findItemColumnIndex(table) {
-        const headers = Array.from(table.querySelectorAll('thead th'));
-        if (!headers.length) return -1;
-        for (let i = 0; i < headers.length; i++) {
-            const text = (headers[i].innerText || '').trim().toLowerCase();
-            if (text.includes('item') || text.includes('description') || text.includes('product name')) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    function applyNicknamesToVisibleRows() {
-        if (state.nicknameApplying) return;
-        state.nicknameApplying = true;
-        const nicknameMap = state.nicknames || {};
-        try {
-            const tables = Array.from(document.querySelectorAll('table'));
-            tables.forEach((table) => {
-                const productIdx = findProductColumnIndex(table);
-                const itemIdx = findItemColumnIndex(table);
-                if (productIdx < 0 || itemIdx < 0 || itemIdx === productIdx) return;
-
-                const rows = Array.from(table.querySelectorAll('tbody tr'));
-                rows.forEach((row) => {
-                    const cells = row.querySelectorAll('td');
-                    if (!cells || productIdx >= cells.length || itemIdx >= cells.length) return;
-
-                    const productCell = cells[productIdx];
-                    const itemCell = cells[itemIdx];
-                    const link = productCell.querySelector('.ic3-product-link');
-                    const productKey = canonicalProductNumber(link ? link.dataset.productNumber : productCell.innerText);
-                    if (!productKey) return;
-
-                    const nickname = String(nicknameMap[productKey] || '').trim();
-                    if (!itemCell.dataset.ic3OriginalName) {
-                        itemCell.dataset.ic3OriginalName = String(itemCell.textContent || '').trim();
-                    }
-
-                    const original = String(itemCell.dataset.ic3OriginalName || '').trim();
-                    const currentText = String(itemCell.textContent || '').trim();
-                    if (nickname) {
-                        if (currentText !== nickname) {
-                            itemCell.textContent = nickname;
-                        }
-                        if (original && itemCell.title !== original) {
-                            itemCell.title = original;
-                        }
-                    } else if (original) {
-                        if (currentText !== original) {
-                            itemCell.textContent = original;
-                        }
-                        if (itemCell.hasAttribute('title')) {
-                            itemCell.removeAttribute('title');
-                        }
-                    }
-                });
-            });
-        } finally {
-            state.nicknameApplying = false;
-        }
-    }
-
-    function ensureProductManagementNicknameColumn() {
-        const table = document.getElementById('productManagementTable');
-        if (!(table instanceof HTMLTableElement)) return;
-
-        const headerRow = table.querySelector('thead tr');
-        if (headerRow && !headerRow.querySelector('th[data-ic3-nickname-col="1"]')) {
-            const th = document.createElement('th');
-            th.setAttribute('data-ic3-nickname-col', '1');
-            th.textContent = 'Nickname';
-            const headerCells = headerRow.querySelectorAll('th');
-            if (headerCells.length > 0) {
-                headerRow.insertBefore(th, headerCells[headerCells.length - 1]);
-            } else {
-                headerRow.appendChild(th);
-            }
-        }
-
-        const productIdx = findProductColumnIndex(table);
-        if (productIdx < 0) return;
-
-        const rows = Array.from(table.querySelectorAll('tbody tr'));
-        rows.forEach(function (row) {
-            const cells = row.querySelectorAll('td');
-            if (!cells || cells.length < 2 || productIdx >= cells.length) return;
-
-            const productCell = cells[productIdx];
-            const link = productCell.querySelector('.ic3-product-link');
-            const productNumber = canonicalProductNumber(link ? link.dataset.productNumber : productCell.innerText);
-            if (!productNumber) return;
-
-            let nicknameCell = row.querySelector('td[data-ic3-nickname-cell="1"]');
-            if (!nicknameCell) {
-                nicknameCell = document.createElement('td');
-                nicknameCell.setAttribute('data-ic3-nickname-cell', '1');
-                const latestCells = row.querySelectorAll('td');
-                if (latestCells.length > 0) {
-                    row.insertBefore(nicknameCell, latestCells[latestCells.length - 1]);
-                } else {
-                    row.appendChild(nicknameCell);
-                }
-            }
-
-            const currentNickname = String((state.nicknames || {})[productNumber] || '').trim();
-            const inputId = 'ic3InlineNick_' + productNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
-            nicknameCell.innerHTML = '' +
-                '<div style="display:flex; gap:6px; align-items:center; min-width:220px;">' +
-                '<input id="' + inputId + '" class="ic3InlineNicknameInput" data-product="' + escapeHtml(productNumber) + '" maxlength="48" value="' + escapeHtml(currentNickname) + '" placeholder="Short name" style="width:140px; padding:5px 6px; border:1px solid #cbd5e1; border-radius:6px;" />' +
-                '<button type="button" class="btn ic3InlineNicknameSave" data-product="' + escapeHtml(productNumber) + '" style="padding:4px 8px; font-size:12px; background:#334155; color:#fff;">Save</button>' +
-                '</div>';
-        });
-    }
-
-    async function loadNicknames() {
-        try {
-            const response = await fetch('/api/products/nicknames');
-            const payload = await response.json();
-            if (!response.ok || !payload.success) {
-                throw new Error(payload.message || 'Unable to load nicknames.');
-            }
-            state.nicknames = payload.nicknames || {};
-            applyNicknamesToVisibleRows();
-            ensureProductManagementNicknameColumn();
-        } catch (_error) {
-            state.nicknames = state.nicknames || {};
-        }
-    }
-
-    function ensureNicknameManagerModal() {
-        let modal = document.getElementById('ic3NicknameManagerModal');
-        if (modal) return modal;
-
-        modal = document.createElement('div');
-        modal.id = 'ic3NicknameManagerModal';
-        modal.style.position = 'fixed';
-        modal.style.inset = '0';
-        modal.style.background = 'rgba(15, 23, 42, 0.45)';
-        modal.style.display = 'none';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        modal.style.zIndex = '9999';
-        modal.innerHTML = '' +
-            '<div style="width:min(96vw,920px);max-height:88vh;overflow:auto;background:#fff;border-radius:12px;border:1px solid #cbd5e1;box-shadow:0 16px 48px rgba(15,23,42,0.28);padding:14px;">' +
-            '  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
-            '    <div><strong style="font-size:16px;color:#0f172a;">Manage Product Nicknames</strong><div style="font-size:12px;color:#64748b;">Set short labels to keep inventory readable.</div></div>' +
-            '    <button id="ic3NicknameManagerClose" type="button" style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#475569;">&times;</button>' +
-            '  </div>' +
-            '  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;">' +
-            '    <input id="ic3NicknameManagerSearch" type="text" placeholder="Search by product # or description" style="flex:1;min-width:240px;padding:8px 10px;border:1px solid #93c5fd;border-radius:8px;" />' +
-            '    <button id="ic3NicknameExportCsv" type="button" class="btn" style="background:#1d4ed8;color:#fff;">Export CSV</button>' +
-            '    <input id="ic3NicknameImportFile" type="file" accept=".csv,text/csv" style="display:none;" />' +
-            '    <button id="ic3NicknameImportPick" type="button" class="btn" style="background:#475569;color:#fff;">Choose CSV</button>' +
-            '    <button id="ic3NicknameImportApply" type="button" class="btn" style="background:#7c3aed;color:#fff;">Import CSV</button>' +
-            '    <button id="ic3NicknameManagerSaveAll" type="button" class="btn" style="background:#0f766e;color:#fff;">Save All Changes</button>' +
-            '    <button id="ic3NicknameManagerCancel" type="button" class="btn" style="background:#e2e8f0;color:#0f172a;">Close</button>' +
-            '  </div>' +
-            '  <div id="ic3NicknameImportFileName" style="font-size:12px;color:#64748b;margin:-4px 0 8px 0;"></div>' +
-            '  <div id="ic3NicknameManagerStatus" style="font-size:12px;color:#475569;margin-bottom:8px;"></div>' +
-            '  <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:auto;max-height:58vh;">' +
-            '    <table style="width:100%;border-collapse:collapse;">' +
-            '      <thead><tr style="background:#f8fafc;">' +
-            '        <th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;">Product #</th>' +
-            '        <th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;">Description</th>' +
-            '        <th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;">Nickname</th>' +
-            '        <th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;">Action</th>' +
-            '      </tr></thead>' +
-            '      <tbody id="ic3NicknameManagerBody"></tbody>' +
-            '    </table>' +
-            '  </div>' +
-            '</div>';
-
-        document.body.appendChild(modal);
-        return modal;
-    }
-
-    function closeNicknameManagerModal() {
-        const modal = document.getElementById('ic3NicknameManagerModal');
-        if (!modal) return;
-        modal.style.display = 'none';
-    }
-
-    function rowNicknameValue(productNumber) {
-        const input = document.querySelector('input.ic3NicknameInput[data-product="' + escapeCssAttr(productNumber) + '"]');
-        return String((input && input.value) || '').trim();
-    }
-
-    function escapeCssAttr(value) {
-        return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    }
-
-    function renderNicknameManagerRows(filterText) {
-        const body = document.getElementById('ic3NicknameManagerBody');
-        const status = document.getElementById('ic3NicknameManagerStatus');
-        if (!body) return;
-
-        const q = String(filterText || '').trim().toLowerCase();
-        const rows = (state.nicknameProducts || []).filter(function (row) {
-            if (!q) return true;
-            const num = String(row.productNumber || '').toLowerCase();
-            const desc = String(row.description || '').toLowerCase();
-            return num.includes(q) || desc.includes(q);
-        });
-
-        if (!rows.length) {
-            body.innerHTML = '<tr><td colspan="4" style="padding:10px;color:#64748b;">No matching products.</td></tr>';
-            if (status) status.textContent = '0 products shown.';
-            return;
-        }
-
-        let html = '';
-        rows.forEach(function (row) {
-            const productNumber = String(row.productNumber || '').trim();
-            const description = String(row.description || '').trim();
-            const nickname = String((state.nicknames || {})[productNumber] || '').trim();
-            html += '<tr>' +
-                '<td style="padding:8px;border-bottom:1px solid #eef2f7;font-weight:700;">' + escapeHtml(productNumber) + '</td>' +
-                '<td style="padding:8px;border-bottom:1px solid #eef2f7;">' + escapeHtml(description || '-') + '</td>' +
-                '<td style="padding:8px;border-bottom:1px solid #eef2f7;"><input class="ic3NicknameInput" data-product="' + escapeHtml(productNumber) + '" data-initial="' + escapeHtml(nickname) + '" maxlength="48" value="' + escapeHtml(nickname) + '" placeholder="Short name" style="width:100%;min-width:180px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;" /></td>' +
-                '<td style="padding:8px;border-bottom:1px solid #eef2f7;"><button type="button" class="btn ic3NicknameRowSave" data-product="' + escapeHtml(productNumber) + '" style="background:#334155;color:#fff;">Save</button></td>' +
-                '</tr>';
-        });
-        body.innerHTML = html;
-        if (status) status.textContent = rows.length + ' products shown.';
-    }
-
-    async function loadProductsForNicknameManager() {
-        const response = await fetch('/api/products');
-        const payload = await response.json();
-        if (!response.ok || !Array.isArray(payload)) {
-            throw new Error('Unable to load product list.');
-        }
-
-        const out = [];
-        payload.forEach(function (row) {
-            if (!row || typeof row !== 'object') return;
-            const productNumber = canonicalProductNumber(row['Product Number'] || row.product_number || '');
-            if (!productNumber) return;
-            out.push({
-                productNumber: productNumber,
-                description: String(row['Product Description'] || row.description || row['Display Name'] || ''),
-            });
-        });
-
-        out.sort(function (a, b) {
-            return String(a.productNumber || '').localeCompare(String(b.productNumber || ''));
-        });
-        state.nicknameProducts = out;
-    }
-
-    async function saveNicknameForProduct(productNumber) {
-        const input = document.querySelector('input.ic3NicknameInput[data-product="' + escapeCssAttr(productNumber) + '"]');
-        const status = document.getElementById('ic3NicknameManagerStatus');
-        if (!input) return;
-
-        const nextValue = String(input.value || '').trim();
-        const initial = String(input.dataset.initial || '').trim();
-        if (nextValue === initial) {
-            if (status) status.textContent = 'No changes for product ' + productNumber + '.';
-            return;
-        }
-
-        await postJson('/api/products/nicknames', {
-            product_number: productNumber,
-            nickname: nextValue,
-        });
-
-        input.dataset.initial = nextValue;
-        if (nextValue) {
-            state.nicknames[productNumber] = nextValue;
-        } else {
-            delete state.nicknames[productNumber];
-        }
-        applyNicknamesToVisibleRows();
-        if (status) status.textContent = 'Saved nickname for product ' + productNumber + '.';
-    }
-
-    async function saveAllNicknameChanges() {
-        const status = document.getElementById('ic3NicknameManagerStatus');
-        const rows = Array.from(document.querySelectorAll('input.ic3NicknameInput'));
-        const changed = rows.filter(function (input) {
-            return String(input.value || '').trim() !== String(input.dataset.initial || '').trim();
-        });
-
-        if (!changed.length) {
-            if (status) status.textContent = 'No nickname changes to save.';
-            return;
-        }
-
-        if (status) status.textContent = 'Saving ' + changed.length + ' nickname change(s)...';
-        const updates = [];
-        for (const input of changed) {
-            const productNumber = String(input.dataset.product || '').trim();
-            if (!productNumber) continue;
-            updates.push({
-                product_number: productNumber,
-                nickname: String(input.value || '').trim(),
-            });
-        }
-
-        if (!updates.length) {
-            if (status) status.textContent = 'No valid nickname changes to save.';
-            return;
-        }
-
-        await postJson('/api/products/nicknames/bulk', { updates: updates });
-
-        for (const input of changed) {
-            const productNumber = String(input.dataset.product || '').trim();
-            const nextValue = String(input.value || '').trim();
-            input.dataset.initial = nextValue;
-            if (productNumber) {
-                if (nextValue) state.nicknames[productNumber] = nextValue;
-                else delete state.nicknames[productNumber];
-            }
-        }
-
-        if (typeof window.loadProducts === 'function') {
-            try { window.loadProducts(); } catch (_err) {}
-        }
-        applyNicknamesToVisibleRows();
-        if (status) status.textContent = 'All nickname changes saved.';
-        showToast('Nicknames updated.', 'success');
-    }
-
-    async function exportNicknameCsv() {
-        const status = document.getElementById('ic3NicknameManagerStatus');
-        if (status) status.textContent = 'Preparing CSV export...';
-        try {
-            const response = await fetch('/api/products/nicknames/export');
-            if (!response.ok) {
-                throw new Error('Export failed (' + response.status + ')');
-            }
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = 'product_nicknames.csv';
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
-            URL.revokeObjectURL(url);
-            if (status) status.textContent = 'CSV exported.';
-        } catch (error) {
-            if (status) status.textContent = 'Export failed: ' + error.message;
-        }
-    }
-
-    async function importNicknameCsv() {
-        const fileInput = document.getElementById('ic3NicknameImportFile');
-        const status = document.getElementById('ic3NicknameManagerStatus');
-        if (!fileInput || !fileInput.files || !fileInput.files.length) {
-            if (status) status.textContent = 'Choose a CSV file first.';
-            return;
-        }
-
-        const file = fileInput.files[0];
-        const fd = new FormData();
-        fd.append('file', file);
-        if (status) status.textContent = 'Importing CSV...';
-
-        try {
-            const response = await fetch('/api/products/nicknames/import', {
-                method: 'POST',
-                body: fd,
-            });
-            const payload = await response.json();
-            if (!response.ok || !payload.success) {
-                throw new Error((payload && payload.message) || 'CSV import failed.');
-            }
-
-            await loadNicknames();
-            renderNicknameManagerRows(String((document.getElementById('ic3NicknameManagerSearch') || {}).value || ''));
-            applyNicknamesToVisibleRows();
-            if (typeof window.loadProducts === 'function') {
-                try { window.loadProducts(); } catch (_err) {}
-            }
-            if (status) status.textContent = 'CSV imported. Updated ' + String(payload.applied || 0) + ' row(s).';
-            showToast('Nickname CSV import complete.', 'success');
-        } catch (error) {
-            if (status) status.textContent = 'Import failed: ' + error.message;
-            showToast('CSV import failed: ' + error.message, 'error');
-        }
-    }
-
-    async function openNicknameManager() {
-        const modal = ensureNicknameManagerModal();
-        const search = document.getElementById('ic3NicknameManagerSearch');
-        const status = document.getElementById('ic3NicknameManagerStatus');
-        const closeBtn = document.getElementById('ic3NicknameManagerClose');
-        const cancelBtn = document.getElementById('ic3NicknameManagerCancel');
-        const saveAllBtn = document.getElementById('ic3NicknameManagerSaveAll');
-        const exportBtn = document.getElementById('ic3NicknameExportCsv');
-        const importPickBtn = document.getElementById('ic3NicknameImportPick');
-        const importApplyBtn = document.getElementById('ic3NicknameImportApply');
-        const importFile = document.getElementById('ic3NicknameImportFile');
-        const importFileName = document.getElementById('ic3NicknameImportFileName');
-        if (!search || !status || !closeBtn || !cancelBtn || !saveAllBtn || !exportBtn || !importPickBtn || !importApplyBtn || !importFile || !importFileName) return;
-
-        modal.style.display = 'flex';
-        status.textContent = 'Loading products...';
-
-        if (modal.dataset.ic3NicknameBound !== '1') {
-            modal.dataset.ic3NicknameBound = '1';
-            modal.addEventListener('click', function (event) {
-                if (event.target === modal) closeNicknameManagerModal();
-            });
-            closeBtn.addEventListener('click', closeNicknameManagerModal);
-            cancelBtn.addEventListener('click', closeNicknameManagerModal);
-            search.addEventListener('input', function () {
-                renderNicknameManagerRows(search.value || '');
-            });
-            saveAllBtn.addEventListener('click', function () {
-                saveAllNicknameChanges().catch(function (error) {
-                    status.textContent = 'Save failed: ' + error.message;
-                });
-            });
-            exportBtn.addEventListener('click', function () {
-                exportNicknameCsv();
-            });
-            importPickBtn.addEventListener('click', function () {
-                importFile.click();
-            });
-            importFile.addEventListener('change', function () {
-                const selected = importFile.files && importFile.files.length ? importFile.files[0] : null;
-                importFileName.textContent = selected ? ('Selected file: ' + String(selected.name || '')) : '';
-            });
-            importApplyBtn.addEventListener('click', function () {
-                importNicknameCsv();
-            });
-
-            modal.addEventListener('click', function (event) {
-                const rowSaveBtn = event.target && event.target.closest ? event.target.closest('.ic3NicknameRowSave') : null;
-                if (!rowSaveBtn) return;
-                const productNumber = String(rowSaveBtn.dataset.product || '').trim();
-                if (!productNumber) return;
-                saveNicknameForProduct(productNumber).catch(function (error) {
-                    status.textContent = 'Save failed: ' + error.message;
-                });
-            });
-        }
-
-        try {
-            await loadNicknames();
-            await loadProductsForNicknameManager();
-            renderNicknameManagerRows('');
-            status.textContent = (state.nicknameProducts || []).length + ' products loaded.';
-            setTimeout(function () { try { search.focus(); } catch (_err) {} }, 0);
-        } catch (error) {
-            status.textContent = 'Load failed: ' + error.message;
-        }
     }
 
     function ensureProductDetailTab() {
@@ -2510,15 +1950,6 @@ PRODUCT_DETAIL_SCRIPT = r"""
         html += '<span id="ic3CaseCountStatus" style="font-size:12px; color:#374151;"></span>';
         html += '</div>';
 
-        html += '<div style="display:flex; align-items:end; gap:8px; flex-wrap:wrap; margin-bottom:12px;">';
-        html += '<div style="min-width:240px;"><label style="display:block; font-size:12px; color:#64748b;">Nickname / Short Name</label>';
-        html += '<input id="ic3ProductNickname" type="text" maxlength="48" value="' + escapeHtml(product.nickname || '') + '" placeholder="e.g. LG Chicken Breast" style="width:100%; padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px;" />';
-        html += '</div>';
-        html += '<button class="btn" id="ic3SaveProductNickname" style="background:#334155; color:white;">Save Nickname</button>';
-        html += '<button class="btn" id="ic3OpenNicknameManager" style="background:#0f766e; color:white;">Manage Nicknames</button>';
-        html += '<span id="ic3NicknameStatus" style="font-size:12px; color:#374151;"></span>';
-        html += '</div>';
-
         html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">';
         ['week', 'month', 'ytd'].forEach((key) => {
             const active = state.windowKey === key;
@@ -2700,72 +2131,6 @@ PRODUCT_DETAIL_SCRIPT = r"""
             return;
         }
 
-        if (event.target && event.target.id === 'ic3SaveProductNickname') {
-            event.preventDefault();
-            const input = document.getElementById('ic3ProductNickname');
-            const status = document.getElementById('ic3NicknameStatus');
-            const nicknameValue = String((input && input.value) || '').trim();
-            if (!state.productNumber) return;
-            if (status) status.textContent = 'Saving...';
-
-            postJson('/api/products/nicknames', {
-                product_number: state.productNumber,
-                nickname: nicknameValue,
-            }).then((result) => {
-                const canonical = canonicalProductNumber(state.productNumber);
-                if (canonical) {
-                    if (nicknameValue) {
-                        state.nicknames[canonical] = nicknameValue;
-                    } else {
-                        delete state.nicknames[canonical];
-                    }
-                }
-                applyNicknamesToVisibleRows();
-                if (typeof window.loadProducts === 'function') {
-                    try { window.loadProducts(); } catch (_err) {}
-                }
-                if (status) status.textContent = 'Saved.';
-                showToast(nicknameValue ? 'Nickname saved.' : 'Nickname cleared.', 'success');
-                loadProductDetail(state.productNumber, state.windowKey);
-            }).catch((error) => {
-                if (status) status.textContent = 'Error: ' + error.message;
-                showToast('Nickname save failed: ' + error.message, 'error');
-            });
-            return;
-        }
-
-        if (event.target && event.target.id === 'ic3OpenNicknameManager') {
-            event.preventDefault();
-            openNicknameManager();
-            return;
-        }
-
-        const inlineNickSaveBtn = event.target && event.target.closest ? event.target.closest('.ic3InlineNicknameSave') : null;
-        if (inlineNickSaveBtn) {
-            event.preventDefault();
-            const productNumber = canonicalProductNumber(String(inlineNickSaveBtn.dataset.product || '').trim());
-            const input = document.querySelector('input.ic3InlineNicknameInput[data-product="' + escapeCssAttr(productNumber) + '"]');
-            const nicknameValue = String((input && input.value) || '').trim();
-            if (!productNumber) return;
-
-            postJson('/api/products/nicknames', {
-                product_number: productNumber,
-                nickname: nicknameValue,
-            }).then(function () {
-                if (nicknameValue) {
-                    state.nicknames[productNumber] = nicknameValue;
-                } else {
-                    delete state.nicknames[productNumber];
-                }
-                applyNicknamesToVisibleRows();
-                ensureProductManagementNicknameColumn();
-                showToast(nicknameValue ? 'Nickname saved.' : 'Nickname cleared.', 'success');
-            }).catch(function (error) {
-                showToast('Nickname save failed: ' + error.message, 'error');
-            });
-            return;
-        }
-
         const orderBtn = event.target && event.target.closest ? event.target.closest('.ic3SaveOrderBtn') : null;
         if (orderBtn) {
             event.preventDefault();
@@ -2824,9 +2189,6 @@ PRODUCT_DETAIL_SCRIPT = r"""
     const runInstall = function () {
         ensureProductDetailTab();
         installProductLinks();
-        loadNicknames();
-        applyNicknamesToVisibleRows();
-        ensureProductManagementNicknameColumn();
     };
 
     if (document.readyState === 'loading') {
@@ -2845,8 +2207,6 @@ PRODUCT_DETAIL_SCRIPT = r"""
             ic3ProductDetailRefreshScheduled = false;
             installProductLinks();
             ensureProductDetailTab();
-            applyNicknamesToVisibleRows();
-            ensureProductManagementNicknameColumn();
         }, 120);
     };
 
@@ -2864,42 +2224,18 @@ MOBILE_UI_SCRIPT = r"""
     if (window.__ic3MobileUiInstalled) return;
     window.__ic3MobileUiInstalled = true;
 
-    // Temporarily disable the mobile card/table overlay so IC3 falls back
-    // to the stable inventory table flow that was working earlier.
-    return;
-
-    /* ---- Touch-lock: installed here because head injection is unreliable ---- */
-    if (!window.__ic3TouchLockInstalled) {
-        window.__ic3TouchLockInstalled = true;
-        window.__ic3TouchActive = false;
-        document.addEventListener('touchstart', function () {
-            window.__ic3TouchActive = true;
-        }, { passive: true, capture: true });
-        document.addEventListener('touchend', function () {
-            setTimeout(function () { window.__ic3TouchActive = false; }, 500);
-        }, { passive: true, capture: true });
-        document.addEventListener('touchcancel', function () {
-            window.__ic3TouchActive = false;
-        }, { passive: true, capture: true });
+    const styleId = 'ic3-mobile-enhancement-style';
+    if (document.getElementById(styleId)) {
+        return;
     }
 
-    const styleId = 'ic3-mobile-enhancement-style';
-    let style = document.getElementById(styleId);
-    if (!style) {
-        style = document.createElement('style');
-        style.id = styleId;
-        style.type = 'text/css';
-        style.textContent = [
-        /* Fix 300ms tap delay on all interactive elements */
-        'a, button, input, select, textarea, label, [role="button"] { touch-action: manipulation; }',
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.type = 'text/css';
+    style.textContent = [
         '.tabs { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }',
-        '.tab { flex-shrink: 0 !important; font-size: 0.82rem !important; padding: 12px 10px !important; touch-action: manipulation; }',
+        '.tab { flex-shrink: 0 !important; font-size: 0.82rem !important; padding: 12px 10px !important; }',
         '.tab img, .tab .tab-icon { width: 16px !important; height: 16px !important; }',
-        '.btn { touch-action: manipulation; }',
-        '.quantity-input { touch-action: manipulation; }',
-        '.location-option { touch-action: manipulation; }',
-        '.ic3-mobile-controls button, .ic3-mobile-controls input { touch-action: manipulation; }',
-        '#ic3MobileViewToggle button { touch-action: manipulation; }',
         '@media (max-width: 768px) {',
         '  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }',
         '  body { font-size: 16px !important; line-height: 1.45; }',
@@ -2910,13 +2246,10 @@ MOBILE_UI_SCRIPT = r"""
         '  .tabs { display: flex !important; overflow-x: auto !important; scroll-snap-type: x mandatory; }',
         '  .tab { flex: 0 0 auto !important; min-width: 130px !important; padding: 14px 14px !important; font-size: 1rem !important; line-height: 1.2 !important; scroll-snap-align: start; }',
         '  .tab-content { padding: 14px !important; }',
-        /* Hide unselected location options on mobile â€” only show the active one, same as desktop */
-        '  .location-selector { display: block !important; }',
-        '  .location-option { display: none !important; }',
-        '  .location-option:has(input[type="radio"]:checked) { display: flex !important; min-height: 44px; padding: 8px 12px !important; border: 2px solid #667eea; border-radius: 8px; pointer-events: none; cursor: default; }',
-        '  .location-option:has(input[type="radio"]:checked) input[type="radio"] { display: none; }',
-        '  .location-option:has(input[type="radio"]:checked) label { font-size: 1rem !important; font-weight: 700; color: #667eea; cursor: default; }',
-        '  .date-selector { display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; align-items: stretch !important; }',
+        '  .location-selector, .date-selector { display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; align-items: stretch !important; }',
+        '  .location-option { min-height: 52px; padding: 10px 12px !important; }',
+        '  .location-option label { font-size: 1rem !important; }',
+        '  .location-option input[type="radio"] { width: 20px; height: 20px; }',
         '  .date-selector label { font-size: 1rem !important; font-weight: 600; }',
         '  .date-selector input, .date-selector button, .date-selector .btn { width: 100% !important; min-height: 46px !important; font-size: 1rem !important; }',
         '  .inventory-controls-panel { grid-template-columns: 1fr !important; gap: 10px !important; padding: 12px !important; }',
@@ -2954,53 +2287,16 @@ MOBILE_UI_SCRIPT = r"""
         '  .header h1 { font-size: 1.75rem !important; }',
         '  .category-table th, .category-table td { font-size: 0.84rem !important; }',
         '}'
-        ].join('\n');
+    ].join('\n');
 
-        const head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
-        head.appendChild(style);
-    }
-
-    /* ---- JS-based location hiding for mobile (replaces :has() CSS which fails on old Android/iOS) ---- */
-    function applyMobileLocationHiding() {
-        const mq = window.matchMedia('(max-width: 768px)');
-        if (!mq.matches) return;
-        const options = Array.from(document.querySelectorAll('.location-option'));
-        if (!options.length) return;
-        options.forEach(function (opt) {
-            const radio = opt.querySelector('input[type="radio"]');
-            if (!radio) return;
-            if (radio.checked) {
-                opt.style.display = 'flex';
-                opt.style.border = '2px solid #667eea';
-                opt.style.borderRadius = '8px';
-                opt.style.pointerEvents = 'none';
-                opt.style.cursor = 'default';
-                if (radio) radio.style.display = 'none';
-            } else {
-                opt.style.display = 'none';
-            }
-        });
-    }
-
-    function hideLegacyViewSelector() {
-        var select = document.getElementById('viewMode');
-        var toggle = document.getElementById('ic3MobileViewToggle');
-        if (!select || !toggle) return;
-
-        var wrapper = select.closest('.control-group') || select.parentElement;
-        if (wrapper) {
-            wrapper.style.display = 'none';
-        }
-    }
+    const head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
+    head.appendChild(style);
 
     const mobileQuery = window.matchMedia('(max-width: 768px)');
     const storageKey = 'ic3-mobile-view-mode';
     const state = {
         mode: localStorage.getItem(storageKey) === 'table' ? 'table' : 'cards',
         scheduled: false,
-        refreshPendingAfterEdit: false,
-        observer: null,
-        bootstrapAttempts: 0,
     };
 
     function isMobile() {
@@ -3095,27 +2391,6 @@ MOBILE_UI_SCRIPT = r"""
         cardsRoot.innerHTML = '';
 
         const rows = Array.from(hosts.categories.querySelectorAll('tbody tr'));
-        if (!rows.length && state.bootstrapAttempts < 3) {
-            state.bootstrapAttempts += 1;
-
-            // Recovery path: if IC3 hasn't painted rows yet, ask core UI to reload products.
-            try {
-                if (typeof loadProducts === 'function') {
-                    loadProducts();
-                }
-            } catch (e) {}
-
-            cardsRoot.innerHTML = '<div class="ic3-mobile-card"><div class="ic3-mobile-item">Loading inventory items...</div></div>';
-            window.setTimeout(function () {
-                scheduleRefresh();
-            }, 220);
-            return;
-        }
-
-        if (rows.length) {
-            state.bootstrapAttempts = 0;
-        }
-
         const visibleRows = rows.filter(function (row) {
             const input = row.querySelector('input.quantity-input');
             if (!input) return false;
@@ -3159,18 +2434,11 @@ MOBILE_UI_SCRIPT = r"""
             cardQty.setAttribute('inputmode', 'decimal');
             cardQty.addEventListener('input', function () {
                 data.qtyInput.value = cardQty.value;
+                data.qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
             });
             cardQty.addEventListener('change', function () {
                 data.qtyInput.value = cardQty.value;
                 data.qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-            cardQty.addEventListener('blur', function () {
-                data.qtyInput.value = cardQty.value;
-                data.qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
-                if (state.refreshPendingAfterEdit) {
-                    state.refreshPendingAfterEdit = false;
-                    scheduleRefresh();
-                }
             });
 
             controls.appendChild(cardQty);
@@ -3216,43 +2484,21 @@ MOBILE_UI_SCRIPT = r"""
         }
 
         hosts.toggle.style.display = 'grid';
-        /* Disconnect the observer while rebuilding cards so our own DOM
-           writes do not re-trigger the MutationObserver, which would
-           cause a rapid loop that swallows tap events. */
-        if (state.observer) { state.observer.disconnect(); }
         renderCards();
-        if (state.observer) {
-            state.observer.observe(document.body, { childList: true, subtree: false });
-        }
-        const hasNoItemsMessage = /No items match the current filters\./i.test(hosts.cards.textContent || '');
-        const hasRenderedCards = hosts.cards.children.length > 0 && !hasNoItemsMessage;
-        const showCards = state.mode === 'cards' && hasRenderedCards;
+        const showCards = state.mode === 'cards';
         hosts.cards.classList.toggle('cards-visible', showCards);
         hosts.categories.classList.toggle('ic3-table-hidden-mobile', showCards);
     }
 
     function scheduleRefresh() {
-        const active = document.activeElement;
-        if (
-            active &&
-            active.tagName === 'INPUT' &&
-            active.closest &&
-            active.closest('#ic3MobileCards')
-        ) {
-            state.refreshPendingAfterEdit = true;
-            return;
-        }
-
         if (state.scheduled) {
             return;
         }
         state.scheduled = true;
-        /* Use 350ms timeout instead of rAF so card rebuilds never happen
-           during the same frame as a tap gesture. */
-        window.setTimeout(function () {
+        window.requestAnimationFrame(function () {
             state.scheduled = false;
             applyMode();
-        }, 350);
+        });
     }
 
     function installRefreshHooks() {
@@ -3268,27 +2514,11 @@ MOBILE_UI_SCRIPT = r"""
         });
 
         if (!document.body.dataset.ic3MobileObserverInstalled) {
-            /* Only watch direct children of body for major layout changes
-               (e.g. IC3 loading inventory data). subtree:false prevents
-               the self-loop where our own renderCards() triggers the observer.
-               Also skip entirely when a touch is active so taps always land. */
             const observer = new MutationObserver(function () {
-                if (window.__ic3TouchActive) return;
                 scheduleRefresh();
             });
-            observer.observe(document.body, { childList: true, subtree: false });
-            state.observer = observer;
+            observer.observe(document.body, { childList: true, subtree: true, attributes: true });
             document.body.dataset.ic3MobileObserverInstalled = '1';
-        }
-
-        const categories = document.getElementById('categoriesContainer');
-        if (categories && categories.dataset.ic3RowsObserverInstalled !== '1') {
-            const rowsObserver = new MutationObserver(function () {
-                if (window.__ic3TouchActive) return;
-                scheduleRefresh();
-            });
-            rowsObserver.observe(categories, { childList: true, subtree: true });
-            categories.dataset.ic3RowsObserverInstalled = '1';
         }
     }
 
@@ -3314,8 +2544,6 @@ MOBILE_UI_SCRIPT = r"""
         defaultShowEditButtonsOff();
         installRefreshHooks();
         applyMode();
-        applyMobileLocationHiding();
-        hideLegacyViewSelector();
     };
 
     if (document.readyState === 'loading') {
@@ -3324,901 +2552,12 @@ MOBILE_UI_SCRIPT = r"""
         runInstall();
     }
 
-    /* Re-apply location hiding whenever the location list is rebuilt by the sync script */
-    const _locHideObserver = new MutationObserver(function () {
-        if (window.__ic3TouchActive) return;
-        applyMobileLocationHiding();
-        hideLegacyViewSelector();
-    });
-    _locHideObserver.observe(document.body, { childList: true, subtree: true });
-})();
-</script>
-"""
-
-INVENTORY_SETS_UI_SCRIPT = r"""
-<script>
-(function () {
-    if (window.__ic3InventorySetsUiInstalled) return;
-    window.__ic3InventorySetsUiInstalled = true;
-
-    const STORAGE_KEY_INVENTORY_ID = 'ic3ActiveInventoryId';
-    const STORAGE_KEY_ROLLUP = 'ic3InventoryRollupEnabled';
-    let inventoriesCache = [];
-
-    function getStoredInventoryId() {
-        try {
-            return String(localStorage.getItem(STORAGE_KEY_INVENTORY_ID) || '').trim();
-        } catch (_err) {
-            return '';
-        }
-    }
-
-    function setStoredInventoryId(value) {
-        try {
-            localStorage.setItem(STORAGE_KEY_INVENTORY_ID, String(value || '').trim());
-        } catch (_err) {}
-    }
-
-    function getRollupEnabled() {
-        try {
-            return String(localStorage.getItem(STORAGE_KEY_ROLLUP) || '0').trim() === '1';
-        } catch (_err) {
-            return false;
-        }
-    }
-
-    function setRollupEnabled(value) {
-        try {
-            localStorage.setItem(STORAGE_KEY_ROLLUP, value ? '1' : '0');
-        } catch (_err) {}
-    }
-
-    function normalizeInventoryName(value) {
-        return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    }
-
-    function getCurrentInventoryId() {
-        const select = document.getElementById('ic3InventorySetSelect');
-        if (select && select.value) {
-            return String(select.value || '').trim();
-        }
-        return getStoredInventoryId();
-    }
-
-    function isRollupEnabled() {
-        const checkbox = document.getElementById('ic3InventoryRollupToggle');
-        if (checkbox) {
-            return !!checkbox.checked;
-        }
-        return getRollupEnabled();
-    }
-
-    function buildApiUrl(url) {
-        const raw = String(url || '');
-        if (!raw) return raw;
-
-        const inventoryId = getCurrentInventoryId();
-        const rollup = isRollupEnabled();
-        if (!inventoryId && !rollup) return raw;
-
-        const sep = raw.includes('?') ? '&' : '?';
-        const parts = [];
-        if (inventoryId) parts.push('inventory_id=' + encodeURIComponent(inventoryId));
-        if (rollup) parts.push('rollup=1');
-        if (!parts.length) return raw;
-        return raw + sep + parts.join('&');
-    }
-
-    function postJson(url, payload) {
-        return fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload || {}),
-        }).then(async function (response) {
-            let data = {};
-            try {
-                data = await response.json();
-            } catch (_err) {
-                data = {};
-            }
-            if (!response.ok || !data.success) {
-                throw new Error((data && data.message) || ('Request failed (' + response.status + ')'));
-            }
-            return data;
-        });
-    }
-
-    function refreshIc3Views() {
-        if (typeof window.loadProducts === 'function') {
-            try { window.loadProducts(); } catch (_err) {}
-        }
-        if (typeof window.loadInventoryHistory === 'function') {
-            try { window.loadInventoryHistory(); } catch (_err) {}
-        }
-        if (typeof window.loadInvoiceHistory === 'function') {
-            try { window.loadInvoiceHistory(); } catch (_err) {}
-        }
-        if (typeof window.loadProductDetail === 'function' && window.__ic3ProductDetailState && window.__ic3ProductDetailState.productNumber) {
-            try {
-                window.loadProductDetail(window.__ic3ProductDetailState.productNumber, window.__ic3ProductDetailState.windowKey || 'week');
-            } catch (_err) {}
-        }
-    }
-
-    function ensureCreateModal() {
-        let modal = document.getElementById('ic3InventoryCreateModal');
-        if (modal) return modal;
-
-        modal = document.createElement('div');
-        modal.id = 'ic3InventoryCreateModal';
-        modal.style.position = 'fixed';
-        modal.style.inset = '0';
-        modal.style.background = 'rgba(15, 23, 42, 0.45)';
-        modal.style.display = 'none';
-        modal.style.alignItems = 'center';
-        modal.style.justifyContent = 'center';
-        modal.style.zIndex = '9999';
-        modal.innerHTML = '' +
-            '<div style="width:min(94vw,480px);background:#fff;border-radius:12px;border:1px solid #cbd5e1;box-shadow:0 16px 48px rgba(15,23,42,0.28);padding:14px;">' +
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
-            '<strong style="font-size:16px;color:#0f172a;">Create Inventory</strong>' +
-            '<button id="ic3InventoryModalCloseTop" type="button" style="border:none;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:#475569;">&times;</button>' +
-            '</div>' +
-            '<label style="display:block;font-size:12px;color:#475569;margin:4px 0;">Name</label>' +
-            '<input id="ic3InventoryModalName" type="text" placeholder="Main Inventory / Bar / Cooler" style="width:100%;padding:8px 10px;border:1px solid #93c5fd;border-radius:8px;" />' +
-            '<label style="display:block;font-size:12px;color:#475569;margin:10px 0 4px;">Parent Inventory</label>' +
-            '<select id="ic3InventoryModalParent" style="width:100%;padding:8px 10px;border:1px solid #93c5fd;border-radius:8px;"></select>' +
-            '<div id="ic3InventoryModalMsg" style="min-height:18px;margin-top:8px;color:#64748b;font-size:12px;"></div>' +
-            '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">' +
-            '<button id="ic3InventoryModalCancel" type="button" style="padding:7px 12px;border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:8px;cursor:pointer;">Cancel</button>' +
-            '<button id="ic3InventoryModalSave" type="button" style="padding:7px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;">Create</button>' +
-            '</div>' +
-            '</div>';
-
-        document.body.appendChild(modal);
-        return modal;
-    }
-
-    function closeCreateModal() {
-        const modal = document.getElementById('ic3InventoryCreateModal');
-        if (!modal) return;
-        modal.style.display = 'none';
-    }
-
-    function openCreateModal(statusNode) {
-        const modal = ensureCreateModal();
-        const nameInput = document.getElementById('ic3InventoryModalName');
-        const parentSelect = document.getElementById('ic3InventoryModalParent');
-        const saveBtn = document.getElementById('ic3InventoryModalSave');
-        const cancelBtn = document.getElementById('ic3InventoryModalCancel');
-        const closeTopBtn = document.getElementById('ic3InventoryModalCloseTop');
-        const msg = document.getElementById('ic3InventoryModalMsg');
-        if (!nameInput || !parentSelect || !saveBtn || !cancelBtn || !closeTopBtn || !msg) return;
-
-        const currentInventoryId = getCurrentInventoryId();
-        const currentInventory = (inventoriesCache || []).find(function (inv) {
-            return String((inv && inv.id) || '').trim() === currentInventoryId;
-        }) || null;
-
-        const parentOptions = ['<option value="">No parent (top-level)</option>'];
-        (inventoriesCache || []).forEach(function (inv) {
-            const id = String((inv && inv.id) || '').trim();
-            const name = String((inv && inv.name) || '').trim();
-            if (!id || !name) return;
-            parentOptions.push('<option value="' + id.replace(/"/g, '&quot;') + '">' + name.replace(/</g, '&lt;') + '</option>');
-        });
-        parentSelect.innerHTML = parentOptions.join('');
-        parentSelect.value = currentInventory ? currentInventoryId : '';
-        msg.textContent = currentInventory
-            ? ('Tip: this will default to a submenu under "' + String(currentInventory.name || '') + '".')
-            : 'Create a top-level inventory (like Main Inventory), or choose a parent for submenu.';
-
-        nameInput.value = '';
-        modal.style.display = 'flex';
-        setTimeout(function () { try { nameInput.focus(); } catch (_err) {} }, 0);
-
-        if (modal.dataset.ic3ModalBound !== '1') {
-            modal.dataset.ic3ModalBound = '1';
-            modal.addEventListener('click', function (event) {
-                if (event.target === modal) closeCreateModal();
-            });
-            cancelBtn.addEventListener('click', closeCreateModal);
-            closeTopBtn.addEventListener('click', closeCreateModal);
-        }
-
-        saveBtn.onclick = function () {
-            const name = String(nameInput.value || '').trim();
-            const parentInventoryId = String(parentSelect.value || '').trim();
-            if (!name) {
-                msg.textContent = 'Name is required.';
-                msg.style.color = '#991b1b';
-                return;
-            }
-
-            const normalizedName = normalizeInventoryName(name);
-            const duplicate = (inventoriesCache || []).some(function (inv) {
-                const invName = normalizeInventoryName((inv && inv.name) || '');
-                const invParent = String((inv && inv.parent_inventory_id) || '').trim();
-                return invName === normalizedName && invParent === parentInventoryId;
-            });
-            if (duplicate) {
-                msg.textContent = 'That inventory name already exists under the selected parent.';
-                msg.style.color = '#991b1b';
-                return;
-            }
-
-            msg.textContent = 'Creating inventory...';
-            msg.style.color = '#475569';
-            saveBtn.disabled = true;
-
-            postJson('/api/inventories', {
-                name: name,
-                parent_inventory_id: parentInventoryId,
-                set_active: true,
-            }).then(function () {
-                if (statusNode) statusNode.textContent = 'Inventory created.';
-                closeCreateModal();
-                return loadInventories();
-            }).then(function () {
-                refreshIc3Views();
-            }).catch(function (error) {
-                msg.textContent = 'Create failed: ' + error.message;
-                msg.style.color = '#991b1b';
-                if (statusNode) statusNode.textContent = 'Create failed: ' + error.message;
-            }).finally(function () {
-                saveBtn.disabled = false;
-            });
-        };
-    }
-
-    function renderInventoryPanel(payload) {
-        const inventoryTab = document.getElementById('inventory');
-        const controls = document.querySelector('.inventory-controls-panel') || document.getElementById('categoriesContainer');
-        if (!inventoryTab || !controls || !controls.parentNode) return;
-
-        let panel = document.getElementById('ic3InventorySetPanel');
-        if (!panel) {
-            panel = document.createElement('div');
-            panel.id = 'ic3InventorySetPanel';
-            panel.style.display = 'flex';
-            panel.style.flexWrap = 'wrap';
-            panel.style.gap = '8px';
-            panel.style.alignItems = 'center';
-            panel.style.margin = '10px 0';
-            panel.style.padding = '10px';
-            panel.style.border = '1px solid #dbeafe';
-            panel.style.borderRadius = '10px';
-            panel.style.background = '#f8fbff';
-
-            panel.innerHTML = '' +
-                '<strong style="color:#1e3a8a;">Inventory Set</strong>' +
-                '<select id="ic3InventorySetSelect" style="min-width:220px;padding:6px 8px;border:1px solid #93c5fd;border-radius:8px;"></select>' +
-                '<button id="ic3InventorySetCreateBtn" type="button" style="padding:6px 10px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;">+ Create</button>' +
-                '<label style="display:inline-flex;align-items:center;gap:6px;color:#334155;font-size:13px;">' +
-                '<input id="ic3InventoryRollupToggle" type="checkbox" /> Roll up sub-inventories' +
-                '</label>' +
-                '<span id="ic3InventorySetStatus" style="font-size:12px;color:#475569;"></span>';
-
-            controls.parentNode.insertBefore(panel, controls);
-        }
-
-        const select = document.getElementById('ic3InventorySetSelect');
-        const status = document.getElementById('ic3InventorySetStatus');
-        const rollupToggle = document.getElementById('ic3InventoryRollupToggle');
-        if (!select || !status || !rollupToggle) return;
-
-        const inventories = Array.isArray((payload || {}).inventories) ? payload.inventories : [];
-        inventoriesCache = inventories.slice();
-        const activeInventoryId = String((payload || {}).active_inventory_id || '').trim();
-        const storedInventoryId = getStoredInventoryId();
-        const preferredId = storedInventoryId || activeInventoryId;
-
-        const inventoryById = {};
-        inventories.forEach(function (inv) {
-            const id = String((inv && inv.id) || '').trim();
-            if (id) inventoryById[id] = inv;
-        });
-
-        const options = ['<option value="">Legacy / Unassigned</option>'];
-        inventories.forEach(function (inv) {
-            const id = String((inv && inv.id) || '').trim();
-            const name = String((inv && inv.name) || '').trim();
-            if (!id || !name) return;
-            const parentId = String((inv && inv.parent_inventory_id) || '').trim();
-            const parentName = parentId && inventoryById[parentId]
-                ? String((inventoryById[parentId] && inventoryById[parentId].name) || '').trim()
-                : '';
-            const label = parentName ? (parentName + ' > ' + name) : name;
-            options.push('<option value="' + id.replace(/"/g, '&quot;') + '">' + label.replace(/</g, '&lt;') + '</option>');
-        });
-        select.innerHTML = options.join('');
-
-        const validValues = Array.from(select.options).map(function (o) { return String(o.value || ''); });
-        if (preferredId && validValues.includes(preferredId)) {
-            select.value = preferredId;
-        } else if (activeInventoryId && validValues.includes(activeInventoryId)) {
-            select.value = activeInventoryId;
-        } else {
-            select.value = '';
-        }
-
-        setStoredInventoryId(select.value || '');
-        rollupToggle.checked = getRollupEnabled();
-        status.textContent = inventories.length ? (inventories.length + ' inventory set(s)') : 'No inventory sets yet. Create one to start using multi-inventory.';
-    }
-
-    function loadInventories() {
-        return fetch('/api/inventories')
-            .then(async function (response) {
-                const payload = await response.json();
-                if (!response.ok || !payload.success) {
-                    throw new Error((payload && payload.message) || 'Unable to load inventories');
-                }
-                renderInventoryPanel(payload);
-                return payload;
-            })
-            .catch(function (error) {
-                const status = document.getElementById('ic3InventorySetStatus');
-                if (status) status.textContent = 'Inventory API unavailable: ' + error.message;
-            });
-    }
-
-    function installHandlers() {
-        const select = document.getElementById('ic3InventorySetSelect');
-        const createBtn = document.getElementById('ic3InventorySetCreateBtn');
-        const rollupToggle = document.getElementById('ic3InventoryRollupToggle');
-        const status = document.getElementById('ic3InventorySetStatus');
-        if (!select || !createBtn || !rollupToggle || !status) return;
-
-        if (select.dataset.ic3Bound !== '1') {
-            select.dataset.ic3Bound = '1';
-            select.addEventListener('change', function () {
-                const nextId = String(select.value || '').trim();
-                setStoredInventoryId(nextId);
-                if (!nextId) {
-                    refreshIc3Views();
-                    return;
-                }
-                postJson('/api/inventories/select', { inventory_id: nextId })
-                    .then(function () {
-                        status.textContent = 'Active inventory updated.';
-                        refreshIc3Views();
-                    })
-                    .catch(function (error) {
-                        status.textContent = 'Select failed: ' + error.message;
-                    });
-            });
-        }
-
-        if (rollupToggle.dataset.ic3Bound !== '1') {
-            rollupToggle.dataset.ic3Bound = '1';
-            rollupToggle.addEventListener('change', function () {
-                setRollupEnabled(!!rollupToggle.checked);
-                refreshIc3Views();
-            });
-        }
-
-        if (createBtn.dataset.ic3Bound !== '1') {
-            createBtn.dataset.ic3Bound = '1';
-            createBtn.addEventListener('click', function () {
-                openCreateModal(status);
-            });
-        }
-    }
-
-    function installPanel() {
-        loadInventories().then(function () {
-            installHandlers();
-        });
-    }
-
-    // Inject inventory context into existing API calls without rewriting legacy scripts.
-    const originalFetch = window.fetch ? window.fetch.bind(window) : null;
-    if (originalFetch) {
-        window.fetch = function (resource, init) {
-            let url = '';
-            let req = resource;
-            const options = Object.assign({}, init || {});
-
-            if (typeof resource === 'string') {
-                url = resource;
-            } else if (resource && typeof resource.url === 'string') {
-                url = resource.url;
-            }
-
-            const normalized = String(url || '');
-            let normalizedRewritten = normalized;
-
-            // Normalize legacy hardcoded API origins (e.g. :5080) to same-origin /api.
-            if (normalizedRewritten.indexOf(':5080/api/') >= 0) {
-                const idx5080 = normalizedRewritten.indexOf(':5080/api/');
-                if (idx5080 >= 0) {
-                    normalizedRewritten = '/api/' + normalizedRewritten.slice(idx5080 + ':5080/api/'.length);
-                }
-            }
-            normalizedRewritten = normalizedRewritten
-                .replace('http://localhost:5080/api/', '/api/')
-                .replace('https://localhost:5080/api/', '/api/')
-                .replace('http://127.0.0.1:5080/api/', '/api/')
-                .replace('https://127.0.0.1:5080/api/', '/api/');
-
-            if (normalizedRewritten !== normalized) {
-                if (typeof resource === 'string') {
-                    req = normalizedRewritten;
-                } else if (resource instanceof Request) {
-                    req = new Request(normalizedRewritten, resource);
-                }
-            }
-
-            const isDetail = normalized.indexOf('/api/products/') >= 0 && normalized.indexOf('/detail') >= 0;
-            const isInventoryList = normalized.indexOf('/api/inventory/list') >= 0;
-            const isInventoryUpdate = normalized.indexOf('/api/products/update-inventory-quantity') >= 0;
-
-            if (isDetail || isInventoryList) {
-                const rewrittenUrl = buildApiUrl(normalized);
-                if (typeof resource === 'string') {
-                    req = rewrittenUrl;
-                } else if (resource instanceof Request) {
-                    req = new Request(rewrittenUrl, resource);
-                }
-            }
-
-            if (isInventoryUpdate && options && options.body && typeof options.body === 'string') {
-                try {
-                    const parsed = JSON.parse(options.body);
-                    if (parsed && typeof parsed === 'object' && !parsed.inventory_id) {
-                        const activeInventoryId = getCurrentInventoryId();
-                        if (activeInventoryId) {
-                            parsed.inventory_id = activeInventoryId;
-                            options.body = JSON.stringify(parsed);
-                        }
-                    }
-                } catch (_err) {}
-            }
-
-            return originalFetch(req, options);
-        };
-    }
-
-    // Expose state for optional integration points.
-    window.__ic3GetInventoryContext = function () {
-        return {
-            inventory_id: getCurrentInventoryId(),
-            rollup: isRollupEnabled(),
-        };
-    };
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', installPanel);
-    } else {
-        installPanel();
-    }
-
-    const observer = new MutationObserver(function () {
-        if (!document.getElementById('ic3InventorySetPanel')) {
-            installPanel();
-            return;
-        }
-        installHandlers();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-})();
-</script>
-"""
-
-PRODUCT_ACTIVITY_ENHANCEMENT_SCRIPT = r"""
-<script>
-(function () {
-    if (window.__ic3ProductActivityEnhancementInstalled) return;
-    window.__ic3ProductActivityEnhancementInstalled = true;
-
-    const ORDER_STORAGE_KEY = 'ic3-product-activity-order-mode';
-    const VIEW_STORAGE_KEY = 'ic3-product-activity-view-mode';
-
-    function parseNumber(value) {
-        const cleaned = String(value || '').replace(/[^0-9.\-]/g, '');
-        const num = Number(cleaned);
-        return Number.isFinite(num) ? num : 0;
-    }
-
-    function addStyles() {
-        const styleId = 'ic3-product-activity-enhancement-style';
-        if (document.getElementById(styleId)) return;
-
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = [
-            '#reportContent { overflow-x: auto; }',
-            '#reportContent table { width: 100%; border-collapse: collapse; }',
-            '#reportContent table th, #reportContent table td { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; word-break: break-word !important; line-height: 1.3; }',
-            '#reportContent table th { font-size: 12px !important; font-weight: 700; }',
-            '#reportContent table td { font-size: 12px !important; }',
-            '#reportContent table th:nth-child(n+10), #reportContent table td:nth-child(n+10) { min-width: 118px; }',
-            '#reportContent .ic3-report-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 10px 0 12px; padding: 10px; border: 1px solid #dbe3ef; border-radius: 10px; background: #f8fbff; }',
-            '#reportContent .ic3-report-toolbar .ic3-field { display: flex; flex-direction: column; min-width: 210px; gap: 4px; }',
-            '#reportContent .ic3-report-toolbar label { font-size: 12px; color: #334155; font-weight: 700; }',
-            '#reportContent .ic3-report-toolbar select { min-height: 38px; border-radius: 8px; border: 1px solid #c7d4e7; padding: 7px 10px; font-size: 14px; background: #fff; color: #0f172a; }',
-            '#reportContent.ic3-summary-mode table th:nth-child(n+10), #reportContent.ic3-summary-mode table td:nth-child(n+10) { display: none; }',
-            '#reportContent.ic3-summary-mode table th, #reportContent.ic3-summary-mode table td { font-size: 12px; padding: 6px 8px; }',
-            '#reportContent.ic3-cards-mode table { display: none !important; }',
-            '#reportContent .ic3-report-cards { display: none; margin-top: 8px; gap: 10px; }',
-            '#reportContent.ic3-cards-mode .ic3-report-cards { display: grid; grid-template-columns: 1fr; }',
-            '#reportContent .ic3-report-card { border: 1px solid #dbe3ef; border-radius: 12px; padding: 10px; background: #ffffff; box-shadow: 0 1px 6px rgba(15,23,42,0.06); }',
-            '#reportContent .ic3-report-card .title { font-weight: 800; color: #0f172a; font-size: 14px; line-height: 1.25; margin-bottom: 6px; }',
-            '#reportContent .ic3-report-card .meta { font-size: 12px; color: #475569; margin-bottom: 6px; }',
-            '#reportContent .ic3-report-card .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }',
-            '#reportContent .ic3-report-card .stat { border: 1px solid #e5eaf3; border-radius: 8px; padding: 6px; background: #f8fafc; }',
-            '#reportContent .ic3-report-card .stat .k { font-size: 11px; color: #64748b; }',
-            '#reportContent .ic3-report-card .stat .v { font-size: 13px; color: #0f172a; font-weight: 700; }',
-            '@media (max-width: 900px) {',
-            '  #reportContent .ic3-report-toolbar { display: grid; grid-template-columns: 1fr; padding: 10px; }',
-            '  #reportContent .ic3-report-toolbar .ic3-field { min-width: 0; }',
-            '  #reportContent table th, #reportContent table td { font-size: 11px; padding: 5px 6px; }',
-            '}',
-            '@media (max-width: 768px) {',
-            '  #reportContent { margin-top: 6px; }',
-            '  #reportContent .ic3-report-toolbar select { min-height: 44px; font-size: 16px; }',
-            '  #reportContent table th, #reportContent table td { font-size: 13px !important; }',
-            '  #reportContent.ic3-summary-mode table th:nth-child(3), #reportContent.ic3-summary-mode table td:nth-child(3), #reportContent.ic3-summary-mode table th:nth-child(4), #reportContent.ic3-summary-mode table td:nth-child(4) { display: none; }',
-            '}',
-        ].join('\n');
-
-        (document.head || document.documentElement).appendChild(style);
-    }
-
-    function buildInventoryOrderMap() {
-        const map = new Map();
-        const qtyInputs = Array.from(document.querySelectorAll('#categoriesContainer input.quantity-input[id^="qty_"]'));
-        qtyInputs.forEach((input, idx) => {
-            const key = String(input.id || '').replace(/^qty_/, '').trim();
-            if (key && !map.has(key)) {
-                map.set(key, idx);
-            }
-        });
-        return map;
-    }
-
-    function getReportTable() {
-        const reportContent = document.getElementById('reportContent');
-        if (!reportContent) return null;
-        const table = reportContent.querySelector('table');
-        if (!(table instanceof HTMLTableElement)) return null;
-        return table;
-    }
-
-    function getColumnIndexes(table) {
-        const headers = Array.from(table.querySelectorAll('thead th'));
-        const idx = {
-            product: 0,
-            description: 1,
-            beginInv: 4,
-            totalOrders: 5,
-            endInv: 6,
-            usage: 7,
-            casesRequired: 8,
-        };
-
-        headers.forEach((th, i) => {
-            const text = (th.textContent || '').trim().toLowerCase();
-            if (text.includes('product')) idx.product = i;
-            if (text.includes('description')) idx.description = i;
-            if (text.includes('begin inv')) idx.beginInv = i;
-            if (text.includes('total orders')) idx.totalOrders = i;
-            if (text.includes('end inv')) idx.endInv = i;
-            if (text === 'usage' || text.includes('usage')) idx.usage = i;
-            if (text.includes('cases required')) idx.casesRequired = i;
-        });
-
-        return idx;
-    }
-
-    function extractRows(table, idx) {
-        const body = table.tBodies && table.tBodies.length ? table.tBodies[0] : null;
-        if (!body) return [];
-        const rows = Array.from(body.rows || []);
-
-        return rows.map((row, originalIndex) => {
-            const cells = row.cells || [];
-            const product = (cells[idx.product] ? cells[idx.product].innerText : '').trim();
-            const description = (cells[idx.description] ? cells[idx.description].innerText : '').trim();
-            const usage = parseNumber(cells[idx.usage] ? cells[idx.usage].innerText : '0');
-            return { row, originalIndex, product, description, usage };
-        });
-    }
-
-    function sortRows(rows, mode, inventoryOrder) {
-        const sorted = rows.slice();
-        sorted.sort((a, b) => {
-            if (mode === 'inventory') {
-                const ai = inventoryOrder.has(a.product) ? inventoryOrder.get(a.product) : Number.MAX_SAFE_INTEGER;
-                const bi = inventoryOrder.has(b.product) ? inventoryOrder.get(b.product) : Number.MAX_SAFE_INTEGER;
-                if (ai !== bi) return ai - bi;
-                return a.originalIndex - b.originalIndex;
-            }
-            if (mode === 'usage-desc') {
-                if (b.usage !== a.usage) return b.usage - a.usage;
-                return a.originalIndex - b.originalIndex;
-            }
-            if (mode === 'usage-asc') {
-                if (a.usage !== b.usage) return a.usage - b.usage;
-                return a.originalIndex - b.originalIndex;
-            }
-            if (mode === 'product') {
-                return a.product.localeCompare(b.product, undefined, { numeric: true, sensitivity: 'base' });
-            }
-            if (mode === 'description') {
-                return a.description.localeCompare(b.description, undefined, { sensitivity: 'base' });
-            }
-            return a.originalIndex - b.originalIndex;
-        });
-        return sorted;
-    }
-
-    function applySortedRows(table, sortedRows) {
-        const body = table.tBodies && table.tBodies.length ? table.tBodies[0] : null;
-        if (!body) return;
-        const frag = document.createDocumentFragment();
-        sortedRows.forEach((entry) => frag.appendChild(entry.row));
-        body.appendChild(frag);
-    }
-
-    function upsertCards(reportContent, rows, idx) {
-        let cards = reportContent.querySelector('.ic3-report-cards');
-        if (!cards) {
-            cards = document.createElement('div');
-            cards.className = 'ic3-report-cards';
-            reportContent.appendChild(cards);
-        }
-
-        cards.innerHTML = '';
-        rows.forEach((entry) => {
-            const cells = entry.row.cells || [];
-            const product = cells[idx.product] ? cells[idx.product].innerText.trim() : '';
-            const description = cells[idx.description] ? cells[idx.description].innerText.trim() : '';
-            const beginInv = cells[idx.beginInv] ? cells[idx.beginInv].innerText.trim() : '-';
-            const totalOrders = cells[idx.totalOrders] ? cells[idx.totalOrders].innerText.trim() : '-';
-            const endInv = cells[idx.endInv] ? cells[idx.endInv].innerText.trim() : '-';
-            const usage = cells[idx.usage] ? cells[idx.usage].innerText.trim() : '-';
-            const cases = cells[idx.casesRequired] ? cells[idx.casesRequired].innerText.trim() : '-';
-
-            const card = document.createElement('article');
-            card.className = 'ic3-report-card';
-            card.innerHTML = [
-                '<div class="title">' + description.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>',
-                '<div class="meta">Product #: <strong>' + product.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</strong></div>',
-                '<div class="stats">',
-                '<div class="stat"><div class="k">Begin Inv</div><div class="v">' + beginInv + '</div></div>',
-                '<div class="stat"><div class="k">Total Orders</div><div class="v">' + totalOrders + '</div></div>',
-                '<div class="stat"><div class="k">End Inv</div><div class="v">' + endInv + '</div></div>',
-                '<div class="stat"><div class="k">Usage</div><div class="v">' + usage + '</div></div>',
-                '<div class="stat"><div class="k">Cases Required</div><div class="v">' + cases + '</div></div>',
-                '</div>'
-            ].join('');
-            cards.appendChild(card);
-        });
-    }
-
-    function ensureToolbar(reportContent, applyCallback) {
-        let toolbar = reportContent.querySelector('.ic3-report-toolbar');
-        if (!toolbar) {
-            toolbar = document.createElement('div');
-            toolbar.className = 'ic3-report-toolbar';
-            toolbar.innerHTML = [
-                '<div class="ic3-field">',
-                '  <label for="ic3ReportOrderMode">Product Order</label>',
-                '  <select id="ic3ReportOrderMode">',
-                '    <option value="inventory">Product List Order (Default)</option>',
-                '    <option value="usage-desc">Usage High to Low</option>',
-                '    <option value="usage-asc">Usage Low to High</option>',
-                '    <option value="product">Product Number</option>',
-                '    <option value="description">Description A to Z</option>',
-                '  </select>',
-                '</div>',
-                '<div class="ic3-field">',
-                '  <label for="ic3ReportViewMode">View Mode</label>',
-                '  <select id="ic3ReportViewMode">',
-                '    <option value="full">Full Table</option>',
-                '    <option value="summary">Summary Table</option>',
-                '    <option value="cards">Mobile Cards</option>',
-                '  </select>',
-                '</div>'
-            ].join('');
-            reportContent.insertBefore(toolbar, reportContent.firstChild || null);
-        }
-
-        const orderSelect = toolbar.querySelector('#ic3ReportOrderMode');
-        const viewSelect = toolbar.querySelector('#ic3ReportViewMode');
-        if (!(orderSelect instanceof HTMLSelectElement) || !(viewSelect instanceof HTMLSelectElement)) return;
-
-        if (!orderSelect.dataset.ic3Bound) {
-            orderSelect.dataset.ic3Bound = '1';
-            orderSelect.value = localStorage.getItem(ORDER_STORAGE_KEY) || 'inventory';
-            orderSelect.addEventListener('change', function () {
-                localStorage.setItem(ORDER_STORAGE_KEY, orderSelect.value);
-                applyCallback();
-            });
-        }
-
-        if (!viewSelect.dataset.ic3Bound) {
-            viewSelect.dataset.ic3Bound = '1';
-            const isMobile = window.matchMedia('(max-width: 768px)').matches;
-            const saved = localStorage.getItem(VIEW_STORAGE_KEY);
-            viewSelect.value = saved || (isMobile ? 'summary' : 'full');
-            viewSelect.addEventListener('change', function () {
-                localStorage.setItem(VIEW_STORAGE_KEY, viewSelect.value);
-                applyCallback();
-            });
-        }
-    }
-
-    function applyViewMode(reportContent, mode) {
-        reportContent.classList.toggle('ic3-summary-mode', mode === 'summary');
-        reportContent.classList.toggle('ic3-cards-mode', mode === 'cards');
-    }
-
-    function enhanceProductActivityReport() {
-        const reportContent = document.getElementById('reportContent');
-        const table = getReportTable();
-        if (!reportContent || !table) return;
-
-        const inventoryOrder = buildInventoryOrderMap();
-        const idx = getColumnIndexes(table);
-
-        const applyAll = function () {
-            const orderSelect = reportContent.querySelector('#ic3ReportOrderMode');
-            const viewSelect = reportContent.querySelector('#ic3ReportViewMode');
-            const orderMode = (orderSelect && orderSelect.value) ? orderSelect.value : 'inventory';
-            const viewMode = (viewSelect && viewSelect.value) ? viewSelect.value : 'full';
-
-            const rows = extractRows(table, idx);
-            const sorted = sortRows(rows, orderMode, inventoryOrder);
-            applySortedRows(table, sorted);
-            upsertCards(reportContent, sorted, idx);
-            applyViewMode(reportContent, viewMode);
-        };
-
-        ensureToolbar(reportContent, applyAll);
-        applyAll();
-    }
-
-    let scheduled = false;
-    function scheduleEnhance() {
-        if (scheduled) return;
-        scheduled = true;
-        window.setTimeout(function () {
-            scheduled = false;
-            enhanceProductActivityReport();
-        }, 80);
-    }
-
-    addStyles();
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', scheduleEnhance);
-    } else {
-        scheduleEnhance();
-    }
-
-    const observer = new MutationObserver(function () {
-        if (window.__ic3TouchActive) return;
-        scheduleEnhance();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-})();
-</script>
-"""
-
-INVENTORY_VISIBILITY_HOTFIX_SCRIPT = r"""
-<script>
-(function () {
-    if (window.__ic3InventoryVisibilityHotfixInstalled) return;
-    window.__ic3InventoryVisibilityHotfixInstalled = true;
-
-    function stabilizeInventoryVisibility() {
-        var preferred = 'cards';
-        try {
-            preferred = localStorage.getItem('ic3-mobile-view-mode') === 'table' ? 'table' : 'cards';
-        } catch (e) {}
-
-        var categories = document.getElementById('categoriesContainer');
-        var cards = document.getElementById('ic3MobileCards');
-        var toggle = document.getElementById('ic3MobileViewToggle');
-        var legacyView = document.getElementById('viewMode');
-        if (!categories) return;
-
-        if (legacyView && toggle) {
-            var legacyWrapper = legacyView.closest('.control-group') || legacyView.parentElement;
-            if (legacyWrapper) {
-                legacyWrapper.style.display = 'none';
-            }
-        }
-
-        var cardsText = cards ? (cards.textContent || '') : '';
-        var noItems = /No items match the current filters\./i.test(cardsText);
-        var hasRenderedCards = !!(cards && cards.children && cards.children.length > 0 && !noItems);
-        var showCards = preferred === 'cards' && hasRenderedCards;
-
-        if (showCards) {
-            categories.classList.add('ic3-table-hidden-mobile');
-            if (cards) cards.classList.add('cards-visible');
-        } else {
-            categories.classList.remove('ic3-table-hidden-mobile');
-            if (cards) cards.classList.remove('cards-visible');
-            if (categories.style && categories.style.display === 'none') {
-                categories.style.display = '';
-            }
-        }
-
-        if (!toggle) return;
-        var cardsBtn = toggle.querySelector('button[data-mode="cards"]');
-        var tableBtn = toggle.querySelector('button[data-mode="table"]');
-        if (cardsBtn) cardsBtn.classList.toggle('active', showCards);
-        if (tableBtn) tableBtn.classList.toggle('active', !showCards);
-    }
-
-    function run() {
-        stabilizeInventoryVisibility();
-        window.setTimeout(stabilizeInventoryVisibility, 80);
-        window.setTimeout(stabilizeInventoryVisibility, 250);
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', run);
-    } else {
-        run();
-    }
-
-    var observer = new MutationObserver(function () {
-        if (window.__ic3TouchActive) return;
-        stabilizeInventoryVisibility();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-})();
-</script>
-"""
-
-LEGACY_VIEWMODE_BRIDGE_SCRIPT = r"""
-<script>
-(function () {
-    if (window.__ic3LegacyViewModeBridgeInstalled) return;
-    window.__ic3LegacyViewModeBridgeInstalled = true;
-
-    function normalizeLegacyViewSelector() {
-        var select = document.getElementById('viewMode');
-        if (!select || select.tagName !== 'SELECT') return;
-
-        var options = Array.prototype.slice.call(select.options || []);
-        options.forEach(function (opt) {
-            if (!opt) return;
-            var value = String(opt.value || '').trim().toLowerCase();
-            if (value === 'list') {
-                opt.textContent = 'Table View (Shows Row Order)';
-            } else if (value === 'categorized') {
-                opt.textContent = 'Card View (Groups by Category)';
-            }
-        });
-
-        var labels = document.querySelectorAll('label[for="viewMode"]');
-        labels.forEach(function (label) {
-            label.textContent = 'View Mode:';
-        });
-    }
-
-    function run() {
-        normalizeLegacyViewSelector();
-        window.setTimeout(normalizeLegacyViewSelector, 150);
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', run);
-    } else {
-        run();
-    }
-
-    var observer = new MutationObserver(function () {
-        if (window.__ic3TouchActive) return;
-        normalizeLegacyViewSelector();
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    // Mobile smoke checklist:
+    // 1) Tabs readable + horizontally scrollable.
+    // 2) Location/date/search/sort controls are tap-friendly.
+    // 3) Card/Table toggle works and quantity edits stay in sync.
+    // 4) Quantity inputs and save/load buttons are easy to tap.
+    // 5) Desktop layout remains unchanged above 768px.
 })();
 </script>
 """
@@ -4237,11 +2576,6 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         ("https://localhost:5003/api/", "/api/"),
         ("http://127.0.0.1:5003/api/", "/api/"),
         ("https://127.0.0.1:5003/api/", "/api/"),
-        ("http://localhost:5080/api/", "/api/"),
-        ("https://localhost:5080/api/", "/api/"),
-        ("http://127.0.0.1:5080/api/", "/api/"),
-        ("https://127.0.0.1:5080/api/", "/api/"),
-        (":5080/api/", "/api/"),
         (
             "const selectedRadio = document.querySelector('input[name=\"location\"][type=\"radio\"]:checked');\n    }\n        if (selectedRadio && typeof selectedRadio.value === 'string' && selectedRadio.value.trim()) {",
             "const selectedRadio = document.querySelector('input[name=\"location\"][type=\"radio\"]:checked');\n        if (selectedRadio && typeof selectedRadio.value === 'string' && selectedRadio.value.trim()) {",
@@ -4271,12 +2605,6 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         flags=re.IGNORECASE,
     )
     updated = re.sub(
-        r'<div\s+class=["\']control-group["\']>\s*<label\s+for=["\']viewMode["\'][^>]*>.*?</label>\s*<select\s+id=["\']viewMode["\'][\s\S]*?</select>\s*</div>',
-        '',
-        updated,
-        flags=re.IGNORECASE,
-    )
-    updated = re.sub(
         r"function\s+dateFromFilename\(filename\)\s*\{[\s\S]*?return\s+new\s+Date\(\)\.toISOString\(\)\.split\('T'\)\[0\];\s*\}",
         "function dateFromFilename(filename) {\\n            const m = filename.match(/(\\\\d{4})[-_\\/](\\\\d{2})[-_\\/](\\\\d{2})|^(\\\\d{4})(\\\\d{2})(\\\\d{2})/);\\n            if (m) return (m[1] || m[4]) + '-' + (m[2] || m[5]) + '-' + (m[3] || m[6]);\\n            return new Date().toISOString().split('T')[0];\\n        }",
         updated,
@@ -4294,8 +2622,25 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         updated,
         flags=re.DOTALL,
     )
-    # Keep the legacy location radio markup consistent without injecting any
-    # extra scripts into the rendered page.
+    if "__ic3InvoiceOverrideInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", OVERRIDE_SCRIPT + "\n</body>", 1)
+
+    if "__ic3ProductDetailInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", PRODUCT_DETAIL_SCRIPT + "\n</body>", 1)
+
+    if "__ic3MobileUiInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
+
+    if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace(
+            "</body>",
+            PRODUCTMIX_SYNC_UI_SCRIPT + "\n" + LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>",
+            1,
+        )
+
+    if "__ic3SharedLocationsInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
+
     updated = updated.replace(
         "const selectedRadio = document.querySelector('input[name=\"location\"][type=\"radio\"]:checked');\n    }\n        if (selectedRadio && typeof selectedRadio.value === 'string' && selectedRadio.value.trim()) {",
         "const selectedRadio = document.querySelector('input[name=\"location\"][type=\"radio\"]:checked');\n        if (selectedRadio && typeof selectedRadio.value === 'string' && selectedRadio.value.trim()) {",
@@ -4307,9 +2652,6 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         updated,
         flags=re.DOTALL,
     )
-
-    if "__ic3InventorySetsUiInstalled" not in updated and "</body>" in updated:
-        updated = updated.replace("</body>", INVENTORY_SETS_UI_SCRIPT + "\n</body>", 1)
 
     return updated
 
@@ -4433,202 +2775,6 @@ def _normalize_runtime_location_text(raw_value) -> str:
     return text.lower()
 
 
-def _utc_now_text() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
-
-
-def _slugify_inventory_name(name: str) -> str:
-    text = str(name or "").strip().lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-    return text or "inventory"
-
-
-def _inventory_company_scope_key() -> str:
-    try:
-        tenant_scope = resolve_tenant_scope(
-            request.headers,
-            app_name="ic3",
-            logger=logging.getLogger("ic3"),
-            request_path=request.path,
-            method=request.method,
-        )
-    except Exception:
-        tenant_scope = {}
-
-    company_name = str((tenant_scope or {}).get("company_name") or "").strip()
-    if not company_name:
-        return "__default__"
-    return _slugify_inventory_name(company_name)
-
-
-def _load_inventory_sets_registry() -> dict:
-    payload = _load_json_if_present(INVENTORY_SETS_PATH)
-    if not isinstance(payload, dict):
-        payload = {}
-
-    companies = payload.get("companies")
-    if not isinstance(companies, dict):
-        companies = {}
-
-    return {
-        "version": int(payload.get("version") or INVENTORY_REGISTRY_VERSION),
-        "companies": companies,
-    }
-
-
-def _load_product_nickname_registry() -> dict:
-    payload = _load_json_if_present(PRODUCT_NICKNAMES_PATH)
-    if not isinstance(payload, dict):
-        payload = {}
-
-    companies = payload.get("companies")
-    if not isinstance(companies, dict):
-        companies = {}
-
-    return {
-        "version": int(payload.get("version") or PRODUCT_NICKNAMES_VERSION),
-        "companies": companies,
-    }
-
-
-def _save_product_nickname_registry(registry: dict) -> None:
-    PRODUCT_NICKNAMES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with PRODUCT_NICKNAMES_PATH.open("w", encoding="utf-8") as handle:
-        json.dump(registry, handle, ensure_ascii=True, indent=2)
-
-
-def _product_nickname_company_bucket(registry: dict, company_key: str, create: bool = False) -> dict | None:
-    companies = registry.setdefault("companies", {})
-    bucket = companies.get(company_key)
-    if not isinstance(bucket, dict):
-        if not create:
-            return None
-        bucket = {
-            "nicknames": {},
-            "updated_at": _utc_now_text(),
-        }
-        companies[company_key] = bucket
-
-    nicknames = bucket.get("nicknames")
-    if not isinstance(nicknames, dict):
-        bucket["nicknames"] = {}
-
-    return bucket
-
-
-def _runtime_product_nickname_map(company_key: str | None = None) -> dict[str, str]:
-    key = str(company_key or _inventory_company_scope_key() or "").strip() or "__default__"
-    registry = _load_product_nickname_registry()
-    bucket = _product_nickname_company_bucket(registry, key, create=False) or {"nicknames": {}}
-    nicknames = bucket.get("nicknames") if isinstance(bucket, dict) else {}
-    result: dict[str, str] = {}
-    if isinstance(nicknames, dict):
-        for raw_key, raw_value in nicknames.items():
-            product_key = _canonical_product_number(raw_key)
-            short_name = str(raw_value or "").strip()
-            if product_key and short_name:
-                result[product_key] = short_name
-    return result
-
-
-def _save_inventory_sets_registry(registry: dict) -> None:
-    INVENTORY_SETS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with INVENTORY_SETS_PATH.open("w", encoding="utf-8") as handle:
-        json.dump(registry, handle, ensure_ascii=True, indent=2)
-
-
-def _inventory_company_bucket(registry: dict, company_key: str, create: bool = False) -> dict | None:
-    companies = registry.setdefault("companies", {})
-    bucket = companies.get(company_key)
-    if not isinstance(bucket, dict):
-        if not create:
-            return None
-        bucket = {
-            "inventories": [],
-            "active_inventory_id": "",
-            "updated_at": _utc_now_text(),
-        }
-        companies[company_key] = bucket
-
-    inventories = bucket.get("inventories")
-    if not isinstance(inventories, list):
-        bucket["inventories"] = []
-
-    if "active_inventory_id" not in bucket:
-        bucket["active_inventory_id"] = ""
-
-    return bucket
-
-
-def _inventory_find(company_bucket: dict, inventory_id: str) -> dict | None:
-    target = str(inventory_id or "").strip()
-    if not target:
-        return None
-    for item in company_bucket.get("inventories") or []:
-        if str(item.get("id") or "").strip() == target:
-            return item
-    return None
-
-
-def _inventory_children(company_bucket: dict, parent_inventory_id: str) -> list[str]:
-    parent_id = str(parent_inventory_id or "").strip()
-    if not parent_id:
-        return []
-
-    children: list[str] = []
-    queue = [parent_id]
-    seen: set[str] = set()
-    while queue:
-        current = queue.pop(0)
-        if current in seen:
-            continue
-        seen.add(current)
-        for item in company_bucket.get("inventories") or []:
-            item_id = str(item.get("id") or "").strip()
-            parent_id_val = str(item.get("parent_inventory_id") or "").strip()
-            if not item_id or parent_id_val != current:
-                continue
-            children.append(item_id)
-            queue.append(item_id)
-    return children
-
-
-def _inventory_selection_from_request(company_bucket: dict) -> str:
-    raw = str(
-        request.args.get("inventory_id")
-        or request.form.get("inventory_id")
-        or request.headers.get("X-IC3-Inventory-Id")
-        or ""
-    ).strip()
-    if raw:
-        return raw
-    return str(company_bucket.get("active_inventory_id") or "").strip()
-
-
-def _is_date_key_text(text: str) -> bool:
-    return _safe_parse_date(str(text or "").strip()) is not None
-
-
-def _split_location_inventory_maps(location_payload: dict) -> tuple[dict, dict[str, dict]]:
-    if not isinstance(location_payload, dict):
-        return {}, {}
-
-    legacy_by_date: dict = {}
-    inventory_maps: dict[str, dict] = {}
-
-    for key, value in location_payload.items():
-        key_text = str(key or "").strip()
-        if not key_text:
-            continue
-        if _is_date_key_text(key_text):
-            legacy_by_date[key_text] = value
-            continue
-        if isinstance(value, dict):
-            inventory_maps[key_text] = value
-
-    return legacy_by_date, inventory_maps
-
-
 def _dexter_selected_location_from_headers() -> str:
     location_text = str(request.headers.get("X-Dexter-Restaurant-Location") or "").strip()
     if location_text:
@@ -4702,22 +2848,11 @@ def _register_product_detail_endpoints(flask_app) -> None:
     def get_product_detail_runtime(product_number):
         requested_location = _effective_runtime_location()
         window_key = str(request.args.get("window") or "week").strip().lower()
-        rollup_mode = str(request.args.get("rollup") or "0").strip().lower() in {"1", "true", "yes"}
 
         products_list_obj = globals().get("products_list") or []
         inventory_data_obj = globals().get("inventory_data") or {}
         order_data_obj = globals().get("order_data") or {}
         invoice_import_log_obj = globals().get("invoice_import_log") or []
-
-        inventory_registry = _load_inventory_sets_registry()
-        company_key = _inventory_company_scope_key()
-        company_bucket = _inventory_company_bucket(inventory_registry, company_key, create=False) or {"inventories": [], "active_inventory_id": ""}
-        selected_inventory_id = _inventory_selection_from_request(company_bucket)
-        selected_inventory_ids: set[str] = set()
-        if selected_inventory_id:
-            selected_inventory_ids.add(selected_inventory_id)
-            if rollup_mode:
-                selected_inventory_ids.update(_inventory_children(company_bucket, selected_inventory_id))
 
         canonical_num = _canonical_product_number(product_number)
         if not canonical_num:
@@ -4747,8 +2882,6 @@ def _register_product_detail_endpoints(flask_app) -> None:
             "group_name": str((product or {}).get("Group Name") or ""),
             "case_count_type": str((product or {}).get("Case Count Type") or "No"),
         }
-        nickname_map = _runtime_product_nickname_map(company_key)
-        product_payload["nickname"] = str(nickname_map.get(canonical_num) or "")
 
         price_by_date = {}
         for entry in (invoice_import_log_obj or []):
@@ -4797,59 +2930,23 @@ def _register_product_detail_endpoints(flask_app) -> None:
 
         inventory_rows = []
         for location in locations_to_scan:
-            location_payload = inventory_data_obj.get(location, {}) or {}
-            if not isinstance(location_payload, dict):
-                continue
-
-            legacy_by_date, inventory_maps = _split_location_inventory_maps(location_payload)
-
-            # Legacy flat structure (location -> date -> product map)
-            if not selected_inventory_id:
-                for date_str, snapshot in legacy_by_date.items():
-                    if not isinstance(snapshot, dict):
-                        continue
-                    for key, raw_qty in snapshot.items():
-                        if _canonical_product_number(key) != canonical_num:
-                            continue
-                        try:
-                            quantity = float(raw_qty)
-                        except Exception:
-                            quantity = 0.0
-                        inventory_rows.append(
-                            {
-                                "date": str(date_str),
-                                "location": str(location),
-                                "quantity": quantity,
-                                "inventory_id": "",
-                            }
-                        )
-
-            # New nested structure (location -> inventory_id -> date -> product map)
-            for inventory_id_key, by_date in inventory_maps.items():
-                if selected_inventory_ids and inventory_id_key not in selected_inventory_ids:
+            for date_str, snapshot in (inventory_data_obj.get(location, {}) or {}).items():
+                if not isinstance(snapshot, dict):
                     continue
-                if not isinstance(by_date, dict):
-                    continue
-                for date_str, snapshot in by_date.items():
-                    if not isinstance(snapshot, dict):
+                for key, raw_qty in snapshot.items():
+                    if _canonical_product_number(key) != canonical_num:
                         continue
-                    if not _is_date_key_text(str(date_str)):
-                        continue
-                    for key, raw_qty in snapshot.items():
-                        if _canonical_product_number(key) != canonical_num:
-                            continue
-                        try:
-                            quantity = float(raw_qty)
-                        except Exception:
-                            quantity = 0.0
-                        inventory_rows.append(
-                            {
-                                "date": str(date_str),
-                                "location": str(location),
-                                "quantity": quantity,
-                                "inventory_id": str(inventory_id_key),
-                            }
-                        )
+                    try:
+                        quantity = float(raw_qty)
+                    except Exception:
+                        quantity = 0.0
+                    inventory_rows.append(
+                        {
+                            "date": str(date_str),
+                            "location": str(location),
+                            "quantity": quantity,
+                        }
+                    )
 
         filtered_orders = _window_filter_dates(order_rows, window_key)
         filtered_inventory = _window_filter_dates(inventory_rows, window_key)
@@ -4888,8 +2985,6 @@ def _register_product_detail_endpoints(flask_app) -> None:
                     "inventory_rows": len(filtered_inventory),
                     "total_order_qty": sum(float(row.get("quantity") or 0) for row in filtered_orders),
                     "latest_inventory_qty": latest_inventory_qty,
-                    "inventory_id": selected_inventory_id,
-                    "rollup": rollup_mode,
                 },
                 "order_history": filtered_orders,
                 "inventory_history": filtered_inventory,
@@ -4924,181 +3019,6 @@ def _register_product_detail_endpoints(flask_app) -> None:
                 return jsonify({"success": False, "message": "Failed to persist case count type."}), 500
 
         return jsonify({"success": True, "message": "Case count type updated."})
-
-    @flask_app.route("/api/products/nicknames", methods=["GET", "POST"])
-    def api_product_nicknames_runtime():
-        company_key = _inventory_company_scope_key()
-
-        if request.method == "GET":
-            nickname_map = _runtime_product_nickname_map(company_key)
-            return jsonify({"success": True, "company_key": company_key, "nicknames": nickname_map})
-
-        payload = request.get_json(silent=True) or {}
-        product_number = _canonical_product_number(payload.get("product_number"))
-        nickname = str(payload.get("nickname") or payload.get("short_name") or "").strip()
-        if not product_number:
-            return jsonify({"success": False, "message": "product_number is required."}), 400
-        if len(nickname) > 48:
-            return jsonify({"success": False, "message": "nickname must be 48 characters or fewer."}), 400
-
-        registry = _load_product_nickname_registry()
-        bucket = _product_nickname_company_bucket(registry, company_key, create=True) or {"nicknames": {}}
-        nicknames = bucket.get("nicknames") if isinstance(bucket, dict) else {}
-        if not isinstance(nicknames, dict):
-            nicknames = {}
-            bucket["nicknames"] = nicknames
-
-        if nickname:
-            nicknames[product_number] = nickname
-        elif product_number in nicknames:
-            nicknames.pop(product_number, None)
-
-        bucket["updated_at"] = _utc_now_text()
-        _save_product_nickname_registry(registry)
-        return jsonify({
-            "success": True,
-            "product_number": product_number,
-            "nickname": str(nicknames.get(product_number) or ""),
-            "message": "Nickname updated.",
-        })
-
-    @flask_app.route("/api/products/nicknames/bulk", methods=["POST"])
-    def api_product_nicknames_bulk_runtime():
-        company_key = _inventory_company_scope_key()
-        payload = request.get_json(silent=True) or {}
-        updates = payload.get("updates") if isinstance(payload, dict) else []
-        if not isinstance(updates, list):
-            return jsonify({"success": False, "message": "updates must be a list."}), 400
-
-        registry = _load_product_nickname_registry()
-        bucket = _product_nickname_company_bucket(registry, company_key, create=True) or {"nicknames": {}}
-        nicknames = bucket.get("nicknames") if isinstance(bucket, dict) else {}
-        if not isinstance(nicknames, dict):
-            nicknames = {}
-            bucket["nicknames"] = nicknames
-
-        applied = 0
-        for row in updates:
-            if not isinstance(row, dict):
-                continue
-            product_number = _canonical_product_number(row.get("product_number"))
-            if not product_number:
-                continue
-            nickname = str(row.get("nickname") or row.get("short_name") or "").strip()
-            if len(nickname) > 48:
-                return jsonify({
-                    "success": False,
-                    "message": f"nickname too long for product {product_number} (max 48).",
-                }), 400
-
-            if nickname:
-                nicknames[product_number] = nickname
-            elif product_number in nicknames:
-                nicknames.pop(product_number, None)
-            applied += 1
-
-        bucket["updated_at"] = _utc_now_text()
-        _save_product_nickname_registry(registry)
-        return jsonify({
-            "success": True,
-            "message": "Nickname bulk update complete.",
-            "applied": applied,
-        })
-
-    @flask_app.route("/api/products/nicknames/export", methods=["GET"])
-    def api_product_nicknames_export_runtime():
-        company_key = _inventory_company_scope_key()
-        products_list_obj = globals().get("products_list") or []
-        nickname_map = _runtime_product_nickname_map(company_key)
-
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["product_number", "description", "nickname"])
-
-        for row in (products_list_obj or []):
-            if not isinstance(row, dict):
-                continue
-            product_number = _canonical_product_number(row.get("Product Number") or row.get("product_number"))
-            if not product_number:
-                continue
-            description = str(row.get("Product Description") or row.get("description") or "").strip()
-            nickname = str(nickname_map.get(product_number) or "")
-            writer.writerow([product_number, description, nickname])
-
-        csv_text = output.getvalue()
-        output.close()
-        return Response(
-            csv_text,
-            mimetype="text/csv",
-            headers={"Content-Disposition": "attachment; filename=product_nicknames.csv"},
-        )
-
-    @flask_app.route("/api/products/nicknames/import", methods=["POST"])
-    def api_product_nicknames_import_runtime():
-        company_key = _inventory_company_scope_key()
-        uploaded = request.files.get("file")
-        if uploaded is None:
-            return jsonify({"success": False, "message": "CSV file is required in field 'file'."}), 400
-
-        try:
-            raw_bytes = uploaded.read()
-            text = raw_bytes.decode("utf-8-sig", errors="replace")
-        except Exception:
-            return jsonify({"success": False, "message": "Unable to read CSV file."}), 400
-
-        stream = io.StringIO(text)
-        reader = csv.DictReader(stream)
-        if not reader.fieldnames:
-            return jsonify({"success": False, "message": "CSV must include headers."}), 400
-
-        normalized_headers = {str(name or "").strip().lower() for name in reader.fieldnames}
-        if "product_number" not in normalized_headers:
-            return jsonify({"success": False, "message": "CSV must include product_number header."}), 400
-
-        registry = _load_product_nickname_registry()
-        bucket = _product_nickname_company_bucket(registry, company_key, create=True) or {"nicknames": {}}
-        nicknames = bucket.get("nicknames") if isinstance(bucket, dict) else {}
-        if not isinstance(nicknames, dict):
-            nicknames = {}
-            bucket["nicknames"] = nicknames
-
-        applied = 0
-        for row in reader:
-            if not isinstance(row, dict):
-                continue
-
-            product_number = _canonical_product_number(
-                row.get("product_number") or row.get("Product Number") or row.get("PRODUCT_NUMBER")
-            )
-            if not product_number:
-                continue
-
-            nickname = str(
-                row.get("nickname")
-                or row.get("short_name")
-                or row.get("Nickname")
-                or row.get("Short Name")
-                or ""
-            ).strip()
-            if len(nickname) > 48:
-                return jsonify({
-                    "success": False,
-                    "message": f"nickname too long for product {product_number} (max 48).",
-                }), 400
-
-            if nickname:
-                nicknames[product_number] = nickname
-            elif product_number in nicknames:
-                nicknames.pop(product_number, None)
-            applied += 1
-
-        bucket["updated_at"] = _utc_now_text()
-        _save_product_nickname_registry(registry)
-        return jsonify({
-            "success": True,
-            "message": "Nickname CSV import complete.",
-            "applied": applied,
-        })
 
     @flask_app.route("/api/products/update-order-quantity", methods=["POST"])
     def update_order_quantity_runtime():
@@ -5167,7 +3087,6 @@ def _register_product_detail_endpoints(flask_app) -> None:
         location = _effective_runtime_location()
         date_str = str(payload.get("date") or "").strip()
         product_number = _canonical_product_number(payload.get("product_number"))
-        requested_inventory_id = str(payload.get("inventory_id") or "").strip()
 
         try:
             quantity = float(payload.get("quantity"))
@@ -5179,24 +3098,9 @@ def _register_product_detail_endpoints(flask_app) -> None:
         if not product_number:
             return jsonify({"success": False, "message": "product_number is required."}), 400
 
-        inventory_registry = _load_inventory_sets_registry()
-        company_key = _inventory_company_scope_key()
-        company_bucket = _inventory_company_bucket(inventory_registry, company_key, create=False) or {"inventories": [], "active_inventory_id": ""}
-        selected_inventory_id = requested_inventory_id or _inventory_selection_from_request(company_bucket)
-        if selected_inventory_id and not _inventory_find(company_bucket, selected_inventory_id):
-            return jsonify({"success": False, "message": "inventory_id not found for this company."}), 404
-
         inventory_data_obj = globals().setdefault("inventory_data", {})
         location_map = inventory_data_obj.setdefault(location, {})
-
-        if selected_inventory_id:
-            inventory_map = location_map.setdefault(selected_inventory_id, {})
-            if not isinstance(inventory_map, dict):
-                inventory_map = {}
-                location_map[selected_inventory_id] = inventory_map
-            day_map = inventory_map.setdefault(date_str, {})
-        else:
-            day_map = location_map.setdefault(date_str, {})
+        day_map = location_map.setdefault(date_str, {})
 
         matching_key = None
         for key in day_map.keys():
@@ -5212,13 +3116,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
         if callable(save_inventory):
             save_inventory()
 
-        return jsonify(
-            {
-                "success": True,
-                "message": "Inventory quantity updated.",
-                "inventory_id": selected_inventory_id,
-            }
-        )
+        return jsonify({"success": True, "message": "Inventory quantity updated."})
 
 
 def _install_product_detail_api_patch() -> None:
@@ -5522,226 +3420,19 @@ def _register_compat_inventory_endpoints(flask_app) -> None:
 
     existing_rules = {rule.rule for rule in flask_app.url_map.iter_rules()}
 
-    if "/api/inventories" not in existing_rules:
-        @flask_app.route("/api/inventories", methods=["GET", "POST"])
-        def api_inventories_runtime():
-            registry = _load_inventory_sets_registry()
-            company_key = _inventory_company_scope_key()
-
-            if request.method == "GET":
-                company_bucket = _inventory_company_bucket(registry, company_key, create=False) or {"inventories": [], "active_inventory_id": ""}
-                inventories = []
-                for item in company_bucket.get("inventories") or []:
-                    inventories.append(
-                        {
-                            "id": str(item.get("id") or ""),
-                            "name": str(item.get("name") or ""),
-                            "slug": str(item.get("slug") or ""),
-                            "parent_inventory_id": str(item.get("parent_inventory_id") or ""),
-                            "is_active": bool(item.get("is_active", True)),
-                            "sort_order": int(item.get("sort_order") or 0),
-                            "created_at": str(item.get("created_at") or ""),
-                            "updated_at": str(item.get("updated_at") or ""),
-                        }
-                    )
-                inventories.sort(key=lambda row: (int(row.get("sort_order") or 0), row.get("name") or ""))
-                return jsonify(
-                    {
-                        "success": True,
-                        "company_key": company_key,
-                        "active_inventory_id": str(company_bucket.get("active_inventory_id") or ""),
-                        "inventories": inventories,
-                    }
-                )
-
-            payload = request.get_json(silent=True) or {}
-            name = str(payload.get("name") or "").strip()
-            parent_inventory_id = str(payload.get("parent_inventory_id") or "").strip()
-            set_active = bool(payload.get("set_active", True))
-
-            if not name:
-                return jsonify({"success": False, "message": "name is required."}), 400
-
-            company_bucket = _inventory_company_bucket(registry, company_key, create=True) or {"inventories": [], "active_inventory_id": ""}
-            inventories = company_bucket.get("inventories") or []
-
-            if parent_inventory_id:
-                parent_row = _inventory_find(company_bucket, parent_inventory_id)
-                if not parent_row:
-                    return jsonify({"success": False, "message": "parent_inventory_id not found."}), 400
-
-            incoming_slug = _slugify_inventory_name(name)
-            for item in inventories:
-                existing_parent_id = str(item.get("parent_inventory_id") or "").strip()
-                if existing_parent_id != parent_inventory_id:
-                    continue
-                existing_slug = _slugify_inventory_name(str(item.get("name") or ""))
-                if existing_slug == incoming_slug:
-                    return jsonify({"success": False, "message": "Inventory name already exists under this parent."}), 409
-
-            now_text = _utc_now_text()
-            new_id = f"inv_{uuid.uuid4().hex[:12]}"
-            record = {
-                "id": new_id,
-                "name": name,
-                "slug": incoming_slug,
-                "parent_inventory_id": parent_inventory_id,
-                "is_active": True,
-                "sort_order": len(inventories) + 1,
-                "created_at": now_text,
-                "updated_at": now_text,
-            }
-            inventories.append(record)
-            company_bucket["inventories"] = inventories
-
-            if set_active:
-                company_bucket["active_inventory_id"] = new_id
-            company_bucket["updated_at"] = now_text
-
-            _save_inventory_sets_registry(registry)
-            return jsonify({"success": True, "inventory": record, "active_inventory_id": str(company_bucket.get("active_inventory_id") or "")}), 201
-
-    if "/api/inventories/select" not in existing_rules:
-        @flask_app.route("/api/inventories/select", methods=["POST"])
-        def api_inventories_select_runtime():
-            payload = request.get_json(silent=True) or {}
-            inventory_id = str(payload.get("inventory_id") or "").strip()
-            if not inventory_id:
-                return jsonify({"success": False, "message": "inventory_id is required."}), 400
-
-            registry = _load_inventory_sets_registry()
-            company_key = _inventory_company_scope_key()
-            company_bucket = _inventory_company_bucket(registry, company_key, create=False)
-            if not company_bucket:
-                return jsonify({"success": False, "message": "No inventories configured for this company."}), 404
-
-            inventory_row = _inventory_find(company_bucket, inventory_id)
-            if not inventory_row:
-                return jsonify({"success": False, "message": "Inventory not found."}), 404
-            if not bool(inventory_row.get("is_active", True)):
-                return jsonify({"success": False, "message": "Inventory is inactive."}), 400
-
-            company_bucket["active_inventory_id"] = inventory_id
-            company_bucket["updated_at"] = _utc_now_text()
-            _save_inventory_sets_registry(registry)
-            return jsonify({"success": True, "active_inventory_id": inventory_id})
-
-    if "/api/inventories/<inventory_id>" not in existing_rules:
-        @flask_app.route("/api/inventories/<inventory_id>", methods=["PATCH"])
-        def api_inventories_patch_runtime(inventory_id):
-            inventory_id = str(inventory_id or "").strip()
-            if not inventory_id:
-                return jsonify({"success": False, "message": "inventory_id is required."}), 400
-
-            payload = request.get_json(silent=True) or {}
-            registry = _load_inventory_sets_registry()
-            company_key = _inventory_company_scope_key()
-            company_bucket = _inventory_company_bucket(registry, company_key, create=False)
-            if not company_bucket:
-                return jsonify({"success": False, "message": "No inventories configured for this company."}), 404
-
-            row = _inventory_find(company_bucket, inventory_id)
-            if not row:
-                return jsonify({"success": False, "message": "Inventory not found."}), 404
-
-            next_name = str(row.get("name") or "").strip()
-            next_parent = str(row.get("parent_inventory_id") or "").strip()
-
-            if "name" in payload:
-                requested_name = str(payload.get("name") or "").strip()
-                if not requested_name:
-                    return jsonify({"success": False, "message": "name cannot be blank."}), 400
-                next_name = requested_name
-
-            if "parent_inventory_id" in payload:
-                next_parent = str(payload.get("parent_inventory_id") or "").strip()
-                if next_parent == inventory_id:
-                    return jsonify({"success": False, "message": "Inventory cannot be its own parent."}), 400
-                if next_parent:
-                    parent_row = _inventory_find(company_bucket, next_parent)
-                    if not parent_row:
-                        return jsonify({"success": False, "message": "parent_inventory_id not found."}), 400
-                    descendants = set(_inventory_children(company_bucket, inventory_id))
-                    if next_parent in descendants:
-                        return jsonify({"success": False, "message": "Cannot assign a descendant as parent."}), 400
-
-            next_slug = _slugify_inventory_name(next_name)
-            for item in company_bucket.get("inventories") or []:
-                if str(item.get("id") or "") == inventory_id:
-                    continue
-                item_parent_id = str(item.get("parent_inventory_id") or "").strip()
-                if item_parent_id != next_parent:
-                    continue
-                item_slug = _slugify_inventory_name(str(item.get("name") or ""))
-                if item_slug == next_slug:
-                    return jsonify({"success": False, "message": "Inventory name already exists under this parent."}), 409
-
-            row["name"] = next_name
-            row["slug"] = next_slug
-            row["parent_inventory_id"] = next_parent
-
-            if "is_active" in payload:
-                row["is_active"] = bool(payload.get("is_active"))
-
-            if bool(payload.get("set_active")):
-                if not bool(row.get("is_active", True)):
-                    return jsonify({"success": False, "message": "Cannot set inactive inventory as active."}), 400
-                company_bucket["active_inventory_id"] = inventory_id
-
-            if str(company_bucket.get("active_inventory_id") or "") == inventory_id and not bool(row.get("is_active", True)):
-                company_bucket["active_inventory_id"] = ""
-
-            row["updated_at"] = _utc_now_text()
-            company_bucket["updated_at"] = row["updated_at"]
-            _save_inventory_sets_registry(registry)
-            return jsonify({"success": True, "inventory": row, "active_inventory_id": str(company_bucket.get("active_inventory_id") or "")})
-
     if "/api/products" not in existing_rules:
         @flask_app.route("/api/products", methods=["GET"])
         def api_products_runtime():
             products = globals().get("products_list") or []
             if not isinstance(products, list):
                 products = []
-            company_key = _inventory_company_scope_key()
-            nickname_map = _runtime_product_nickname_map(company_key)
-
-            adapted = []
-            for row in products:
-                if not isinstance(row, dict):
-                    adapted.append(row)
-                    continue
-
-                row_out = dict(row)
-                canonical_num = _canonical_product_number(row.get("Product Number") or row.get("product_number"))
-                nickname = str(nickname_map.get(canonical_num) or "")
-                if nickname:
-                    row_out["Nickname"] = nickname
-                    if str(row_out.get("Product Description") or "").strip():
-                        row_out["Display Name"] = nickname
-                adapted.append(row_out)
-
-            return jsonify(adapted)
+            return jsonify(products)
 
     if "/api/inventory/list" not in existing_rules:
         @flask_app.route("/api/inventory/list", methods=["GET"])
         def api_inventory_list_runtime():
             inventory_data_obj = globals().get("inventory_data") or {}
             enforced_location = _normalize_runtime_location_text(_dexter_selected_location_from_headers())
-            inventory_registry = _load_inventory_sets_registry()
-            company_key = _inventory_company_scope_key()
-            company_bucket = _inventory_company_bucket(inventory_registry, company_key, create=False) or {"inventories": [], "active_inventory_id": ""}
-            selected_inventory_id = _inventory_selection_from_request(company_bucket)
-            include_rollup = str(request.args.get("rollup") or "0").strip().lower() in {"1", "true", "yes"}
-            selected_inventory_ids: set[str] = set()
-            if selected_inventory_id:
-                selected_inventory_ids.add(selected_inventory_id)
-                if include_rollup:
-                    selected_inventory_ids.update(_inventory_children(company_bucket, selected_inventory_id))
-
-            inventory_name_by_id = {
-                str(item.get("id") or ""): str(item.get("name") or "")
-                for item in (company_bucket.get("inventories") or [])
-            }
             items = []
 
             if isinstance(inventory_data_obj, dict):
@@ -5750,40 +3441,15 @@ def _register_compat_inventory_endpoints(flask_app) -> None:
                         continue
                     if not isinstance(by_date, dict):
                         continue
-
-                    legacy_by_date, inventory_maps = _split_location_inventory_maps(by_date)
-
-                    if not selected_inventory_id:
-                        for date_key, day_map in legacy_by_date.items():
-                            count = len(day_map) if isinstance(day_map, dict) else 0
-                            items.append(
-                                {
-                                    "location": str(location),
-                                    "date": str(date_key),
-                                    "item_count": int(count),
-                                    "inventory_id": "",
-                                    "inventory_name": "Legacy",
-                                }
-                            )
-
-                    for inventory_id_key, inventory_by_date in inventory_maps.items():
-                        if selected_inventory_ids and inventory_id_key not in selected_inventory_ids:
-                            continue
-                        if not isinstance(inventory_by_date, dict):
-                            continue
-                        for date_key, day_map in inventory_by_date.items():
-                            if not _is_date_key_text(str(date_key)):
-                                continue
-                            count = len(day_map) if isinstance(day_map, dict) else 0
-                            items.append(
-                                {
-                                    "location": str(location),
-                                    "date": str(date_key),
-                                    "item_count": int(count),
-                                    "inventory_id": str(inventory_id_key),
-                                    "inventory_name": inventory_name_by_id.get(str(inventory_id_key), ""),
-                                }
-                            )
+                    for date_key, day_map in by_date.items():
+                        count = len(day_map) if isinstance(day_map, dict) else 0
+                        items.append(
+                            {
+                                "location": str(location),
+                                "date": str(date_key),
+                                "item_count": int(count),
+                            }
+                        )
 
             items.sort(key=lambda row: (row.get("location", ""), row.get("date", "")), reverse=True)
             return jsonify(items)
@@ -5903,7 +3569,7 @@ def _install_global_flask_response_patch() -> None:
 
 def _exec_bytecode() -> None:
     if not BYTECODE_FILE.exists():
-        # Bytecode missing â€” run from source instead
+        # Bytecode missing — run from source instead
         return
 
     try:
@@ -6006,6 +3672,14 @@ def _force_production_flask_run() -> None:
             if response.direct_passthrough:
                 response.direct_passthrough = False
 
+            body = response.get_data(as_text=True)
+            if "__ic3SharedLocationsInstalled" in body or "</body>" not in body:
+                return response
+
+            updated = body.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
+            response.set_data(updated)
+            if "Content-Length" in response.headers:
+                response.headers["Content-Length"] = str(len(response.get_data()))
             return response
 
         flask_app._ic3_shared_locations_run_hook = True
@@ -6070,9 +3744,6 @@ def _patch_bulk_upload_limit_runtime() -> None:
         ("Maximum is 20 total.", "No maximum limit."),
         ("const deliveryDate = dateField.value;", "const selectedDeliveryDate = (dateField.value || '').trim();\n            const parsedDeliveryDate = dateFromFilename(file.name);\n            const deliveryDate = selectedDeliveryDate || parsedDeliveryDate;\n            if (!selectedDeliveryDate) {\n                dateField.value = deliveryDate;\n            }"),
         ("formData.append('delivery_date', invoice.date);", "formData.append('delivery_date', invoice.date || dateFromFilename(invoice.file.name));"),
-        ("const viewMode = document.getElementById('viewMode').value;", "const viewMode = (document.getElementById('viewMode') || { value: 'categorized' }).value;"),
-        ("const sortBy = document.getElementById('sortBy').value;", "const sortBy = (document.getElementById('sortBy') || { value: 'csv-order' }).value;"),
-        ("const showEdit = document.getElementById('showEditButtons').checked;", "const showEdit = !!(document.getElementById('showEditButtons') && document.getElementById('showEditButtons').checked);"),
     )
 
     regex_replacements = (
@@ -6089,32 +3760,12 @@ def _patch_bulk_upload_limit_runtime() -> None:
             lambda m: m.group(1),
         ),
         (
-            r'<div\s+class=["\']control-group["\']>\s*<label\s+for=["\']viewMode["\'][^>]*>.*?</label>\s*<select\s+id=["\']viewMode["\'][\s\S]*?</select>\s*</div>',
-            lambda m: '',
-        ),
-        (
             r"function\s+dateFromFilename\(filename\)\s*\{[\s\S]*?return\s+new\s+Date\(\)\.toISOString\(\)\.split\('T'\)\[0\];\s*\}",
             lambda m: "function dateFromFilename(filename) {\n            const m = filename.match(/(\\d{4})[-_\\/](\\d{2})[-_\\/](\\d{2})|^(\\d{4})(\\d{2})(\\d{2})/);\n            if (m) return (m[1] || m[4]) + '-' + (m[2] || m[5]) + '-' + (m[3] || m[6]);\n            return new Date().toISOString().split('T')[0];\n        }",
         ),
         (
             r"function\s+showBulkUpload\(\)\s*\{[\s\S]*?\}",
             lambda m: "function showBulkUpload() {\n            document.getElementById('singleUploadSection').style.display = 'none';\n            document.getElementById('bulkUploadSection').style.display = 'block';\n            bulkInvoices = [];\n            renderBulkInvoiceList();\n            const bulkStatus = document.getElementById('bulkUploadStatus');\n            if (bulkStatus) bulkStatus.style.display = 'none';\n        }",
-        ),
-        (
-            r"const\s+viewMode\s*=\s*document\.getElementById\('viewMode'\)\.value\s*;\s*\n\s*const\s+sortBy\s*=\s*document\.getElementById\('sortBy'\)\.value\s*;\s*\n\s*const\s+showEdit\s*=\s*document\.getElementById\('showEditButtons'\)\.checked\s*;",
-            lambda m: "const viewModeEl = document.getElementById('viewMode');\n            const sortByEl = document.getElementById('sortBy');\n            const showEditEl = document.getElementById('showEditButtons');\n            const viewMode = (viewModeEl && viewModeEl.value) ? viewModeEl.value : 'categorized';\n            const sortBy = (sortByEl && sortByEl.value) ? sortByEl.value : 'csv-order';\n            const showEdit = !!(showEditEl && showEditEl.checked);",
-        ),
-        (
-            r"const\s+viewMode\s*=\s*document\.getElementById\('viewMode'\)\.value\s*;",
-            lambda m: "const viewModeEl = document.getElementById('viewMode');\n            const sortByEl = document.getElementById('sortBy');\n            const showEditEl = document.getElementById('showEditButtons');\n            const viewMode = (viewModeEl && viewModeEl.value) ? viewModeEl.value : 'categorized';",
-        ),
-        (
-            r"const\s+sortBy\s*=\s*document\.getElementById\('sortBy'\)\.value\s*;",
-            lambda m: "const sortBy = (sortByEl && sortByEl.value) ? sortByEl.value : 'csv-order';",
-        ),
-        (
-            r"const\s+showEdit\s*=\s*document\.getElementById\('showEditButtons'\)\.checked\s*;",
-            lambda m: "const showEdit = !!(showEditEl && showEditEl.checked);",
         ),
         (
             r"function\s+dateFromFilename\(filename\)\s*\{\s*const\s+m\s*=\s*filename\.match\(/\^\\\(\\d\{4\}\\\)\\\(\\d\{2\}\\\)\\\(\\d\{2\}\\\)/\);\s*if\s*\(m\)\s*return\s*`\$\{m\[1\]\}-\$\{m\[2\]\}-\$\{m\[3\]\}`;\s*return\s+new\s+Date\(\)\.toISOString\(\)\.split\('T'\)\[0\];\s*\}",
@@ -6134,26 +3785,27 @@ def _patch_bulk_upload_limit_runtime() -> None:
 
         body = response.get_data(as_text=True)
         updated = body
-
-        # Remove legacy Dexter-injected guard scripts to avoid double-wrapping
-        # and conflicting runtime behavior.
-        updated = re.sub(
-            r'<script[^>]*id=["\']__dexter_ic3_display_guard["\'][^>]*>[\s\S]*?</script>',
-            '',
-            updated,
-            flags=re.IGNORECASE,
-        )
-        updated = re.sub(
-            r'<script[^>]*id=["\']__dexter_ic3_view_cleanup["\'][^>]*>[\s\S]*?</script>',
-            '',
-            updated,
-            flags=re.IGNORECASE,
-        )
         for old, new in literal_replacements:
             updated = updated.replace(old, new)
 
         for pattern, replacement in regex_replacements:
             updated = re.sub(pattern, replacement, updated, flags=re.DOTALL)
+
+        if "__ic3ProductDetailInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace("</body>", PRODUCT_DETAIL_SCRIPT + "\n</body>", 1)
+
+        if "__ic3MobileUiInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
+
+        if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace(
+                "</body>",
+                PRODUCTMIX_SYNC_UI_SCRIPT + "\n" + LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>",
+                1,
+            )
+
+        if "__ic3SharedLocationsInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
 
         if updated != body:
             response.set_data(updated)
@@ -6184,86 +3836,6 @@ _patch_favicon_endpoint()
 _patch_bulk_upload_limit_runtime()
 
 
-def _install_displayproducts_null_guard_patch() -> None:
-    target_app = globals().get("app")
-    if target_app is None:
-        return
-
-    @target_app.after_request
-    def _guard_displayproducts_controls(response):
-        content_type = (response.content_type or "").lower()
-        if "text/html" not in content_type:
-            return response
-
-        if response.direct_passthrough:
-            response.direct_passthrough = False
-
-        body = response.get_data(as_text=True)
-        
-        wrapper_script = """<script>
-/* IC3 SYNC FIX - Controls & displayProducts wrapper */
-(function() {
-  function ensureControls() {
-    var vm = document.getElementById('viewMode');
-    if (!vm) {
-      vm = document.createElement('select');
-      vm.id = 'viewMode';
-      vm.style.display = 'none';
-      vm.value = 'categorized';
-      document.documentElement.appendChild(vm);
-    }
-    var sb = document.getElementById('sortBy');
-    if (!sb) {
-      sb = document.createElement('select');
-      sb.id = 'sortBy';
-      sb.style.display = 'none';
-      sb.value = 'csv-order';
-      document.documentElement.appendChild(sb);
-    }
-    var se = document.getElementById('showEditButtons');
-    if (!se) {
-      se = document.createElement('input');
-      se.id = 'showEditButtons';
-      se.type = 'checkbox';
-      se.style.display = 'none';
-      se.checked = false;
-      document.documentElement.appendChild(se);
-    }
-  }
-  ensureControls();
-  var orig = window.displayProducts;
-  if (typeof orig === 'function') {
-    window.displayProducts = function() {
-      ensureControls();
-      try { return orig.apply(this, arguments); }
-      catch(e) { console.error('[IC3-Guard] displayProducts:', e); }
-    };
-  }
-})();
-</script>"""
-        
-        # Inject FIRST - before any other content
-        if "<html" in body.lower():
-            # Find <html...> tag and inject right after it
-            body_new = body
-            i = body_new.lower().find("<html")
-            if i >= 0:
-                # Find the end of the opening tag
-                j = body_new.find(">", i)
-                if j >= 0:
-                    body_new = body_new[:j+1] + wrapper_script + body_new[j+1:]
-                    body = body_new
-
-        response.set_data(body)
-        if "Content-Length" in response.headers:
-            response.headers["Content-Length"] = str(len(response.get_data()))
-        return response
-
-
-# Disabled: legacy hook caused duplicate displayProducts wrappers.
-# _install_displayproducts_null_guard_patch()
-
-
 def _install_shared_locations_failsafe_patch() -> None:
     target_app = globals().get("app")
     if target_app is None:
@@ -6279,54 +3851,21 @@ def _install_shared_locations_failsafe_patch() -> None:
         # disable it so we can append the shared-locations script.
         if response.direct_passthrough:
             response.direct_passthrough = False
+
+        body = response.get_data(as_text=True)
+        if "__ic3SharedLocationsInstalled" in body:
+            return response
+        if "</body>" not in body:
+            return response
+
+        updated = body.replace("</body>", LOCATION_OPTIONS_SYNC_SCRIPT + "\n</body>", 1)
+        response.set_data(updated)
+        if "Content-Length" in response.headers:
+            response.headers["Content-Length"] = str(len(response.get_data()))
         return response
 
 
 _install_shared_locations_failsafe_patch()
-
-
-def _install_displayproducts_hard_guard_patch() -> None:
-    target_app = globals().get("app")
-    if target_app is None:
-        return
-
-    @target_app.after_request
-    def _hard_guard_displayproducts(response):
-        content_type = (response.content_type or "").lower()
-        if "text/html" not in content_type:
-            return response
-
-        if response.direct_passthrough:
-            response.direct_passthrough = False
-
-        body = response.get_data(as_text=True)
-        updated = body
-
-        updated = re.sub(
-            r"document\.getElementById\((['\"])viewMode\1\)\.value",
-            "(document.getElementById('viewMode')||{value:'categorized'}).value",
-            updated,
-        )
-        updated = re.sub(
-            r"document\.getElementById\((['\"])sortBy\1\)\.value",
-            "(document.getElementById('sortBy')||{value:'csv-order'}).value",
-            updated,
-        )
-        updated = re.sub(
-            r"document\.getElementById\((['\"])showEditButtons\1\)\.checked",
-            "!!(document.getElementById('showEditButtons')&&document.getElementById('showEditButtons').checked)",
-            updated,
-        )
-
-        if updated != body:
-            response.set_data(updated)
-            if "Content-Length" in response.headers:
-                response.headers["Content-Length"] = str(len(response.get_data()))
-        return response
-
-
-# Disabled: handled centrally by _rewrite_bulk_upload_cap.
-# _install_displayproducts_hard_guard_patch()
 
 
 IC3_INVENTORY_OPPORTUNITY_SCRIPT = r"""
@@ -6689,7 +4228,7 @@ def _install_dexter_ui_patch() -> None:
         '</script>'
         + IC3_INVENTORY_OPPORTUNITY_SCRIPT +
         '<script src="/dexter-ui/theme.js" defer></script>'
-        '<div class="dx-version-badge" aria-hidden="true">Dexter Â· IC3 Â· v0.9-demo</div>'
+        '<div class="dx-version-badge" aria-hidden="true">Dexter · IC3 · v0.9-demo</div>'
     )
 
     marker = "__dexter_ui_installed"
@@ -6701,8 +4240,33 @@ def _install_dexter_ui_patch() -> None:
             return response
         if response.direct_passthrough:
             response.direct_passthrough = False
-        # Leave the hook in place for ordering, but stop mutating the response
-        # body so inventory pages render the server HTML unchanged.
+        try:
+            body = response.get_data(as_text=True)
+        except UnicodeDecodeError:
+            return response
+
+        if marker in body:
+            return response
+        if "</head>" not in body and "</body>" not in body:
+            return response
+
+        updated = body
+        if "</head>" in updated:
+            updated = updated.replace(
+                "</head>",
+                head_block + f'<meta name="dexter-ui" content="1" data-{marker}="1"></head>',
+                1,
+            )
+        else:
+            updated = head_block + updated
+        if "</body>" in updated:
+            updated = updated.replace("</body>", body_block + "</body>", 1)
+        else:
+            updated = updated + body_block
+
+        response.set_data(updated)
+        if "Content-Length" in response.headers:
+            response.headers["Content-Length"] = str(len(response.get_data()))
         return response
 
 
@@ -6734,8 +4298,7 @@ if __name__ == "__main__":
                 print(f"[ic3] Running via waitress on {host}:{port} (threads={waitress_threads})")
                 serve(runtime_app, host=host, port=port, threads=waitress_threads)
             except ImportError:
-                print("[ic3] waitress not installed â€” falling back to Flask dev server.")
+                print("[ic3] waitress not installed — falling back to Flask dev server.")
                 runtime_app.run(host=host, port=port, debug=False, use_reloader=False)
         else:
             runtime_app.run(host=host, port=port)
-
