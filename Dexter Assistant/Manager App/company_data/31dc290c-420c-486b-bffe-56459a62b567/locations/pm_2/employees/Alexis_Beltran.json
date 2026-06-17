@@ -4,12 +4,46 @@
     "lastName": "Beltran",
     "dateOfHire": "2025-11-20",
     "id": 1763625144381.4373,
-    "locationId": "pm_2"
+    "locationId": "pm_2",
+    "jobTitle": "",
+    "email": "",
+    "phone": ""
   },
   "disciplinaryReports": [],
   "certifications": {
     "TABC": null,
     "FoodHandlers": null,
     "Other": []
+  },
+  "documents": {
+    "legal": {
+      "i9": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "w2": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "alcoholServingPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "foodHandlersPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "additionalPermits": []
+    },
+    "medicalCallIns": [],
+    "essentialPaperwork": []
   }
 }

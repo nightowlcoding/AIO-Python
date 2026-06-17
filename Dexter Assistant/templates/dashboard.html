@@ -645,7 +645,7 @@
                 </aside>
 
                 <aside class="left-sub">
-                    <div class="sub-head" id="subHead"><span id="subHeadLabel">Sub Menu</span><div class="sub-head-actions"><a class="sub-logout" href="/auth/logout">Logout</a><button class="sub-toggle-btn" onclick="toggleSubSidebar()" title="Hide panel">&#8249;</button></div></div>
+                    <div class="sub-head" id="subHead"><span id="subHeadLabel">Sub Menu</span><div class="sub-head-actions"><a class="sub-logout" href="{{ tenant_scoped_path('/auth/logout') }}">Logout</a><button class="sub-toggle-btn" onclick="toggleSubSidebar()" title="Hide panel">&#8249;</button></div></div>
                         <nav id="subNav" class="sub-menu"></nav>
                 </aside>
 
@@ -660,7 +660,7 @@
                                 <span class="company-label">Location</span>
                                 <span class="company-chip">{{ current_location_name or 'Not Assigned' }}</span>
                                 {% if location_switch_options %}
-                                <form method="post" action="/admin/location-scope" class="location-switch-form">
+                                <form method="post" action="{{ tenant_scoped_path('/admin/location-scope') }}" class="location-switch-form">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                                     <input type="hidden" name="next_path" value="{{ request.path }}" />
                                     <select name="restaurant_id" required>
@@ -750,11 +750,11 @@
                     title: 'Admin',
                     subtitle: 'Company administration, user roles, task controls, and audit records.',
                     items: [
-                        { id: 'admin-companies', label: 'Companies', url: '/admin/companies' },
-                        { id: 'admin-company-health', label: 'Company Health', url: '/admin/company-health' },
-                        { id: 'admin-users', label: 'User Management', url: '/admin/users' },
-                        { id: 'admin-tasks', label: 'Operational Tasks', url: '/admin/tasks' },
-                        { id: 'admin-audit', label: 'Audit Logs', url: '/admin/audit-logs' },
+                        { id: 'admin-companies', label: 'Companies', url: '{{ tenant_scoped_path('/admin/companies') }}' },
+                        { id: 'admin-company-health', label: 'Company Health', url: '{{ tenant_scoped_path('/admin/company-health') }}' },
+                        { id: 'admin-users', label: 'User Management', url: '{{ tenant_scoped_path('/admin/users') }}' },
+                        { id: 'admin-tasks', label: 'Operational Tasks', url: '{{ tenant_scoped_path('/admin/tasks') }}' },
+                        { id: 'admin-audit', label: 'Audit Logs', url: '{{ tenant_scoped_path('/admin/audit-logs') }}' },
                         { id: 'admin-location-management', label: 'Location Management', url: '/app/productmix/restaurant-setup' },
                         { id: 'admin-productmix-dashboard', label: 'ProductMix Admin Dashboard', url: '/app/productmix/admin' }
                     ]

@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 import os
 import csv
+import json
 import sqlite3
 from datetime import datetime, timedelta
 import secrets
@@ -338,22 +339,232 @@ def create_employee_json(company_id, employee, location_id=None):
 	data = {
 		"employeeInfo": {
 			"firstName": employee["firstName"],
+            "middleName": employee.get("middleName", ""),
 			"lastName": employee["lastName"],
 			"dateOfHire": employee["dateOfHire"],
 			"id": employee["id"],
-			"locationId": location_id
+            "locationId": location_id,
+            "jobTitle": employee.get("jobTitle", ""),
+            "email": employee.get("email", ""),
+            "phone": employee.get("phone", "")
 		},
 		"disciplinaryReports": [],
 		"certifications": {
 			"TABC": None,
 			"FoodHandlers": None,
 			"Other": []
+        },
+        "documents": {
+            "legal": {
+                "i9": {"status": "missing", "expiresOn": "", "notes": "", "lastUpdated": ""},
+                "w2": {"status": "missing", "expiresOn": "", "notes": "", "lastUpdated": ""},
+                "alcoholServingPermit": {"status": "missing", "expiresOn": "", "notes": "", "lastUpdated": ""},
+                "foodHandlersPermit": {"status": "missing", "expiresOn": "", "notes": "", "lastUpdated": ""},
+                "additionalPermits": []
+            },
+            "medicalCallIns": [],
+            "essentialPaperwork": []
 		}
 	}
-	import json
 	with open(filepath, "w") as f:
 		json.dump(data, f, indent=2)
 	return filepath
+
+
+def _ensure_employee_profile_shape(employee):
+    """Backfill profile keys for older employee JSON files."""
+    if not isinstance(employee, dict):
+        employee = {}
+
+    employee_info = employee.get('employeeInfo')
+    if not isinstance(employee_info, dict):
+        employee_info = {}
+    employee_info.setdefault('firstName', '')
+    employee_info.setdefault('middleName', '')
+    employee_info.setdefault('lastName', '')
+    employee_info.setdefault('dateOfHire', '')
+    employee_info.setdefault('id', '')
+    employee_info.setdefault('locationId', None)
+    employee_info.setdefault('jobTitle', '')
+    employee_info.setdefault('email', '')
+    employee_info.setdefault('phone', '')
+    employee['employeeInfo'] = employee_info
+
+    if not isinstance(employee.get('disciplinaryReports'), list):
+        employee['disciplinaryReports'] = []
+
+    certifications = employee.get('certifications')
+    if not isinstance(certifications, dict):
+        certifications = {}
+    certifications.setdefault('TABC', None)
+    certifications.setdefault('FoodHandlers', None)
+    if not isinstance(certifications.get('Other'), list):
+        certifications['Other'] = []
+    employee['certifications'] = certifications
+
+    documents = employee.get('documents')
+    if not isinstance(documents, dict):
+        documents = {}
+
+    legal = documents.get('legal')
+    if not isinstance(legal, dict):
+        legal = {}
+
+    for key in ['i9', 'w2', 'alcoholServingPermit', 'foodHandlersPermit']:
+        entry = legal.get(key)
+        if not isinstance(entry, dict):
+            entry = {}
+        entry.setdefault('status', 'missing')
+        entry.setdefault('expiresOn', '')
+        entry.setdefault('notes', '')
+        entry.setdefault('lastUpdated', '')
+        legal[key] = entry
+
+    if not isinstance(legal.get('additionalPermits'), list):
+        legal['additionalPermits'] = []
+
+    documents['legal'] = legal
+    if not isinstance(documents.get('medicalCallIns'), list):
+        documents['medicalCallIns'] = []
+    if not isinstance(documents.get('essentialPaperwork'), list):
+        documents['essentialPaperwork'] = []
+
+    employee['documents'] = documents
+    return employee
+
+
+def _employee_candidate_paths(base_dir, company_id, filename, selected_location_id=None):
+    """Build candidate absolute paths for an employee profile JSON file."""
+    company_root = os.path.join(base_dir, 'company_data', company_id)
+    candidates = []
+
+    if selected_location_id:
+        candidates.append(
+            os.path.join(company_root, 'locations', str(selected_location_id), 'employees', filename)
+        )
+
+    locations_root = os.path.join(company_root, 'locations')
+    if os.path.isdir(locations_root):
+        for location_id in sorted(os.listdir(locations_root)):
+            location_path = os.path.join(locations_root, location_id)
+            if not os.path.isdir(location_path):
+                continue
+            candidates.append(os.path.join(location_path, 'employees', filename))
+
+    candidates.append(os.path.join(company_root, 'employees', filename))
+
+    ordered = []
+    seen = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        ordered.append(path)
+    return ordered
+
+
+def _resolve_employee_profile_file(base_dir, company_id, filename):
+    """Resolve an employee profile file path with location awareness."""
+    selected_location_id = _normalize_location_id(request.args.get('location_id'))
+    if not selected_location_id:
+        locations = _effective_location_options(current_user.current_company_id)
+        selected_location_id = _resolve_effective_location_id(locations)
+
+    for candidate in _employee_candidate_paths(base_dir, company_id, filename, selected_location_id):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _upsert_employee_profiles_from_daily_entries(company_id, location_id, log_date, daily_employees):
+    """Create roster/profile records for new names entered in Daily Log."""
+    if location_id:
+        data_dir = f"company_data/{company_id}/locations/{location_id}"
+    else:
+        data_dir = f"company_data/{company_id}"
+    os.makedirs(data_dir, exist_ok=True)
+
+    employee_file = f"{data_dir}/employees.json"
+    employee_payload = {'employees': [], 'removedEmployees': []}
+
+    if os.path.exists(employee_file):
+        try:
+            with open(employee_file, 'r') as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                employee_payload = loaded
+        except Exception:
+            pass
+
+    employees = employee_payload.get('employees')
+    if not isinstance(employees, list):
+        employees = []
+
+    removed = employee_payload.get('removedEmployees')
+    if not isinstance(removed, list):
+        removed = []
+
+    def _name_key(first_name, middle_name, last_name):
+        return (
+            f"{str(first_name or '').strip().lower()}::"
+            f"{str(middle_name or '').strip().lower()}::"
+            f"{str(last_name or '').strip().lower()}"
+        )
+
+    active_keys = {
+        _name_key(emp.get('firstName'), emp.get('middleName'), emp.get('lastName'))
+        for emp in employees if isinstance(emp, dict)
+    }
+
+    created_count = 0
+    skipped_name_format_count = 0
+    base_id = int(datetime.now().timestamp() * 1000)
+    default_hire_date = (log_date or datetime.now().strftime('%Y-%m-%d'))
+
+    for idx, entry in enumerate(daily_employees or []):
+        if not isinstance(entry, dict):
+            continue
+        full_name = str(entry.get('name') or '').strip()
+        if not full_name:
+            continue
+
+        parts = [part for part in full_name.split() if part]
+        if len(parts) < 2:
+            skipped_name_format_count += 1
+            continue
+
+        first_name = parts[0]
+        middle_name = parts[1] if len(parts) > 2 else ''
+        last_name = ' '.join(parts[2:]) if len(parts) > 2 else parts[1]
+        key = _name_key(first_name, middle_name, last_name)
+
+        if key in active_keys:
+            continue
+
+        employee = {
+            'id': base_id + idx,
+            'firstName': first_name,
+            'middleName': middle_name,
+            'lastName': last_name,
+            'dateOfHire': default_hire_date,
+            'jobTitle': ''
+        }
+        employees.append(employee)
+        active_keys.add(key)
+        create_employee_json(company_id, employee, location_id)
+        created_count += 1
+
+    employee_payload['employees'] = employees
+    employee_payload['removedEmployees'] = removed
+
+    if created_count > 0:
+        with open(employee_file, 'w') as f:
+            json.dump(employee_payload, f, indent=2)
+
+    return {
+        'created': created_count,
+        'skipped_name_format': skipped_name_format_count,
+    }
 
 def save_daily_log(company_id, log_data, location_id=None):
 	"""Save daily log to CSV file - matching desktop dailylog.py format"""
@@ -437,147 +648,154 @@ def save_daily_log(company_id, log_data, location_id=None):
 		writer.writerow(['Cash in Drawer', log_data.get('drawer_total', 0)])
 		writer.writerow(['DEPOSIT AMOUNT', log_data.get('deposit_amount', 0)])
 
-def load_daily_log(company_id, date_str, location_id=None):
-	"""Load daily log from CSV file - matching desktop dailylog.py format"""
-	if location_id:
-		data_dir = f"company_data/{company_id}/locations/{location_id}/daily_logs"
-	else:
-		data_dir = f"company_data/{company_id}/daily_logs"
-	date_str_clean = date_str.replace('-', '')
+def load_daily_log(company_id, date_str, location_id=None, shift=None):
+    """Load daily log from CSV file - matching desktop dailylog.py format"""
+    if location_id:
+        data_dir = f"company_data/{company_id}/locations/{location_id}/daily_logs"
+    else:
+        data_dir = f"company_data/{company_id}/daily_logs"
+    date_str_clean = date_str.replace('-', '')
 
-	# Try both Day and Night shifts
-	filepath = f"{data_dir}/{date_str_clean}_Day.csv"
-	legacy_dir = os.path.expanduser("~/Documents/AIO Python/daily_logs")
-	legacy_day = os.path.join(legacy_dir, f"{date_str}_Day.csv")
-	legacy_night = os.path.join(legacy_dir, f"{date_str}_Night.csv")
+    # If a shift is provided, load that exact file; otherwise preserve Day-first fallback.
+    if shift:
+        filepath = f"{data_dir}/{date_str_clean}_{shift}.csv"
+    else:
+        filepath = f"{data_dir}/{date_str_clean}_Day.csv"
+    legacy_dir = os.path.expanduser("~/Documents/AIO Python/daily_logs")
+    legacy_day = os.path.join(legacy_dir, f"{date_str}_Day.csv")
+    legacy_night = os.path.join(legacy_dir, f"{date_str}_Night.csv")
 
-	if not os.path.exists(filepath):
-		# If not found, check legacy folder and copy if exists
-		if os.path.exists(legacy_day):
-			import shutil
-			shutil.copy(legacy_day, filepath)
-		elif os.path.exists(legacy_night):
-			filepath = f"{data_dir}/{date_str_clean}_Night.csv"
-			shutil.copy(legacy_night, filepath)
+    if not os.path.exists(filepath):
+        # If not found, check legacy folder and copy if exists.
+        if shift:
+            legacy_shift_path = os.path.join(legacy_dir, f"{date_str}_{shift}.csv")
+            if os.path.exists(legacy_shift_path):
+                import shutil
+                shutil.copy(legacy_shift_path, filepath)
+        else:
+            if os.path.exists(legacy_day):
+                import shutil
+                shutil.copy(legacy_day, filepath)
+            elif os.path.exists(legacy_night):
+                filepath = f"{data_dir}/{date_str_clean}_Night.csv"
+                shutil.copy(legacy_night, filepath)
 
-	if not os.path.exists(filepath):
-		return None
-    
-	log_data = {
-		'employees': [],
-		'shift': 'Day',
-		'notes': '',
-		'pennies': 0,
-		'nickels': 0,
-		'dimes': 0,
-		'quarters': 0,
-		'ones': 0,
-		'fives': 0,
-		'tens': 0,
-		'twenties': 0,
-		'fifties': 0,
-		'hundreds': 0,
-		'drawer_total': 0,
-		'deduction_descs': [],
-		'deduction_locations': [],
-		'deduction_amounts': [],
-		'deposit_amount': 0
-	}
-    
-	try:
-		with open(filepath, 'r') as f:
-			reader = csv.reader(f)
-			rows = list(reader)
-            
-			section = None
-			for i, row in enumerate(rows):
-				if not row:
-					continue
-                
-				# Parse header info
-				if row[0] == 'Shift' and len(row) > 1:
-					log_data['shift'] = row[1]
-				elif row[0] == 'Notes' and len(row) > 1:
-					log_data['notes'] = row[1]
-                
-				# Detect sections
-				elif row[0] == 'Employee Entries':
-					section = 'employees'
-					continue
-				elif row[0] == 'Cash Drawer Count':
-					section = 'drawer'
-					continue
-				elif row[0] == 'Deductions':
-					section = 'deductions'
-					continue
-				elif row[0] == 'Cash Deductions':
-					section = 'deductions'
-					continue
-				elif row[0] == 'Deposit Summary':
-					section = 'deposit'
-					continue
-                
-				# Parse employee data
-				if section == 'employees' and row[0] != 'Name' and len(row) >= 13:
-					employee = {
-						'name': row[0],
-						'shift': row[1] if len(row) > 1 else 'Day',
-						'area': row[2] if len(row) > 2 else '',
-						'cash': float(row[3]) if len(row) > 3 and row[3] else 0,
-						'cc_tips': float(row[4]) if len(row) > 4 and row[4] else 0,
-						'cash_diff': float(row[5]) if len(row) > 5 and row[5] else 0,
-						'visa': float(row[6]) if len(row) > 6 and row[6] else 0,
-						'mastercard': float(row[7]) if len(row) > 7 and row[7] else 0,
-						'amex': float(row[8]) if len(row) > 8 and row[8] else 0,
-						'discover': float(row[9]) if len(row) > 9 and row[9] else 0,
-						'credit': float(row[10]) if len(row) > 10 and row[10] else 0,
-						'beer': float(row[11]) if len(row) > 11 and row[11] else 0,
-						'liquor': float(row[12]) if len(row) > 12 and row[12] else 0,
-						'wine': float(row[13]) if len(row) > 13 and row[13] else 0,
-						'food': float(row[14]) if len(row) > 14 and row[14] else 0,
-						'voids': float(row[15]) if len(row) > 15 and row[15] else 0
-					}
-					log_data['employees'].append(employee)
-                
-				# Parse drawer data
-				elif section == 'drawer' and len(row) >= 2:
-					key = row[0].lower().replace(' ', '_')
-					if key in ['pennies', 'nickels', 'dimes', 'quarters', 'ones', 'fives', 'tens', 'twenties', 'fifties', 'hundreds']:
-						log_data[key] = float(row[1]) if row[1] else 0
-					elif key == 'drawer_total':
-						log_data['drawer_total'] = float(row[1]) if row[1] else 0
-                
-				# Parse deductions (support both old 2-column and new 3-column format)
-				elif section == 'deductions' and len(row) >= 2 and row[0] not in ['Total Deductions']:
-					log_data['deduction_descs'].append(row[0])
-					# Check if this is the new 3-column format (desc, location, amount)
-					if len(row) >= 3:
-						log_data['deduction_locations'].append(row[1] if row[1] else '')
-						log_data['deduction_amounts'].append(float(row[2]) if row[2] else 0)
-					else:
-						# Old 2-column format (desc, amount)
-						log_data['deduction_locations'].append('')
-						log_data['deduction_amounts'].append(float(row[1]) if row[1] else 0)
-                
-				# Parse deposit
-				elif section == 'deposit' and len(row) >= 2:
-					if row[0] == 'DEPOSIT AMOUNT':
-						log_data['deposit_amount'] = float(row[1]) if row[1] else 0
-    
-	except Exception as e:
-		print(f"Error loading daily log: {e}")
-		return None
-    
-	# Calculate deposit if it's missing (for backwards compatibility with old CSV files)
-	if log_data['deposit_amount'] == 0 and log_data['employees']:
-		total_cash = sum(emp.get('cash', 0) for emp in log_data['employees'])
-		total_cc_tips = sum(emp.get('cc_tips', 0) for emp in log_data['employees'])
-		total_deductions = sum(log_data['deduction_amounts'])
-		log_data['deposit_amount'] = total_cash - total_cc_tips - total_deductions
-    
-	return log_data
+    if not os.path.exists(filepath):
+        return None
 
-	return log_data
+    log_data = {
+        'employees': [],
+        'shift': 'Day',
+        'notes': '',
+        'pennies': 0,
+        'nickels': 0,
+        'dimes': 0,
+        'quarters': 0,
+        'ones': 0,
+        'fives': 0,
+        'tens': 0,
+        'twenties': 0,
+        'fifties': 0,
+        'hundreds': 0,
+        'drawer_total': 0,
+        'deduction_descs': [],
+        'deduction_locations': [],
+        'deduction_amounts': [],
+        'deposit_amount': 0
+    }
+
+    try:
+        with open(filepath, 'r') as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+
+            section = None
+            for i, row in enumerate(rows):
+                if not row:
+                    continue
+
+                # Parse header info
+                if row[0] == 'Shift' and len(row) > 1:
+                    log_data['shift'] = row[1]
+                elif row[0] == 'Notes' and len(row) > 1:
+                    log_data['notes'] = row[1]
+
+                # Detect sections
+                elif row[0] == 'Employee Entries':
+                    section = 'employees'
+                    continue
+                elif row[0] == 'Cash Drawer Count':
+                    section = 'drawer'
+                    continue
+                elif row[0] == 'Deductions':
+                    section = 'deductions'
+                    continue
+                elif row[0] == 'Cash Deductions':
+                    section = 'deductions'
+                    continue
+                elif row[0] == 'Deposit Summary':
+                    section = 'deposit'
+                    continue
+
+                # Parse employee data
+                if section == 'employees' and row[0] != 'Name' and len(row) >= 13:
+                    employee = {
+                        'name': row[0],
+                        'shift': row[1] if len(row) > 1 else 'Day',
+                        'area': row[2] if len(row) > 2 else '',
+                        'cash': float(row[3]) if len(row) > 3 and row[3] else 0,
+                        'cc_tips': float(row[4]) if len(row) > 4 and row[4] else 0,
+                        'cash_diff': float(row[5]) if len(row) > 5 and row[5] else 0,
+                        'visa': float(row[6]) if len(row) > 6 and row[6] else 0,
+                        'mastercard': float(row[7]) if len(row) > 7 and row[7] else 0,
+                        'amex': float(row[8]) if len(row) > 8 and row[8] else 0,
+                        'discover': float(row[9]) if len(row) > 9 and row[9] else 0,
+                        'credit': float(row[10]) if len(row) > 10 and row[10] else 0,
+                        'beer': float(row[11]) if len(row) > 11 and row[11] else 0,
+                        'liquor': float(row[12]) if len(row) > 12 and row[12] else 0,
+                        'wine': float(row[13]) if len(row) > 13 and row[13] else 0,
+                        'food': float(row[14]) if len(row) > 14 and row[14] else 0,
+                        'voids': float(row[15]) if len(row) > 15 and row[15] else 0
+                    }
+                    log_data['employees'].append(employee)
+
+                # Parse drawer data
+                elif section == 'drawer' and len(row) >= 2:
+                    key = row[0].lower().replace(' ', '_')
+                    if key in ['pennies', 'nickels', 'dimes', 'quarters', 'ones', 'fives', 'tens', 'twenties', 'fifties', 'hundreds']:
+                        log_data[key] = float(row[1]) if row[1] else 0
+                    elif key == 'drawer_total':
+                        log_data['drawer_total'] = float(row[1]) if row[1] else 0
+
+                # Parse deductions (support both old 2-column and new 3-column format)
+                elif section == 'deductions' and len(row) >= 2 and row[0] not in ['Total Deductions']:
+                    log_data['deduction_descs'].append(row[0])
+                    # Check if this is the new 3-column format (desc, location, amount)
+                    if len(row) >= 3:
+                        log_data['deduction_locations'].append(row[1] if row[1] else '')
+                        log_data['deduction_amounts'].append(float(row[2]) if row[2] else 0)
+                    else:
+                        # Old 2-column format (desc, amount)
+                        log_data['deduction_locations'].append('')
+                        log_data['deduction_amounts'].append(float(row[1]) if row[1] else 0)
+
+                # Parse deposit
+                elif section == 'deposit' and len(row) >= 2:
+                    if row[0] == 'DEPOSIT AMOUNT':
+                        log_data['deposit_amount'] = float(row[1]) if row[1] else 0
+
+    except Exception as e:
+        print(f"Error loading daily log: {e}")
+        return None
+
+    # Calculate deposit if it's missing (for backwards compatibility with old CSV files)
+    if log_data['deposit_amount'] == 0 and log_data['employees']:
+        total_cash = sum(emp.get('cash', 0) for emp in log_data['employees'])
+        total_cc_tips = sum(emp.get('cc_tips', 0) for emp in log_data['employees'])
+        total_deductions = sum(log_data['deduction_amounts'])
+        log_data['deposit_amount'] = total_cash - total_cc_tips - total_deductions
+
+    return log_data
 
 
 def save_cash_drawer(company_id, drawer_data):
@@ -1195,6 +1413,13 @@ def daily_log():
                 # Deposit
                 'deposit_amount': request.form.get('deposit_amount', 0)
             }
+
+            profile_sync_result = _upsert_employee_profiles_from_daily_entries(
+                current_user.current_company_id,
+                location_id,
+                log_data['date'],
+                employees,
+            )
             
             # Save to file with location
             save_daily_log(current_user.current_company_id, log_data, location_id)
@@ -1206,7 +1431,16 @@ def daily_log():
                 {'date': log_data['date'], 'location_id': location_id, 'employees': len(employees), 'deposit': log_data['deposit_amount']}
             )
             
-            flash(f'Daily log saved! {len(employees)} employees, Deposit: ${log_data["deposit_amount"]}', 'success')
+            created_profiles = int(profile_sync_result.get('created', 0))
+            skipped_name_format = int(profile_sync_result.get('skipped_name_format', 0))
+
+            message = f'Daily log saved! {len(employees)} employees, Deposit: ${log_data["deposit_amount"]}'
+            if created_profiles > 0:
+                message += f' | Created {created_profiles} new employee profile(s).'
+            if skipped_name_format > 0:
+                message += f' | Skipped {skipped_name_format} name(s) missing first and last name.'
+
+            flash(message, 'success')
             return redirect(url_for('daily_log', date=log_data['date'], location_id=location_id))
         except Exception as e:
             flash(f'Error saving daily log: {str(e)}', 'danger')
@@ -1631,7 +1865,11 @@ def api_cash_deductions():
     """Get total cash deductions for a date range"""
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
-    data_dir = f"company_data/{current_user.current_company_id}/daily_logs"
+    location_id = _resolve_effective_location_id(_effective_location_options(current_user.current_company_id))
+    if location_id:
+        data_dir = f"company_data/{current_user.current_company_id}/locations/{location_id}/daily_logs"
+    else:
+        data_dir = f"company_data/{current_user.current_company_id}/daily_logs"
     total_deductions = 0.0
     daily_deductions = []
     if not os.path.exists(data_dir):
@@ -1693,7 +1931,11 @@ def api_employee_performance():
     employee_name = request.args.get('employee_name')
     shift_filter = request.args.get('shift_filter', 'Full')  # Default to Full (combined)
     
-    data_dir = f"company_data/{current_user.current_company_id}/daily_logs"
+    location_id = _resolve_effective_location_id(_effective_location_options(current_user.current_company_id))
+    if location_id:
+        data_dir = f"company_data/{current_user.current_company_id}/locations/{location_id}/daily_logs"
+    else:
+        data_dir = f"company_data/{current_user.current_company_id}/daily_logs"
     employee_data = {}
     daily_breakdown = {}  # Store daily data when filtering by specific employee
     
@@ -1723,7 +1965,13 @@ def api_employee_performance():
             if end and file_date > end:
                 continue
             
-            log_data = load_daily_log(current_user.current_company_id, file_date.strftime('%Y-%m-%d'))
+            shift_name = filename.split('_')[1].replace('.csv', '') if '_' in filename else 'Day'
+            log_data = load_daily_log(
+                current_user.current_company_id,
+                file_date.strftime('%Y-%m-%d'),
+                location_id=location_id,
+                shift=shift_name,
+            )
             
             if log_data and log_data.get('employees'):
                 for emp in log_data['employees']:
@@ -1772,7 +2020,7 @@ def api_employee_performance():
                     # Store daily breakdown if filtering by specific employee
                     if employee_name and name.lower() == employee_name.lower():
                         date_key = file_date.strftime('%Y-%m-%d')
-                        shift = filename.split('_')[1].replace('.csv', '') if '_' in filename else 'Day'
+                        shift = shift_name
                         
                         if name not in daily_breakdown:
                             daily_breakdown[name] = []
@@ -2731,26 +2979,121 @@ def serve_employee_json(company_id, filename):
     return send_from_directory(emp_dir, filename, mimetype='application/json')
 
 
-@app.route('/employee/<company_id>/<filename>')
+@app.route('/employee/<company_id>/<filename>', methods=['GET', 'POST'])
 @login_required
 @company_required
 def employee_profile(company_id, filename):
-    import json
-    import os
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    emp_dir = os.path.join(base_dir, 'company_data', company_id, 'employees')
-    filepath = os.path.join(emp_dir, filename)
-    print(f"[DEBUG] Absolute file path: {filepath}")
     if not filename.endswith('.json') or '/' in filename or '\\' in filename:
         flash('Invalid file request.', 'danger')
         return redirect(url_for('employees'))
-    if not os.path.exists(filepath):
-        print(f"[ERROR] Employee file not found at: {filepath}")
+
+    filepath = _resolve_employee_profile_file(base_dir, company_id, filename)
+    if not filepath:
+        print(f"[ERROR] Employee file not found for filename: {filename}")
         flash('Employee file not found.', 'danger')
         return redirect(url_for('employees'))
+
     with open(filepath, 'r') as f:
         employee = json.load(f)
-    return render_template('employee_profile.html', employee=employee)
+    employee = _ensure_employee_profile_shape(employee)
+
+    if request.method == 'POST':
+        action = (request.form.get('action') or '').strip()
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        if action == 'save_basic_info':
+            info = employee['employeeInfo']
+            info['firstName'] = (request.form.get('firstName') or '').strip()
+            info['lastName'] = (request.form.get('lastName') or '').strip()
+            info['dateOfHire'] = (request.form.get('dateOfHire') or '').strip()
+            info['jobTitle'] = (request.form.get('jobTitle') or '').strip()
+            info['email'] = (request.form.get('email') or '').strip()
+            info['phone'] = (request.form.get('phone') or '').strip()
+            flash('Employee profile details saved.', 'success')
+
+        elif action == 'add_writeup':
+            summary = (request.form.get('summary') or '').strip()
+            if summary:
+                employee['disciplinaryReports'].append({
+                    'date': (request.form.get('writeupDate') or '').strip() or today,
+                    'category': (request.form.get('category') or '').strip() or 'General',
+                    'severity': (request.form.get('severity') or '').strip() or 'Documented',
+                    'summary': summary,
+                    'actionTaken': (request.form.get('actionTaken') or '').strip(),
+                    'enteredBy': (request.form.get('enteredBy') or '').strip(),
+                })
+                flash('Write-up added.', 'success')
+            else:
+                flash('Write-up summary is required.', 'warning')
+
+        elif action == 'add_medical_callin':
+            reason = (request.form.get('reason') or '').strip()
+            if reason:
+                employee['documents']['medicalCallIns'].append({
+                    'date': (request.form.get('callInDate') or '').strip() or today,
+                    'reason': reason,
+                    'note': (request.form.get('note') or '').strip(),
+                    'doctorNoteOnFile': (request.form.get('doctorNoteOnFile') or '').strip() == 'yes',
+                    'clearedToReturnDate': (request.form.get('clearedToReturnDate') or '').strip(),
+                    'enteredBy': (request.form.get('enteredByMedical') or '').strip(),
+                })
+                flash('Medical call-in note added.', 'success')
+            else:
+                flash('Medical call-in reason is required.', 'warning')
+
+        elif action == 'save_legal_docs':
+            legal = employee['documents']['legal']
+            for key in ['i9', 'w2', 'alcoholServingPermit', 'foodHandlersPermit']:
+                legal[key]['status'] = (request.form.get(f'{key}_status') or '').strip() or 'missing'
+                legal[key]['expiresOn'] = (request.form.get(f'{key}_expiresOn') or '').strip()
+                legal[key]['notes'] = (request.form.get(f'{key}_notes') or '').strip()
+                legal[key]['lastUpdated'] = today
+            flash('Legal and permit records updated.', 'success')
+
+        elif action == 'add_additional_permit':
+            permit_name = (request.form.get('permitName') or '').strip()
+            if permit_name:
+                employee['documents']['legal']['additionalPermits'].append({
+                    'name': permit_name,
+                    'status': (request.form.get('permitStatus') or '').strip() or 'missing',
+                    'expiresOn': (request.form.get('permitExpiresOn') or '').strip(),
+                    'notes': (request.form.get('permitNotes') or '').strip(),
+                    'lastUpdated': today,
+                })
+                flash('Additional permit added.', 'success')
+            else:
+                flash('Permit name is required.', 'warning')
+
+        elif action == 'add_essential_paperwork':
+            doc_name = (request.form.get('paperName') or '').strip()
+            if doc_name:
+                employee['documents']['essentialPaperwork'].append({
+                    'name': doc_name,
+                    'status': (request.form.get('paperStatus') or '').strip() or 'missing',
+                    'receivedOn': (request.form.get('paperReceivedOn') or '').strip(),
+                    'expiresOn': (request.form.get('paperExpiresOn') or '').strip(),
+                    'notes': (request.form.get('paperNotes') or '').strip(),
+                    'lastUpdated': today,
+                })
+                flash('Essential paperwork item added.', 'success')
+            else:
+                flash('Paperwork name is required.', 'warning')
+
+        with open(filepath, 'w') as f:
+            json.dump(employee, f, indent=2)
+
+        location_id = _normalize_location_id(request.args.get('location_id')) or employee['employeeInfo'].get('locationId')
+        return redirect(url_for('employee_profile', company_id=company_id, filename=filename, location_id=location_id))
+
+    selected_location_id = _normalize_location_id(request.args.get('location_id')) or employee['employeeInfo'].get('locationId')
+    return render_template(
+        'employee_profile.html',
+        employee=employee,
+        company_id=company_id,
+        filename=filename,
+        selected_location_id=selected_location_id,
+    )
 
 
 if __name__ == '__main__':

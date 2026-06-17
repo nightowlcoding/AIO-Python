@@ -1,40 +1,376 @@
 {% extends "base.html" %}
+{% block title %}Employee Profile - Manager App{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <h2>Employee Profile</h2>
-  <div class="card mb-3">
-    <div class="card-body">
-      <h4 class="card-title">{{ employee.employeeInfo.firstName }} {{ employee.employeeInfo.lastName }}</h4>
-      <p><strong>Date of Hire:</strong> {{ employee.employeeInfo.dateOfHire }}</p>
-      <p><strong>ID:</strong> {{ employee.employeeInfo.id }}</p>
+<div class="container-fluid mt-4">
+  <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="mb-1">Employee Profile</h2>
+      <div class="text-muted">
+        {{ employee.employeeInfo.firstName }} {{ employee.employeeInfo.lastName }}
+        <span class="ms-2 badge bg-secondary">ID: {{ employee.employeeInfo.id or 'N/A' }}</span>
+      </div>
+    </div>
+    <a href="{{ url_for('employees', location_id=selected_location_id) }}" class="btn btn-outline-secondary">Back to Employees</a>
+  </div>
+
+  <div class="alert alert-info py-2">
+    Profile photos are not required. Use this page to track write-ups, medical call-ins, legal paperwork, and permits.
+  </div>
+
+  <ul class="nav nav-tabs" id="employeeProfileTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-info" type="button">Profile</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-writeups" type="button">Write-Ups</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-legal" type="button">Legal & Permits</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-medical" type="button">Medical Call-Ins</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-paperwork" type="button">Essential Paperwork</button>
+    </li>
+  </ul>
+
+  <div class="tab-content border border-top-0 rounded-bottom p-3 bg-white">
+    <div class="tab-pane fade show active" id="tab-info" role="tabpanel">
+      <form method="post" action="{{ url_for('employee_profile', company_id=company_id, filename=filename, location_id=selected_location_id) }}" class="card border-0">
+        <input type="hidden" name="action" value="save_basic_info">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">First Name</label>
+            <input class="form-control" name="firstName" value="{{ employee.employeeInfo.firstName }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Last Name</label>
+            <input class="form-control" name="lastName" value="{{ employee.employeeInfo.lastName }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Date of Hire</label>
+            <input type="date" class="form-control" name="dateOfHire" value="{{ employee.employeeInfo.dateOfHire }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Job Title</label>
+            <input class="form-control" name="jobTitle" value="{{ employee.employeeInfo.jobTitle or '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" name="email" value="{{ employee.employeeInfo.email or '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Phone</label>
+            <input class="form-control" name="phone" value="{{ employee.employeeInfo.phone or '' }}">
+          </div>
+          <div class="col-md-4 d-flex align-items-end">
+            <button class="btn btn-primary">Save Profile Info</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="tab-pane fade" id="tab-writeups" role="tabpanel">
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <form method="post" action="{{ url_for('employee_profile', company_id=company_id, filename=filename, location_id=selected_location_id) }}" class="card">
+            <div class="card-header">Add Write-Up</div>
+            <div class="card-body">
+              <input type="hidden" name="action" value="add_writeup">
+              <div class="mb-2">
+                <label class="form-label">Date</label>
+                <input type="date" class="form-control" name="writeupDate">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Category</label>
+                <input class="form-control" name="category" placeholder="Attendance, Conduct, Safety...">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Severity</label>
+                <select class="form-select" name="severity">
+                  <option value="Coaching">Coaching</option>
+                  <option value="Documented">Documented</option>
+                  <option value="Final Warning">Final Warning</option>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Summary</label>
+                <textarea class="form-control" name="summary" rows="3" required></textarea>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Action Taken</label>
+                <input class="form-control" name="actionTaken" placeholder="Verbal warning, retraining, etc.">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Entered By</label>
+                <input class="form-control" name="enteredBy" placeholder="Manager name">
+              </div>
+              <button class="btn btn-warning">Add Write-Up</button>
+            </div>
+          </form>
+        </div>
+        <div class="col-lg-7">
+          <div class="card">
+            <div class="card-header">Write-Up History</div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                  <thead>
+                    <tr><th>Date</th><th>Category</th><th>Severity</th><th>Summary</th><th>Action</th></tr>
+                  </thead>
+                  <tbody>
+                    {% for report in employee.disciplinaryReports|reverse %}
+                    <tr>
+                      <td>{{ report.date or '-' }}</td>
+                      <td>{{ report.category or '-' }}</td>
+                      <td>{{ report.severity or '-' }}</td>
+                      <td>{{ report.summary or report }}</td>
+                      <td>{{ report.actionTaken or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-3">No write-ups yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-legal" role="tabpanel">
+      <form method="post" action="{{ url_for('employee_profile', company_id=company_id, filename=filename, location_id=selected_location_id) }}" class="card mb-3">
+        <div class="card-header">Required Legal Documents and Permits</div>
+        <div class="card-body">
+          <input type="hidden" name="action" value="save_legal_docs">
+          {% set legal = employee.documents.legal %}
+          {% for doc_key, doc_label in [
+            ('i9', 'I-9'),
+            ('w2', 'W-2'),
+            ('alcoholServingPermit', 'Alcohol Serving Permit'),
+            ('foodHandlersPermit', 'Food Handlers Permit')
+          ] %}
+          <div class="border rounded p-2 mb-2">
+            <div class="fw-semibold mb-2">{{ doc_label }}</div>
+            <div class="row g-2">
+              <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="{{ doc_key }}_status">
+                  {% set status = legal[doc_key].status %}
+                  <option value="missing" {% if status == 'missing' %}selected{% endif %}>Missing</option>
+                  <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+                  <option value="on_file" {% if status == 'on_file' %}selected{% endif %}>On File</option>
+                  <option value="expired" {% if status == 'expired' %}selected{% endif %}>Expired</option>
+                  <option value="n_a" {% if status == 'n_a' %}selected{% endif %}>N/A</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Expiration Date</label>
+                <input type="date" class="form-control" name="{{ doc_key }}_expiresOn" value="{{ legal[doc_key].expiresOn }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Notes</label>
+                <input class="form-control" name="{{ doc_key }}_notes" value="{{ legal[doc_key].notes }}">
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+          <button class="btn btn-primary">Save Legal Documents</button>
+        </div>
+      </form>
+
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <form method="post" action="{{ url_for('employee_profile', company_id=company_id, filename=filename, location_id=selected_location_id) }}" class="card">
+            <div class="card-header">Add Additional Permit</div>
+            <div class="card-body">
+              <input type="hidden" name="action" value="add_additional_permit">
+              <div class="mb-2">
+                <label class="form-label">Permit Name</label>
+                <input class="form-control" name="permitName" placeholder="Example: TAM, Manager Food Safety" required>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="permitStatus">
+                  <option value="missing">Missing</option>
+                  <option value="pending">Pending</option>
+                  <option value="on_file">On File</option>
+                  <option value="expired">Expired</option>
+                  <option value="n_a">N/A</option>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Expiration Date</label>
+                <input type="date" class="form-control" name="permitExpiresOn">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Notes</label>
+                <input class="form-control" name="permitNotes">
+              </div>
+              <button class="btn btn-outline-primary">Add Permit</button>
+            </div>
+          </form>
+        </div>
+        <div class="col-lg-7">
+          <div class="card">
+            <div class="card-header">Additional Permit History</div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                  <thead><tr><th>Name</th><th>Status</th><th>Expires</th><th>Notes</th><th>Updated</th></tr></thead>
+                  <tbody>
+                    {% for permit in employee.documents.legal.additionalPermits|reverse %}
+                    <tr>
+                      <td>{{ permit.name }}</td>
+                      <td>{{ permit.status }}</td>
+                      <td>{{ permit.expiresOn or '-' }}</td>
+                      <td>{{ permit.notes or '-' }}</td>
+                      <td>{{ permit.lastUpdated or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-3">No additional permits added yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-medical" role="tabpanel">
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <form method="post" action="{{ url_for('employee_profile', company_id=company_id, filename=filename, location_id=selected_location_id) }}" class="card">
+            <div class="card-header">Add Medical Call-In Note</div>
+            <div class="card-body">
+              <input type="hidden" name="action" value="add_medical_callin">
+              <div class="mb-2">
+                <label class="form-label">Date</label>
+                <input type="date" class="form-control" name="callInDate">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Reason</label>
+                <input class="form-control" name="reason" placeholder="Flu symptoms, injury, family medical leave" required>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Details</label>
+                <textarea class="form-control" name="note" rows="3"></textarea>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Doctor Note On File</label>
+                <select class="form-select" name="doctorNoteOnFile">
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Cleared Return Date</label>
+                <input type="date" class="form-control" name="clearedToReturnDate">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Entered By</label>
+                <input class="form-control" name="enteredByMedical" placeholder="Manager name">
+              </div>
+              <button class="btn btn-outline-danger">Add Medical Note</button>
+            </div>
+          </form>
+        </div>
+        <div class="col-lg-7">
+          <div class="card">
+            <div class="card-header">Medical Call-In History</div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                  <thead><tr><th>Date</th><th>Reason</th><th>Doctor Note</th><th>Return Date</th><th>Entered By</th></tr></thead>
+                  <tbody>
+                    {% for item in employee.documents.medicalCallIns|reverse %}
+                    <tr>
+                      <td>{{ item.date or '-' }}</td>
+                      <td>{{ item.reason or '-' }}</td>
+                      <td>{{ 'Yes' if item.doctorNoteOnFile else 'No' }}</td>
+                      <td>{{ item.clearedToReturnDate or '-' }}</td>
+                      <td>{{ item.enteredBy or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-3">No medical call-ins logged yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-paperwork" role="tabpanel">
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <form method="post" action="{{ url_for('employee_profile', company_id=company_id, filename=filename, location_id=selected_location_id) }}" class="card">
+            <div class="card-header">Add Essential Paperwork</div>
+            <div class="card-body">
+              <input type="hidden" name="action" value="add_essential_paperwork">
+              <div class="mb-2">
+                <label class="form-label">Document Name</label>
+                <input class="form-control" name="paperName" placeholder="Policy acknowledgement, handbook sign-off..." required>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="paperStatus">
+                  <option value="missing">Missing</option>
+                  <option value="pending">Pending</option>
+                  <option value="on_file">On File</option>
+                  <option value="expired">Expired</option>
+                  <option value="n_a">N/A</option>
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Received On</label>
+                <input type="date" class="form-control" name="paperReceivedOn">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Expiration Date</label>
+                <input type="date" class="form-control" name="paperExpiresOn">
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Notes</label>
+                <input class="form-control" name="paperNotes">
+              </div>
+              <button class="btn btn-outline-success">Add Paperwork Item</button>
+            </div>
+          </form>
+        </div>
+        <div class="col-lg-7">
+          <div class="card">
+            <div class="card-header">Essential Paperwork History</div>
+            <div class="card-body p-0">
+              <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                  <thead><tr><th>Document</th><th>Status</th><th>Received</th><th>Expires</th><th>Notes</th></tr></thead>
+                  <tbody>
+                    {% for doc in employee.documents.essentialPaperwork|reverse %}
+                    <tr>
+                      <td>{{ doc.name }}</td>
+                      <td>{{ doc.status }}</td>
+                      <td>{{ doc.receivedOn or '-' }}</td>
+                      <td>{{ doc.expiresOn or '-' }}</td>
+                      <td>{{ doc.notes or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-3">No essential paperwork entries yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5>Certifications</h5>
-      <ul>
-        <li><strong>TABC:</strong> {{ employee.certifications.TABC or 'N/A' }}</li>
-        <li><strong>Food Handlers:</strong> {{ employee.certifications.FoodHandlers or 'N/A' }}</li>
-        {% for cert in employee.certifications.Other %}
-        <li><strong>Other:</strong> {{ cert }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-  </div>
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5>Disciplinary Reports</h5>
-      {% if employee.disciplinaryReports %}
-        <ul>
-        {% for report in employee.disciplinaryReports %}
-          <li>{{ report }}</li>
-        {% endfor %}
-        </ul>
-      {% else %}
-        <p>No reports.</p>
-      {% endif %}
-    </div>
-  </div>
-  <a href="{{ url_for('employees') }}" class="btn btn-secondary">Back to Employees</a>
 </div>
 {% endblock %}

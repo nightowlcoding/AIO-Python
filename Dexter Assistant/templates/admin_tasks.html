@@ -7,14 +7,14 @@
 {% if message %}<div class="msg ok">{{ message }}</div>{% endif %}
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 {% if is_super_admin %}
-<form method="post" action="/admin/company-scope" class="row">
+<form method="post" action="{{ tenant_scoped_path('/admin/company-scope') }}" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <input type="hidden" name="next_path" value="/admin/tasks" />
     <select name="company_id" required><option value="">Select company</option>{% for c in companies %}<option value="{{ c.id }}" {% if selected_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
     <button type="submit">Switch Company</button>
 </form>
 {% endif %}
-<form method="post" action="/admin/tasks/create" class="row">
+<form method="post" action="{{ tenant_scoped_path('/admin/tasks/create') }}" class="row">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     {% if selected_company_id %}<input type="hidden" name="company_id" value="{{ selected_company_id }}" />{% endif %}
   <input name="title" placeholder="Task title" required style="min-width:180px" />
@@ -25,10 +25,10 @@
   <button type="submit">Create Task</button>
 </form>
 <div class="tabs">
-    <a class="tab{% if not status_filter %} active{% endif %}" href="/admin/tasks">All</a>
-    <a class="tab{% if status_filter == 'pending' %} active{% endif %}" href="/admin/tasks?status=pending">Pending</a>
-    <a class="tab{% if status_filter == 'in-progress' %} active{% endif %}" href="/admin/tasks?status=in-progress">In Progress</a>
-    <a class="tab{% if status_filter == 'completed' %} active{% endif %}" href="/admin/tasks?status=completed">Completed</a>
+    <a class="tab{% if not status_filter %} active{% endif %}" href="{{ tenant_scoped_path('/admin/tasks') }}">All</a>
+    <a class="tab{% if status_filter == 'pending' %} active{% endif %}" href="{{ tenant_scoped_path('/admin/tasks?status=pending') }}">Pending</a>
+    <a class="tab{% if status_filter == 'in-progress' %} active{% endif %}" href="{{ tenant_scoped_path('/admin/tasks?status=in-progress') }}">In Progress</a>
+    <a class="tab{% if status_filter == 'completed' %} active{% endif %}" href="{{ tenant_scoped_path('/admin/tasks?status=completed') }}">Completed</a>
 </div>
 <div class="table-card"><table><thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Status</th><th>Assigned To</th><th>Due</th><th>Created</th></tr></thead>
 <tbody>{% for t in tasks %}<tr>

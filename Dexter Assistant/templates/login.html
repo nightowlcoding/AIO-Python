@@ -166,7 +166,7 @@
                 </div>
                 <button type="submit">Sign In</button>
                 {% if error %}<div class="error">{{ error }}</div>{% endif %}
-                <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a> &bull; <a href="/auth/forgot-password">Forgot password?</a></div>
+                <div class="links">No account yet? <a href="{{ register_url }}{% if next_path %}?next={{ next_path }}{% endif %}">Create one</a> &bull; <a href="{{ tenant_scoped_path('/auth/forgot-password') }}">Forgot password?</a></div>
             </form>
         </div>
     </div>

@@ -182,17 +182,52 @@
             .scope-mini-chip { display: none; }
             .scope-mini-chip-combined { display: inline-flex; }
         }
+        @media print {
+            @page {
+                margin: 0;
+            }
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+                overflow: visible !important;
+            }
+            body > *:not(#appFrame) {
+                display: none !important;
+            }
+            #topbar,
+            .scope-mini-bar,
+            .switch-banner,
+            .toast-wrap,
+            .brand-wrap,
+            .nav {
+                display: none !important;
+                visibility: hidden !important;
+            }
+            #appFrame {
+                display: block !important;
+                position: static !important;
+                width: 100% !important;
+                min-height: 0 !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                box-shadow: none !important;
+                background: #fff !important;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="topbar" id="topbar">
         <div class="brand-wrap">
-            <img class="brand-logo" src="/branding/company-logo" alt="Company logo" />
+            <img class="brand-logo" src="{{ company_logo_url }}" alt="Company logo" />
             <div class="brand">{{ app_title }}</div>
         </div>
         <div class="nav">
-            <a class="nav-action nav-action-home" href="/portal" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
-            <a class="nav-action nav-action-admin" href="/admin"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
+            <a class="nav-action nav-action-home" href="{{ portal_root_url }}" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
+            <a class="nav-action nav-action-admin" href="{{ admin_root_url }}"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
             {% if show_shell_nav %}
             <button class="nav-action nav-action-back" type="button" onclick="goBack()"><span class="mini-ico">B</span><span class="nav-label">Back</span><span class="nav-short">BK</span></button>
             {% endif %}
@@ -226,11 +261,11 @@
                 window.history.back();
                 return;
             }
-            window.location.href = '/portal';
+            window.location.href = '{{ portal_root_url }}';
         }
         function openDexterHub(evt) {
             if (evt && evt.preventDefault) evt.preventDefault();
-            var target = '/portal?hub=1&t=' + Date.now();
+            var target = '{{ portal_root_url }}?hub=1&t=' + Date.now();
             try {
                 if (window.top && window.top !== window) {
                     window.top.location.href = target;
@@ -246,8 +281,12 @@
             var frame = document.getElementById('appFrame');
             if (!frame) return;
             var tb = document.getElementById('topbar');
-            var used = (tb ? tb.offsetHeight : 0);
-            var vh = window.innerHeight - used;
+            var scopeBar = document.querySelector('.scope-mini-bar');
+            var switchBanner = document.querySelector('.switch-banner');
+            var used = (tb ? tb.offsetHeight : 0)
+                + (scopeBar ? scopeBar.offsetHeight : 0)
+                + (switchBanner ? switchBanner.offsetHeight : 0);
+            var vh = Math.max(window.innerHeight - used - 8, 560);
             var isMobile = window.innerWidth <= 820;
             if (isMobile) {
                 // Disable iframe internal scroll so iOS can't trap touches inside it.
@@ -266,7 +305,7 @@
                         doc.documentElement ? doc.documentElement.scrollHeight : 0
                     );
                     if (contentH && contentH > 50) {
-                        frame.style.height = Math.max(contentH, isMobile ? 0 : vh) + 'px';
+                        frame.style.height = Math.max(contentH, vh) + 'px';
                         return;
                     }
                 }

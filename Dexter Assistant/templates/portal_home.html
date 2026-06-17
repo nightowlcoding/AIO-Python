@@ -152,7 +152,37 @@
         .scope-mini-chip-combined { display: none; max-width: 96vw; }
         .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 12px 24px; }
         h1 { margin: 0 0 4px; font-size: 27px; font-weight: 800; color: #111827; }
-        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+        .launch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .launch-button {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 108px;
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid #d6d3d1;
+            text-decoration: none;
+            background: linear-gradient(145deg, #ffffff 0%, #fff7ed 100%);
+            box-shadow: 0 8px 24px rgba(15,23,42,0.07);
+            transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+        }
+        .launch-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 26px rgba(15,23,42,0.12);
+            filter: brightness(1.01);
+        }
+        .launch-button-title {
+            color: #111827;
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+        .launch-button-copy {
+            margin-top: 6px;
+            color: #6b7280;
+            font-size: 12px;
+            line-height: 1.4;
+        }
         .scope-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; margin-bottom: 12px; }
         .scope-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-top: 8px; }
         .scope-row .field { flex: 1 1 220px; min-width: 0; }
@@ -229,6 +259,7 @@
         .actions a.primary { background: var(--accent); color: #fff; border-color: #c2410c; }
         .actions a.primary:hover { background: #c2410c; }
         .actions a.secondary { background: var(--accent2); color: #fff; border-color: #0c5b55; }
+        .secondary-panel { margin-top: 12px; }
         .footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
         .toast-wrap { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:9999; pointer-events:none; }
         .toast { background:#1f2937; color:#fff; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:600; opacity:0; transform:translateY(10px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; max-width:320px; }
@@ -238,7 +269,7 @@
         @media (max-width: 700px) {
             .wrap { padding: 12px 10px 18px; }
             h1 { font-size: 1.5rem; }
-            .cards { gap: 10px; }
+            .launch-grid { grid-template-columns: 1fr; gap: 10px; }
             .card { padding: 12px; }
             .topbar { flex-wrap: wrap; gap: 8px; }
             .brand-logo { width: 156px; height: 156px; }
@@ -258,8 +289,8 @@
             <div class="brand">Dexter Ops Portal</div>
         </div>
         <div class="nav">
-            <a class="nav-action nav-action-home" href="/portal" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
-            <a class="nav-action nav-action-admin" href="/admin"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
+            <a class="nav-action nav-action-home" href="{{ portal_root_url }}" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
+            <a class="nav-action nav-action-admin" href="{{ admin_root_url }}"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
             <button class="nav-action nav-action-back" type="button" onclick="goBack()"><span class="mini-ico">B</span><span class="nav-label">Back</span><span class="nav-short">BK</span></button>
         </div>
     </div>
@@ -271,6 +302,20 @@
     </div>
     <div class="wrap">
         <h1>Restaurant Management</h1>
+        <div class="launch-grid" aria-label="Primary applications">
+            <a class="launch-button" href="{{ manager_portal_url }}">
+                <span class="launch-button-title">Daily Operations</span>
+                <span class="launch-button-copy">Open daily logs, team workflows, and operational reporting.</span>
+            </a>
+            <a class="launch-button" href="{{ ic3_portal_url }}">
+                <span class="launch-button-title">Inventory Control</span>
+                <span class="launch-button-copy">Track inventory, invoices, and location-level usage.</span>
+            </a>
+            <a class="launch-button" href="{{ productmix_portal_url }}">
+                <span class="launch-button-title">Product Mix Database</span>
+                <span class="launch-button-copy">Review product mix uploads, production lists, and reports.</span>
+            </a>
+        </div>
         <div class="scope-grid">
             <div class="card">
                 <h2>Scope Controls</h2>
@@ -282,7 +327,7 @@
                 </div>
 
                 {% if role_name == 'Super Admin' %}
-                <form class="scope-row" method="post" action="/admin/company-scope">
+                <form class="scope-row" method="post" action="{{ company_scope_action_url }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="next_path" value="/portal">
                     <div class="field">
@@ -297,7 +342,7 @@
                 </form>
                 {% endif %}
 
-                <form class="scope-row" method="post" action="/admin/location-scope">
+                <form class="scope-row" method="post" action="{{ location_scope_action_url }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="next_path" value="/portal">
                     <div class="field">
@@ -312,47 +357,20 @@
                 </form>
                 <div class="scope-help">This updates context for ProductMix, IC3, and Daily Operations Log.</div>
             </div>
-
-            <div class="card">
-                <h2>Admin Controls</h2>
-                <p>Open additional admin pages directly from the launcher.</p>
-                <div class="admin-links">
-                    <a href="/admin/users">Users and Roles</a>
-                    <a href="/admin/tasks">Tasks</a>
-                    <a href="/admin/email">Email Setup</a>
-                    <a href="/admin/audit-logs">Audit Logs</a>
-                    <a href="/admin/company-profile">Company Profile</a>
-                    {% if role_name == 'Super Admin' %}
-                    <a href="/admin/companies">Companies</a>
-                    <a href="/admin/company-health">Company Health</a>
-                    {% endif %}
-                </div>
-            </div>
         </div>
-        <div class="cards">
-            <div class="card">
-                <h2>ProductMixRestaurantDB</h2>
-                <p>Upload and analyze product mixes, production lists, and report views.</p>
-                <div class="actions">
-                    <a class="primary" href="/portal/productmix">Open ProductMix</a>
-                    <a class="secondary" href="/app/productmix/" target="_blank" rel="noopener">Open Raw</a>
-                </div>
-            </div>
-            <div class="card">
-                <h2>Inventory Control 3</h2>
-                <p>Inventory tracking, invoice imports, and usage analytics for locations.</p>
-                <div class="actions">
-                    <a class="primary" href="/portal/ic3">Open IC3</a>
-                    <a class="secondary" href="/app/ic3/" target="_blank" rel="noopener">Open Raw</a>
-                </div>
-            </div>
-            <div class="card">
-                <h2>Daily Operations Log</h2>
-                <p>Manager workflows for daily logs, employees, and operational reports.</p>
-                <div class="actions">
-                    <a class="primary" href="/portal/managerapp">Open Daily Operations Log</a>
-                    <a class="secondary" href="/app/managerapp/" target="_blank" rel="noopener">Open Raw</a>
-                </div>
+        <div class="card secondary-panel">
+            <h2>Other Application Options</h2>
+            <p>Open supporting admin pages and configuration tools below the primary app launcher.</p>
+            <div class="admin-links">
+                <a href="{{ admin_users_url }}">Users and Roles</a>
+                <a href="{{ admin_tasks_url }}">Tasks</a>
+                <a href="{{ admin_email_url }}">Email Setup</a>
+                <a href="{{ admin_audit_logs_url }}">Audit Logs</a>
+                <a href="{{ admin_company_profile_url }}">Company Profile</a>
+                {% if role_name == 'Super Admin' %}
+                <a href="{{ admin_companies_url }}">Companies</a>
+                <a href="{{ admin_company_health_url }}">Company Health</a>
+                {% endif %}
             </div>
         </div>
         <div class="footer">Front door: {{ host }}:{{ port }}</div>
@@ -375,12 +393,12 @@
                 window.history.back();
                 return;
             }
-            window.location.href = '/portal';
+            window.location.href = '{{ portal_root_url }}';
         }
 
         function openDexterHub(evt) {
             if (evt && evt.preventDefault) evt.preventDefault();
-            var target = '/portal?hub=1&t=' + Date.now();
+            var target = '{{ portal_root_url }}?hub=1&t=' + Date.now();
             try {
                 if (window.top && window.top !== window) {
                     window.top.location.href = target;

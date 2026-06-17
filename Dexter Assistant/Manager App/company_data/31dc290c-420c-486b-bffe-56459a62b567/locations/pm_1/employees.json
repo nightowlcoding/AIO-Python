@@ -1,334 +1,473 @@
 {
   "employees": [
     {
-      "dateOfHire": "2025-11-20",
+      "id": 1781548224340.3518,
+      "firstName": "Kimora",
+      "lastName": "Adair",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0361,
       "firstName": "David",
-      "id": 1763625144381.0115,
-      "lastName": "Barraza"
+      "lastName": "Barraza",
+      "jobTitle": "Barback; Manager",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Abran",
-      "id": 1763625144381.6646,
-      "lastName": "Rosalez"
+      "id": 1781548224340.6787,
+      "firstName": "Thomas",
+      "lastName": "Benavidez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Marissa",
-      "id": 1763625144381.69,
-      "lastName": "Alvarez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Indira",
-      "id": 1763625144381.9373,
-      "lastName": "Garcia"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Felicity",
-      "id": 1763625144381.5435,
-      "lastName": "Alaniz"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Kristin",
-      "id": 1763625144381.2585,
-      "lastName": "Trevino"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Isabel",
-      "id": 1763625144381.429,
-      "lastName": "Garcia"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Dominique",
-      "id": 1763625144381.238,
-      "lastName": "Zamora"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Blaine",
-      "id": 1763625144381.2603,
-      "lastName": "Roberson"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Savannah",
-      "id": 1763625144381.9746,
-      "lastName": "Barrientes"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Mason",
-      "id": 1763625144381.1902,
-      "lastName": "Cantu"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Selena",
-      "id": 1763625144381.4585,
-      "lastName": "Cuellar"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Jesselle",
-      "id": 1763625144381.8462,
-      "lastName": "Dominguez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Bryan",
-      "id": 1763625144381.8196,
-      "lastName": "Garcia"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Selena",
-      "id": 1763625144381.7773,
-      "lastName": "Gomez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Hannah",
-      "id": 1763625144381.62,
-      "lastName": "Griffith"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Michaela",
-      "id": 1763625144381.0176,
-      "lastName": "Mireles"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Lainey",
-      "id": 1763625144381.7288,
-      "lastName": "Pickard"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Lariah",
-      "id": 1763625144381.4084,
-      "lastName": "Saenz"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Emileigh",
-      "id": 1763625144381.144,
-      "lastName": "Salinas"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Isabella",
-      "id": 1763625144381.97,
-      "lastName": "Salinas"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Karson",
-      "id": 1763625144381.8196,
-      "lastName": "Shepherd"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Nevaeh",
-      "id": 1763625144381.6565,
-      "lastName": "Solis"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Raelynn",
-      "id": 1763625144381.6282,
-      "lastName": "Utley"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Arnold",
-      "id": 1763625144381.4912,
-      "lastName": "Ramirez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Mia",
-      "id": 1763625144381.8696,
-      "lastName": "Alvarez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Elinnah",
-      "id": 1763625144381.3513,
-      "lastName": "Castro"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Olivia",
-      "id": 1763625144381.3625,
-      "lastName": "Moralez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Danielle",
-      "id": 1763625144381.8335,
-      "lastName": "Reyes"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Nevaeh",
-      "id": 1763625144381.5898,
-      "lastName": "Sherrell"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Abigail",
-      "id": 1763625144381.0076,
-      "lastName": "Alegria"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Katie",
-      "id": 1763625144381.1333,
-      "lastName": "Arnold"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Lauran",
-      "id": 1763625144381.8142,
-      "lastName": "Banda"
-    },
-    {
-      "dateOfHire": "2025-11-20",
+      "id": 1781548224340.418,
       "firstName": "Alexis",
-      "id": 1763625144381.4373,
-      "lastName": "Beltran"
+      "lastName": "Bratten",
+      "jobTitle": "Bartender; Catering; Host; Server",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Clarissa",
-      "id": 1763625144381.64,
-      "lastName": "Cantu"
+      "id": 1781548224340.8477,
+      "firstName": "Kristina",
+      "lastName": "Burgess",
+      "jobTitle": "Server; Training",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Gianna",
-      "id": 1763625144381.0835,
-      "lastName": "Cantu"
+      "id": 1781548224340.5808,
+      "firstName": "Francisco",
+      "lastName": "Cansino",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Victoria",
-      "id": 1763625144381.118,
-      "lastName": "Cavazos"
+      "id": 1781548224340.972,
+      "firstName": "David",
+      "lastName": "Cantu",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Elena",
-      "id": 1763625144381.8958,
-      "lastName": "Escudero"
+      "id": 1781548224340.38,
+      "firstName": "Jailyn",
+      "lastName": "Carabajal",
+      "jobTitle": "Bartender; Host; Server; Training",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Aliah",
-      "id": 1763625144381.9243,
-      "lastName": "Garcia"
+      "id": 1781548224340.8413,
+      "firstName": "Stephanie",
+      "lastName": "Chapa",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Alexa Rae",
-      "id": 1763625144381.097,
-      "lastName": "Garcia"
+      "id": 1781548224340.783,
+      "firstName": "Juan",
+      "lastName": "Chavez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Alyssa",
-      "id": 1763625144381.3496,
-      "lastName": "Garcia"
+      "id": 1781548224340.488,
+      "firstName": "Lori",
+      "lastName": "Chavez",
+      "jobTitle": "Server; Training",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Alejandro",
-      "id": 1763625144381.753,
-      "lastName": "Gonzalez"
+      "id": 1781548224340.1936,
+      "firstName": "Reana",
+      "lastName": "Cisneros",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Jada",
-      "id": 1763625144381.003,
-      "lastName": "Hayes"
+      "id": 1781548224340.5056,
+      "firstName": "Maria",
+      "lastName": "Cortez",
+      "jobTitle": "Bartender; Host; Server; Training",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Ananda",
-      "id": 1763625144381.7905,
-      "lastName": "Lopez"
+      "id": 1781548224340.739,
+      "firstName": "Carlos",
+      "lastName": "Cuellar",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Jason",
-      "id": 1763625144381.0645,
-      "lastName": "Martinez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Kiara",
-      "id": 1763625144381.888,
-      "lastName": "Mccoy"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Sarah",
-      "id": 1763625144381.4592,
-      "lastName": "Moralez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Pablo",
-      "id": 1763625144381.524,
-      "lastName": "Ochoa"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Isaac",
-      "id": 1763625144381.2092,
-      "lastName": "Pena"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Kassidy",
-      "id": 1763625144381.8242,
-      "lastName": "Pena"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Alexandra",
-      "id": 1763625144381.991,
-      "lastName": "Perez"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Noah",
-      "id": 1763625144381.9524,
-      "lastName": "Robledo"
-    },
-    {
-      "dateOfHire": "2025-11-20",
-      "firstName": "Julissa",
-      "id": 1763625144381.3027,
-      "lastName": "Robles"
-    },
-    {
-      "dateOfHire": "2025-11-20",
+      "id": 1781548224340.5464,
       "firstName": "Theresa",
-      "id": 1763625144381.821,
-      "lastName": "Salinas"
+      "lastName": "Cuellar",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
     },
     {
-      "dateOfHire": "2025-11-20",
-      "firstName": "First Name",
-      "id": 1763625144381.8027,
-      "lastName": "Last Name"
+      "id": 1781548224340.461,
+      "firstName": "Christopher",
+      "lastName": "Fernandez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.601,
+      "firstName": "Maximo",
+      "lastName": "Garcia",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.9812,
+      "firstName": "Meliton",
+      "lastName": "Garza",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.756,
+      "firstName": "Madison",
+      "lastName": "Hernandez",
+      "jobTitle": "Host; Server",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.4067,
+      "firstName": "Gage",
+      "lastName": "Himchak",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.2275,
+      "firstName": "Christopher",
+      "lastName": "Johnson",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.1306,
+      "firstName": "Alyssa",
+      "lastName": "Lazo",
+      "jobTitle": "Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5698,
+      "firstName": "David",
+      "lastName": "Mata",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.262,
+      "firstName": "Luis",
+      "lastName": "Mata",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.207,
+      "firstName": "Melanie",
+      "lastName": "Molina",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.989,
+      "firstName": "Jianna",
+      "lastName": "Munoz",
+      "jobTitle": "Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0361,
+      "firstName": "Default",
+      "lastName": "Online Ordering",
+      "jobTitle": "''",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.8604,
+      "firstName": "Juan",
+      "lastName": "Ordonez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0623,
+      "firstName": "Erika",
+      "lastName": "Ortiz",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.3098,
+      "firstName": "Rebecca",
+      "lastName": "Otero",
+      "jobTitle": "Bartender; Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.4424,
+      "firstName": "Mary Lou",
+      "lastName": "Otero-Munoz",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.4556,
+      "firstName": "Samantha",
+      "lastName": "Ozuna",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5479,
+      "firstName": "Melanie",
+      "lastName": "Padron",
+      "jobTitle": "Bartender; Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.3142,
+      "firstName": "Destiny",
+      "lastName": "Pena",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5356,
+      "firstName": "Devin",
+      "lastName": "Perez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.9788,
+      "firstName": "Luis",
+      "lastName": "Perez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5095,
+      "firstName": "Clint",
+      "lastName": "Pierce",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.1687,
+      "firstName": "Alysha",
+      "lastName": "Ramirez",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.486,
+      "firstName": "Arnold",
+      "lastName": "Ramirez",
+      "jobTitle": "General Manager",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.4385,
+      "firstName": "Emilio",
+      "lastName": "Ramirez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.057,
+      "firstName": "Breanna",
+      "lastName": "Ramos",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.8833,
+      "firstName": "Gabriel",
+      "lastName": "Ramos",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5981,
+      "firstName": "River",
+      "lastName": "Ramos",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5225,
+      "firstName": "Ryan",
+      "lastName": "Ramos",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0154,
+      "firstName": "Saleigh",
+      "lastName": "Ramos",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.6348,
+      "firstName": "Shelbie",
+      "lastName": "Ramos",
+      "jobTitle": "Bartender; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.2217,
+      "firstName": "Juan",
+      "lastName": "Rivera",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.4731,
+      "firstName": "Anisa",
+      "lastName": "Rocha",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.7524,
+      "firstName": "Regeana",
+      "lastName": "Rochester",
+      "jobTitle": "Bartender; Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.4001,
+      "firstName": "Abran",
+      "lastName": "Rosalez",
+      "jobTitle": "General Manager",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0593,
+      "firstName": "Angelina K",
+      "lastName": "Ruiz",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0608,
+      "firstName": "Noemi",
+      "lastName": "Ruiz",
+      "jobTitle": "Host; Server",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0815,
+      "firstName": "Milo",
+      "lastName": "Saenz",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.906,
+      "firstName": "Alexandra",
+      "lastName": "Salinas",
+      "jobTitle": "Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0261,
+      "firstName": "April",
+      "lastName": "Salinas",
+      "jobTitle": "Bartender; Manager; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5845,
+      "firstName": "Genoveva Ann",
+      "lastName": "Salinas",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.4468,
+      "firstName": "Johnathan",
+      "lastName": "Salinas",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.1355,
+      "firstName": "Joziah",
+      "lastName": "Sepulveda",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5986,
+      "firstName": "Alexis",
+      "lastName": "Silva",
+      "jobTitle": "Catering; Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.5066,
+      "firstName": "Corando",
+      "lastName": "Trevino Jr.",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.527,
+      "firstName": "Michael",
+      "lastName": "Vasquez",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.791,
+      "firstName": "Abigail",
+      "lastName": "Vidal",
+      "jobTitle": "Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.8596,
+      "firstName": "YSIDRO TITO",
+      "lastName": "VILLARREAL",
+      "jobTitle": "''",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.8892,
+      "firstName": "Alyssa",
+      "lastName": "Vinton",
+      "jobTitle": "Host; Server; Training",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.3955,
+      "firstName": "Joseph",
+      "lastName": "Zamarripa",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.181,
+      "firstName": "Dominique",
+      "lastName": "Zamora",
+      "jobTitle": "Server",
+      "dateOfHire": "2026-06-15"
+    },
+    {
+      "id": 1781548224340.0447,
+      "firstName": "David",
+      "lastName": "Zuniga",
+      "jobTitle": "Kitchen",
+      "dateOfHire": "2026-06-15"
     }
   ],
   "removedEmployees": []

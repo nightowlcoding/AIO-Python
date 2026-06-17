@@ -332,20 +332,20 @@ Product Number,Product Description,Product Brand,Product Package Size,Group Name
 8060766,"MIX, GRVY BRN CNTRY STYL",Unknown Brand,,Assigned Sub,No,3749580
 4574232,"FILM, PLST 18""X2000' RL CTTR",Unknown Brand,,Assigned Sub,No,4834081
 1205186,"LIME, 110 CT FRESH REF",Unknown Brand,,Assigned Sub,No,1049803
-3222809,"LINER, 33 GAL 33X39 BLK 1.5",Unknown Brand,,Unassigned,No,
-3242708,"MIX, GRVY BRN INST LOW SDM",Unknown Brand,,Unassigned,No,
-7333024,"TOMATO, RND 5X6 #1 GRD FRESH 1",Unknown Brand,,Unassigned,No,
-7310287,"BEEF, CUTLT SLCT RAW FZN",Unknown Brand,,Unassigned,No,
-4482843,"BEEF, STK CUBED CHO 1100 RAW",Unknown Brand,,Unassigned,No,
-3330388,"FORK, DNNR DOMN 18/0 S/S MW",Unknown Brand,,Unassigned,No,
-1036242,"STRAW, PAPR CKTL 5.75"" WHT BOX",Unknown Brand,,Unassigned,No,
-1058178,"BEEF, CHUKSHLDRCLODSLCT 114F2F",Unknown Brand,,Unassigned,No,
-1286798,"MIX, GRVY RST BEEF",Unknown Brand,,Unassigned,No,
-4004008,"MIX, GRVY BRN",Unknown Brand,,Unassigned,No,
-5326426,"LETTUCE, ICBRG CLND & TRIMD",Unknown Brand,,Unassigned,No,
-4395612,"SUGAR, WHT EX FINE CANE",Unknown Brand,,Unassigned,No,
-1005683,"SAUCE, WING GRLC PARM VGTRN",Unknown Brand,,Unassigned,No,
-1090633,"SAUCE, WING LMN PPR LIQ PLST",Unknown Brand,,Unassigned,No,
-1274039,"SAUCE, RANCH GRLC PRM CRSP GRD",Unknown Brand,,Unassigned,No,
-2367852,"POTATO, FF WDG 10 CUT BTRD",Unknown Brand,,Unassigned,No,
-3145237,"SAUCE, CHS QUESO BOIL IN BAG",Unknown Brand,,Unassigned,No,
+4482843,"BEEF, STK CUBED CHO 1100 RAW",Unknown Brand,,Cater Item,No,
+1036242,"STRAW, PAPR CKTL 5.75"" WHT BOX",Unknown Brand,,Cater Item,No,
+1058178,"BEEF, CHUKSHLDRCLODSLCT 114F2F",Unknown Brand,,Cater Item,No,
+1286798,"MIX, GRVY RST BEEF",Unknown Brand,,Cater Item,No,
+1005683,"SAUCE, WING GRLC PARM VGTRN",Unknown Brand,,Spices,No,
+1090633,"SAUCE, WING LMN PPR LIQ PLST",Unknown Brand,,Cater Item,No,
+1274039,"SAUCE, RANCH GRLC PRM CRSP GRD",Unknown Brand,,Spices,No,
+2367852,"POTATO, FF WDG 10 CUT BTRD",Unknown Brand,,Cater Item,No,
+3145237,"SAUCE, CHS QUESO BOIL IN BAG",Unknown Brand,,BHB Universal,No,
+3222809,"LINER, 33 GAL 33X39 BLK 1.5",Unknown Brand,,Assigned Sub,No,7826506
+3242708,"MIX, GRVY BRN INST LOW SDM",Unknown Brand,,Assigned Sub,No,3749580
+7333024,"TOMATO, RND 5X6 #1 GRD FRESH 1",Unknown Brand,,Assigned Sub,No,2331353
+7310287,"BEEF, CUTLT SLCT RAW FZN",Unknown Brand,,Assigned Sub,No,5314208
+4395612,"SUGAR, WHT EX FINE CANE",Unknown Brand,,Assigned Sub,No,8383283
+5326426,"LETTUCE, ICBRG CLND & TRIMD",Unknown Brand,,Assigned Sub,No,2326411
+4004008,"MIX, GRVY BRN",Unknown Brand,,Assigned Sub,No,3749580
+3330388,"FORK, DNNR DOMN 18/0 S/S MW",Unknown Brand,,Assigned Sub,No,2330652

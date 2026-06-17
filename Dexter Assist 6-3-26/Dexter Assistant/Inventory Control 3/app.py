@@ -318,7 +318,7 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
     }
 
     const observer = new MutationObserver(function () {
-        if (!document.getElementById('ic3ProductMixSyncPanel')) {
+        if (!window.__ic3TouchActive && !document.getElementById('ic3ProductMixSyncPanel')) {
             install();
         }
     });
@@ -575,6 +575,7 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
     }
 
     const observer = new MutationObserver(function () {
+        if (window.__ic3TouchActive) return;
         scheduleRefresh();
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -1564,6 +1565,7 @@ OVERRIDE_SCRIPT = r"""
     };
 
     const observer = new MutationObserver(() => {
+        if (window.__ic3TouchActive) return;
         scheduleIc3UiRefresh();
     });
 
@@ -2204,6 +2206,7 @@ PRODUCT_DETAIL_SCRIPT = r"""
     };
 
     const observer = new MutationObserver(() => {
+        if (window.__ic3TouchActive) return;
         scheduleProductDetailRefresh();
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -2217,6 +2220,21 @@ MOBILE_UI_SCRIPT = r"""
     if (window.__ic3MobileUiInstalled) return;
     window.__ic3MobileUiInstalled = true;
 
+    /* ---- Touch-lock: installed here because head injection is unreliable ---- */
+    if (!window.__ic3TouchLockInstalled) {
+        window.__ic3TouchLockInstalled = true;
+        window.__ic3TouchActive = false;
+        document.addEventListener('touchstart', function () {
+            window.__ic3TouchActive = true;
+        }, { passive: true, capture: true });
+        document.addEventListener('touchend', function () {
+            setTimeout(function () { window.__ic3TouchActive = false; }, 500);
+        }, { passive: true, capture: true });
+        document.addEventListener('touchcancel', function () {
+            window.__ic3TouchActive = false;
+        }, { passive: true, capture: true });
+    }
+
     const styleId = 'ic3-mobile-enhancement-style';
     if (document.getElementById(styleId)) {
         return;
@@ -2226,9 +2244,16 @@ MOBILE_UI_SCRIPT = r"""
     style.id = styleId;
     style.type = 'text/css';
     style.textContent = [
+        /* Fix 300ms tap delay on all interactive elements */
+        'a, button, input, select, textarea, label, [role="button"] { touch-action: manipulation; }',
         '.tabs { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }',
-        '.tab { flex-shrink: 0 !important; font-size: 0.82rem !important; padding: 12px 10px !important; }',
+        '.tab { flex-shrink: 0 !important; font-size: 0.82rem !important; padding: 12px 10px !important; touch-action: manipulation; }',
         '.tab img, .tab .tab-icon { width: 16px !important; height: 16px !important; }',
+        '.btn { touch-action: manipulation; }',
+        '.quantity-input { touch-action: manipulation; }',
+        '.location-option { touch-action: manipulation; }',
+        '.ic3-mobile-controls button, .ic3-mobile-controls input { touch-action: manipulation; }',
+        '#ic3MobileViewToggle button { touch-action: manipulation; }',
         '@media (max-width: 768px) {',
         '  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }',
         '  body { font-size: 16px !important; line-height: 1.45; }',
@@ -2239,10 +2264,13 @@ MOBILE_UI_SCRIPT = r"""
         '  .tabs { display: flex !important; overflow-x: auto !important; scroll-snap-type: x mandatory; }',
         '  .tab { flex: 0 0 auto !important; min-width: 130px !important; padding: 14px 14px !important; font-size: 1rem !important; line-height: 1.2 !important; scroll-snap-align: start; }',
         '  .tab-content { padding: 14px !important; }',
-        '  .location-selector, .date-selector { display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; align-items: stretch !important; }',
-        '  .location-option { min-height: 52px; padding: 10px 12px !important; }',
-        '  .location-option label { font-size: 1rem !important; }',
-        '  .location-option input[type="radio"] { width: 20px; height: 20px; }',
+        /* Hide unselected location options on mobile — only show the active one, same as desktop */
+        '  .location-selector { display: block !important; }',
+        '  .location-option { display: none !important; }',
+        '  .location-option:has(input[type="radio"]:checked) { display: flex !important; min-height: 44px; padding: 8px 12px !important; border: 2px solid #667eea; border-radius: 8px; pointer-events: none; cursor: default; }',
+        '  .location-option:has(input[type="radio"]:checked) input[type="radio"] { display: none; }',
+        '  .location-option:has(input[type="radio"]:checked) label { font-size: 1rem !important; font-weight: 700; color: #667eea; cursor: default; }',
+        '  .date-selector { display: grid !important; grid-template-columns: 1fr !important; gap: 10px !important; align-items: stretch !important; }',
         '  .date-selector label { font-size: 1rem !important; font-weight: 600; }',
         '  .date-selector input, .date-selector button, .date-selector .btn { width: 100% !important; min-height: 46px !important; font-size: 1rem !important; }',
         '  .inventory-controls-panel { grid-template-columns: 1fr !important; gap: 10px !important; padding: 12px !important; }',
@@ -2285,11 +2313,35 @@ MOBILE_UI_SCRIPT = r"""
     const head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
     head.appendChild(style);
 
+    /* ---- JS-based location hiding for mobile (replaces :has() CSS which fails on old Android/iOS) ---- */
+    function applyMobileLocationHiding() {
+        const mq = window.matchMedia('(max-width: 768px)');
+        if (!mq.matches) return;
+        const options = Array.from(document.querySelectorAll('.location-option'));
+        if (!options.length) return;
+        options.forEach(function (opt) {
+            const radio = opt.querySelector('input[type="radio"]');
+            if (!radio) return;
+            if (radio.checked) {
+                opt.style.display = 'flex';
+                opt.style.border = '2px solid #667eea';
+                opt.style.borderRadius = '8px';
+                opt.style.pointerEvents = 'none';
+                opt.style.cursor = 'default';
+                if (radio) radio.style.display = 'none';
+            } else {
+                opt.style.display = 'none';
+            }
+        });
+    }
+
     const mobileQuery = window.matchMedia('(max-width: 768px)');
     const storageKey = 'ic3-mobile-view-mode';
     const state = {
         mode: localStorage.getItem(storageKey) === 'table' ? 'table' : 'cards',
         scheduled: false,
+        refreshPendingAfterEdit: false,
+        observer: null,
     };
 
     function isMobile() {
@@ -2427,11 +2479,18 @@ MOBILE_UI_SCRIPT = r"""
             cardQty.setAttribute('inputmode', 'decimal');
             cardQty.addEventListener('input', function () {
                 data.qtyInput.value = cardQty.value;
-                data.qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
             });
             cardQty.addEventListener('change', function () {
                 data.qtyInput.value = cardQty.value;
                 data.qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            cardQty.addEventListener('blur', function () {
+                data.qtyInput.value = cardQty.value;
+                data.qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+                if (state.refreshPendingAfterEdit) {
+                    state.refreshPendingAfterEdit = false;
+                    scheduleRefresh();
+                }
             });
 
             controls.appendChild(cardQty);
@@ -2477,21 +2536,41 @@ MOBILE_UI_SCRIPT = r"""
         }
 
         hosts.toggle.style.display = 'grid';
+        /* Disconnect the observer while rebuilding cards so our own DOM
+           writes do not re-trigger the MutationObserver, which would
+           cause a rapid loop that swallows tap events. */
+        if (state.observer) { state.observer.disconnect(); }
         renderCards();
+        if (state.observer) {
+            state.observer.observe(document.body, { childList: true, subtree: false });
+        }
         const showCards = state.mode === 'cards';
         hosts.cards.classList.toggle('cards-visible', showCards);
         hosts.categories.classList.toggle('ic3-table-hidden-mobile', showCards);
     }
 
     function scheduleRefresh() {
+        const active = document.activeElement;
+        if (
+            active &&
+            active.tagName === 'INPUT' &&
+            active.closest &&
+            active.closest('#ic3MobileCards')
+        ) {
+            state.refreshPendingAfterEdit = true;
+            return;
+        }
+
         if (state.scheduled) {
             return;
         }
         state.scheduled = true;
-        window.requestAnimationFrame(function () {
+        /* Use 350ms timeout instead of rAF so card rebuilds never happen
+           during the same frame as a tap gesture. */
+        window.setTimeout(function () {
             state.scheduled = false;
             applyMode();
-        });
+        }, 350);
     }
 
     function installRefreshHooks() {
@@ -2507,10 +2586,16 @@ MOBILE_UI_SCRIPT = r"""
         });
 
         if (!document.body.dataset.ic3MobileObserverInstalled) {
+            /* Only watch direct children of body for major layout changes
+               (e.g. IC3 loading inventory data). subtree:false prevents
+               the self-loop where our own renderCards() triggers the observer.
+               Also skip entirely when a touch is active so taps always land. */
             const observer = new MutationObserver(function () {
+                if (window.__ic3TouchActive) return;
                 scheduleRefresh();
             });
-            observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+            observer.observe(document.body, { childList: true, subtree: false });
+            state.observer = observer;
             document.body.dataset.ic3MobileObserverInstalled = '1';
         }
     }
@@ -2537,6 +2622,7 @@ MOBILE_UI_SCRIPT = r"""
         defaultShowEditButtonsOff();
         installRefreshHooks();
         applyMode();
+        applyMobileLocationHiding();
     };
 
     if (document.readyState === 'loading') {
@@ -2545,12 +2631,313 @@ MOBILE_UI_SCRIPT = r"""
         runInstall();
     }
 
-    // Mobile smoke checklist:
-    // 1) Tabs readable + horizontally scrollable.
-    // 2) Location/date/search/sort controls are tap-friendly.
-    // 3) Card/Table toggle works and quantity edits stay in sync.
-    // 4) Quantity inputs and save/load buttons are easy to tap.
-    // 5) Desktop layout remains unchanged above 768px.
+    /* Re-apply location hiding whenever the location list is rebuilt by the sync script */
+    const _locHideObserver = new MutationObserver(function () {
+        if (window.__ic3TouchActive) return;
+        applyMobileLocationHiding();
+    });
+    _locHideObserver.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+"""
+
+PRODUCT_ACTIVITY_ENHANCEMENT_SCRIPT = r"""
+<script>
+(function () {
+    if (window.__ic3ProductActivityEnhancementInstalled) return;
+    window.__ic3ProductActivityEnhancementInstalled = true;
+
+    const ORDER_STORAGE_KEY = 'ic3-product-activity-order-mode';
+    const VIEW_STORAGE_KEY = 'ic3-product-activity-view-mode';
+
+    function parseNumber(value) {
+        const cleaned = String(value || '').replace(/[^0-9.\-]/g, '');
+        const num = Number(cleaned);
+        return Number.isFinite(num) ? num : 0;
+    }
+
+    function addStyles() {
+        const styleId = 'ic3-product-activity-enhancement-style';
+        if (document.getElementById(styleId)) return;
+
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = [
+            '#reportContent { overflow-x: auto; }',
+            '#reportContent table { width: 100%; border-collapse: collapse; }',
+            '#reportContent table th, #reportContent table td { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; word-break: break-word !important; line-height: 1.3; }',
+            '#reportContent table th { font-size: 12px !important; font-weight: 700; }',
+            '#reportContent table td { font-size: 12px !important; }',
+            '#reportContent table th:nth-child(n+10), #reportContent table td:nth-child(n+10) { min-width: 118px; }',
+            '#reportContent .ic3-report-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 10px 0 12px; padding: 10px; border: 1px solid #dbe3ef; border-radius: 10px; background: #f8fbff; }',
+            '#reportContent .ic3-report-toolbar .ic3-field { display: flex; flex-direction: column; min-width: 210px; gap: 4px; }',
+            '#reportContent .ic3-report-toolbar label { font-size: 12px; color: #334155; font-weight: 700; }',
+            '#reportContent .ic3-report-toolbar select { min-height: 38px; border-radius: 8px; border: 1px solid #c7d4e7; padding: 7px 10px; font-size: 14px; background: #fff; color: #0f172a; }',
+            '#reportContent.ic3-summary-mode table th:nth-child(n+10), #reportContent.ic3-summary-mode table td:nth-child(n+10) { display: none; }',
+            '#reportContent.ic3-summary-mode table th, #reportContent.ic3-summary-mode table td { font-size: 12px; padding: 6px 8px; }',
+            '#reportContent.ic3-cards-mode table { display: none !important; }',
+            '#reportContent .ic3-report-cards { display: none; margin-top: 8px; gap: 10px; }',
+            '#reportContent.ic3-cards-mode .ic3-report-cards { display: grid; grid-template-columns: 1fr; }',
+            '#reportContent .ic3-report-card { border: 1px solid #dbe3ef; border-radius: 12px; padding: 10px; background: #ffffff; box-shadow: 0 1px 6px rgba(15,23,42,0.06); }',
+            '#reportContent .ic3-report-card .title { font-weight: 800; color: #0f172a; font-size: 14px; line-height: 1.25; margin-bottom: 6px; }',
+            '#reportContent .ic3-report-card .meta { font-size: 12px; color: #475569; margin-bottom: 6px; }',
+            '#reportContent .ic3-report-card .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }',
+            '#reportContent .ic3-report-card .stat { border: 1px solid #e5eaf3; border-radius: 8px; padding: 6px; background: #f8fafc; }',
+            '#reportContent .ic3-report-card .stat .k { font-size: 11px; color: #64748b; }',
+            '#reportContent .ic3-report-card .stat .v { font-size: 13px; color: #0f172a; font-weight: 700; }',
+            '@media (max-width: 900px) {',
+            '  #reportContent .ic3-report-toolbar { display: grid; grid-template-columns: 1fr; padding: 10px; }',
+            '  #reportContent .ic3-report-toolbar .ic3-field { min-width: 0; }',
+            '  #reportContent table th, #reportContent table td { font-size: 11px; padding: 5px 6px; }',
+            '}',
+            '@media (max-width: 768px) {',
+            '  #reportContent { margin-top: 6px; }',
+            '  #reportContent .ic3-report-toolbar select { min-height: 44px; font-size: 16px; }',
+            '  #reportContent table th, #reportContent table td { font-size: 13px !important; }',
+            '  #reportContent.ic3-summary-mode table th:nth-child(3), #reportContent.ic3-summary-mode table td:nth-child(3), #reportContent.ic3-summary-mode table th:nth-child(4), #reportContent.ic3-summary-mode table td:nth-child(4) { display: none; }',
+            '}',
+        ].join('\n');
+
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function buildInventoryOrderMap() {
+        const map = new Map();
+        const qtyInputs = Array.from(document.querySelectorAll('#categoriesContainer input.quantity-input[id^="qty_"]'));
+        qtyInputs.forEach((input, idx) => {
+            const key = String(input.id || '').replace(/^qty_/, '').trim();
+            if (key && !map.has(key)) {
+                map.set(key, idx);
+            }
+        });
+        return map;
+    }
+
+    function getReportTable() {
+        const reportContent = document.getElementById('reportContent');
+        if (!reportContent) return null;
+        const table = reportContent.querySelector('table');
+        if (!(table instanceof HTMLTableElement)) return null;
+        return table;
+    }
+
+    function getColumnIndexes(table) {
+        const headers = Array.from(table.querySelectorAll('thead th'));
+        const idx = {
+            product: 0,
+            description: 1,
+            beginInv: 4,
+            totalOrders: 5,
+            endInv: 6,
+            usage: 7,
+            casesRequired: 8,
+        };
+
+        headers.forEach((th, i) => {
+            const text = (th.textContent || '').trim().toLowerCase();
+            if (text.includes('product')) idx.product = i;
+            if (text.includes('description')) idx.description = i;
+            if (text.includes('begin inv')) idx.beginInv = i;
+            if (text.includes('total orders')) idx.totalOrders = i;
+            if (text.includes('end inv')) idx.endInv = i;
+            if (text === 'usage' || text.includes('usage')) idx.usage = i;
+            if (text.includes('cases required')) idx.casesRequired = i;
+        });
+
+        return idx;
+    }
+
+    function extractRows(table, idx) {
+        const body = table.tBodies && table.tBodies.length ? table.tBodies[0] : null;
+        if (!body) return [];
+        const rows = Array.from(body.rows || []);
+
+        return rows.map((row, originalIndex) => {
+            const cells = row.cells || [];
+            const product = (cells[idx.product] ? cells[idx.product].innerText : '').trim();
+            const description = (cells[idx.description] ? cells[idx.description].innerText : '').trim();
+            const usage = parseNumber(cells[idx.usage] ? cells[idx.usage].innerText : '0');
+            return { row, originalIndex, product, description, usage };
+        });
+    }
+
+    function sortRows(rows, mode, inventoryOrder) {
+        const sorted = rows.slice();
+        sorted.sort((a, b) => {
+            if (mode === 'inventory') {
+                const ai = inventoryOrder.has(a.product) ? inventoryOrder.get(a.product) : Number.MAX_SAFE_INTEGER;
+                const bi = inventoryOrder.has(b.product) ? inventoryOrder.get(b.product) : Number.MAX_SAFE_INTEGER;
+                if (ai !== bi) return ai - bi;
+                return a.originalIndex - b.originalIndex;
+            }
+            if (mode === 'usage-desc') {
+                if (b.usage !== a.usage) return b.usage - a.usage;
+                return a.originalIndex - b.originalIndex;
+            }
+            if (mode === 'usage-asc') {
+                if (a.usage !== b.usage) return a.usage - b.usage;
+                return a.originalIndex - b.originalIndex;
+            }
+            if (mode === 'product') {
+                return a.product.localeCompare(b.product, undefined, { numeric: true, sensitivity: 'base' });
+            }
+            if (mode === 'description') {
+                return a.description.localeCompare(b.description, undefined, { sensitivity: 'base' });
+            }
+            return a.originalIndex - b.originalIndex;
+        });
+        return sorted;
+    }
+
+    function applySortedRows(table, sortedRows) {
+        const body = table.tBodies && table.tBodies.length ? table.tBodies[0] : null;
+        if (!body) return;
+        const frag = document.createDocumentFragment();
+        sortedRows.forEach((entry) => frag.appendChild(entry.row));
+        body.appendChild(frag);
+    }
+
+    function upsertCards(reportContent, rows, idx) {
+        let cards = reportContent.querySelector('.ic3-report-cards');
+        if (!cards) {
+            cards = document.createElement('div');
+            cards.className = 'ic3-report-cards';
+            reportContent.appendChild(cards);
+        }
+
+        cards.innerHTML = '';
+        rows.forEach((entry) => {
+            const cells = entry.row.cells || [];
+            const product = cells[idx.product] ? cells[idx.product].innerText.trim() : '';
+            const description = cells[idx.description] ? cells[idx.description].innerText.trim() : '';
+            const beginInv = cells[idx.beginInv] ? cells[idx.beginInv].innerText.trim() : '-';
+            const totalOrders = cells[idx.totalOrders] ? cells[idx.totalOrders].innerText.trim() : '-';
+            const endInv = cells[idx.endInv] ? cells[idx.endInv].innerText.trim() : '-';
+            const usage = cells[idx.usage] ? cells[idx.usage].innerText.trim() : '-';
+            const cases = cells[idx.casesRequired] ? cells[idx.casesRequired].innerText.trim() : '-';
+
+            const card = document.createElement('article');
+            card.className = 'ic3-report-card';
+            card.innerHTML = [
+                '<div class="title">' + description.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>',
+                '<div class="meta">Product #: <strong>' + product.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</strong></div>',
+                '<div class="stats">',
+                '<div class="stat"><div class="k">Begin Inv</div><div class="v">' + beginInv + '</div></div>',
+                '<div class="stat"><div class="k">Total Orders</div><div class="v">' + totalOrders + '</div></div>',
+                '<div class="stat"><div class="k">End Inv</div><div class="v">' + endInv + '</div></div>',
+                '<div class="stat"><div class="k">Usage</div><div class="v">' + usage + '</div></div>',
+                '<div class="stat"><div class="k">Cases Required</div><div class="v">' + cases + '</div></div>',
+                '</div>'
+            ].join('');
+            cards.appendChild(card);
+        });
+    }
+
+    function ensureToolbar(reportContent, applyCallback) {
+        let toolbar = reportContent.querySelector('.ic3-report-toolbar');
+        if (!toolbar) {
+            toolbar = document.createElement('div');
+            toolbar.className = 'ic3-report-toolbar';
+            toolbar.innerHTML = [
+                '<div class="ic3-field">',
+                '  <label for="ic3ReportOrderMode">Product Order</label>',
+                '  <select id="ic3ReportOrderMode">',
+                '    <option value="inventory">Product List Order (Default)</option>',
+                '    <option value="usage-desc">Usage High to Low</option>',
+                '    <option value="usage-asc">Usage Low to High</option>',
+                '    <option value="product">Product Number</option>',
+                '    <option value="description">Description A to Z</option>',
+                '  </select>',
+                '</div>',
+                '<div class="ic3-field">',
+                '  <label for="ic3ReportViewMode">View Mode</label>',
+                '  <select id="ic3ReportViewMode">',
+                '    <option value="full">Full Table</option>',
+                '    <option value="summary">Summary Table</option>',
+                '    <option value="cards">Mobile Cards</option>',
+                '  </select>',
+                '</div>'
+            ].join('');
+            reportContent.insertBefore(toolbar, reportContent.firstChild || null);
+        }
+
+        const orderSelect = toolbar.querySelector('#ic3ReportOrderMode');
+        const viewSelect = toolbar.querySelector('#ic3ReportViewMode');
+        if (!(orderSelect instanceof HTMLSelectElement) || !(viewSelect instanceof HTMLSelectElement)) return;
+
+        if (!orderSelect.dataset.ic3Bound) {
+            orderSelect.dataset.ic3Bound = '1';
+            orderSelect.value = localStorage.getItem(ORDER_STORAGE_KEY) || 'inventory';
+            orderSelect.addEventListener('change', function () {
+                localStorage.setItem(ORDER_STORAGE_KEY, orderSelect.value);
+                applyCallback();
+            });
+        }
+
+        if (!viewSelect.dataset.ic3Bound) {
+            viewSelect.dataset.ic3Bound = '1';
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+            viewSelect.value = saved || (isMobile ? 'summary' : 'full');
+            viewSelect.addEventListener('change', function () {
+                localStorage.setItem(VIEW_STORAGE_KEY, viewSelect.value);
+                applyCallback();
+            });
+        }
+    }
+
+    function applyViewMode(reportContent, mode) {
+        reportContent.classList.toggle('ic3-summary-mode', mode === 'summary');
+        reportContent.classList.toggle('ic3-cards-mode', mode === 'cards');
+    }
+
+    function enhanceProductActivityReport() {
+        const reportContent = document.getElementById('reportContent');
+        const table = getReportTable();
+        if (!reportContent || !table) return;
+
+        const inventoryOrder = buildInventoryOrderMap();
+        const idx = getColumnIndexes(table);
+
+        const applyAll = function () {
+            const orderSelect = reportContent.querySelector('#ic3ReportOrderMode');
+            const viewSelect = reportContent.querySelector('#ic3ReportViewMode');
+            const orderMode = (orderSelect && orderSelect.value) ? orderSelect.value : 'inventory';
+            const viewMode = (viewSelect && viewSelect.value) ? viewSelect.value : 'full';
+
+            const rows = extractRows(table, idx);
+            const sorted = sortRows(rows, orderMode, inventoryOrder);
+            applySortedRows(table, sorted);
+            upsertCards(reportContent, sorted, idx);
+            applyViewMode(reportContent, viewMode);
+        };
+
+        ensureToolbar(reportContent, applyAll);
+        applyAll();
+    }
+
+    let scheduled = false;
+    function scheduleEnhance() {
+        if (scheduled) return;
+        scheduled = true;
+        window.setTimeout(function () {
+            scheduled = false;
+            enhanceProductActivityReport();
+        }, 80);
+    }
+
+    addStyles();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scheduleEnhance);
+    } else {
+        scheduleEnhance();
+    }
+
+    const observer = new MutationObserver(function () {
+        if (window.__ic3TouchActive) return;
+        scheduleEnhance();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
 """
@@ -2613,6 +3000,9 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
 
     if "__ic3MobileUiInstalled" not in updated and "</body>" in updated:
         updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
+
+    if "__ic3ProductActivityEnhancementInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", PRODUCT_ACTIVITY_ENHANCEMENT_SCRIPT + "\n</body>", 1)
 
     if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
         updated = updated.replace(
@@ -3768,6 +4158,9 @@ def _patch_bulk_upload_limit_runtime() -> None:
         if "__ic3MobileUiInstalled" not in updated and "</body>" in updated:
             updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
 
+        if "__ic3ProductActivityEnhancementInstalled" not in updated and "</body>" in updated:
+            updated = updated.replace("</body>", PRODUCT_ACTIVITY_ENHANCEMENT_SCRIPT + "\n</body>", 1)
+
         if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
             updated = updated.replace(
                 "</body>",
@@ -3886,6 +4279,21 @@ def _install_dexter_ui_patch() -> None:
         # Mark the document as embedded BEFORE body paints so the redundant
         # in-app hero header is hidden by components.css without a flash.
         '<script>try{if(window.top!==window.self){document.documentElement.classList.add("dx-embedded");}}catch(e){document.documentElement.classList.add("dx-embedded");}</script>'
+        # Touch-lock: block all MutationObserver-driven rebuilds while a finger is on screen.
+        # This is the single most important fix for "buttons need multiple taps" on mobile.
+        '<script>'
+        '(function(){'
+        'window.__ic3TouchActive=false;'
+        'document.addEventListener("touchstart",function(){window.__ic3TouchActive=true;},{passive:true,capture:true});'
+        'document.addEventListener("touchend",function(){setTimeout(function(){window.__ic3TouchActive=false;},400);},{passive:true,capture:true});'
+        'document.addEventListener("touchcancel",function(){window.__ic3TouchActive=false;},{passive:true,capture:true});'
+        '})();'
+        '</script>'
+        # Global touch-action: manipulation on all interactive elements — eliminates 300ms tap delay.
+        '<style>'
+        '*,*::before,*::after{-webkit-tap-highlight-color:rgba(0,0,0,0);}'
+        'a,button,input,select,textarea,label,[role="button"],[onclick]{touch-action:manipulation;}'
+        '</style>'
         '<link rel="icon" type="image/x-icon" href="/dexter-ui/brand/favicon.ico">'
         '<link rel="icon" type="image/png" sizes="32x32" href="/dexter-ui/brand/favicon-32.png">'
         '<link rel="apple-touch-icon" sizes="180x180" href="/dexter-ui/brand/apple-touch-icon.png">'
@@ -3906,12 +4314,8 @@ def _install_dexter_ui_patch() -> None:
         ".table thead{background:var(--dx-surface-2)!important;color:var(--dx-text-muted)!important;}"
         ".form-control,.form-select{background:var(--dx-surface)!important;color:var(--dx-text)!important;border-color:var(--dx-border-soft)!important;}"
         ".form-control:focus,.form-select:focus{box-shadow:var(--dx-ring)!important;border-color:var(--dx-primary)!important;}"
-        "table{width:100%!important;table-layout:fixed!important;font-size:11.5px!important;}"
-        "table th,table td{padding:4px 6px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;vertical-align:middle!important;}"
-        "table th:nth-child(1),table td:nth-child(1){width:8%!important;}"
-        "table th:nth-child(2),table td:nth-child(2){width:22%!important;}"
-        "table th:nth-child(3),table td:nth-child(3){width:15%!important;}"
-        "table th:nth-child(4),table td:nth-child(4){width:10%!important;}"
+        ".tab-content table{width:100%!important;table-layout:auto!important;font-size:13px!important;}"
+        ".tab-content table th,.tab-content table td{padding:8px 10px!important;overflow:visible!important;text-overflow:clip!important;white-space:normal!important;word-break:break-word!important;vertical-align:top!important;}"
         # Product Activity report: reduce wide sticky columns and fix sticky left offsets.
         # Widths: Product#=120px, Description=180px, Brand=120px, PackageSize=90px.
         # min-width:0!important overrides the compiled inline min-width (300/220/160px).

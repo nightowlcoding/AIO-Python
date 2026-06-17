@@ -27,7 +27,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import urlopen
 
 import requests
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, Response, g, jsonify, make_response, redirect, render_template, request, send_file, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
@@ -43,6 +43,7 @@ AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
 RBAC_DB_PATH = ROOT / "dexter_assistant_rbac.db"
 COMPANY_STORAGE_ROOT = ROOT.parent / "company_data"
 SESSION_USER_KEY = "dexter_user"
+TENANT_SESSION_KEY = "tenant_slug"
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
 MAX_COMPANY_LOGO_BYTES = 2 * 1024 * 1024
@@ -709,6 +710,25 @@ def _set_session_company_context(company_id: int | None, company_name: str | Non
         user["company_name"] = str(company_name)
     session[SESSION_USER_KEY] = user
     session.modified = True
+
+
+def _get_company_by_slug(company_slug: str, require_active: bool = False) -> sqlite3.Row | None:
+    cleaned_slug = str(company_slug or "").strip().lower()
+    if not cleaned_slug:
+        return None
+    conn = get_rbac_db_connection()
+    try:
+        if require_active:
+            return conn.execute(
+                "SELECT id, name, slug, is_active FROM companies WHERE LOWER(slug) = LOWER(?) AND is_active = 1 LIMIT 1",
+                (cleaned_slug,),
+            ).fetchone()
+        return conn.execute(
+            "SELECT id, name, slug, is_active FROM companies WHERE LOWER(slug) = LOWER(?) LIMIT 1",
+            (cleaned_slug,),
+        ).fetchone()
+    finally:
+        conn.close()
 
 def _get_company_by_id(company_id: int, require_active: bool = False) -> sqlite3.Row | None:
     conn = get_rbac_db_connection()
@@ -2136,6 +2156,15 @@ def _mail_settings() -> dict[str, Any]:
     mail_cfg = CONFIG.get("mail", {}) if isinstance(CONFIG.get("mail", {}), dict) else {}
     username_env = str(mail_cfg.get("username_env") or "DEXTER_SMTP_USERNAME").strip() or "DEXTER_SMTP_USERNAME"
     password_env = str(mail_cfg.get("password_env") or "DEXTER_SMTP_PASSWORD").strip() or "DEXTER_SMTP_PASSWORD"
+    configured_username = str(mail_cfg.get("smtp_username") or mail_cfg.get("username") or "").strip()
+
+    username_from_primary_env = _env_text(username_env)
+    username_from_default_env = _env_text("DEXTER_SMTP_USERNAME")
+    resolved_username = username_from_primary_env or username_from_default_env or configured_username
+
+    password_from_primary_env = _env_text(password_env)
+    password_from_default_env = _env_text("DEXTER_SMTP_PASSWORD")
+    resolved_password = password_from_primary_env or password_from_default_env
 
     smtp_port_raw = _env_text("DEXTER_SMTP_PORT", str(mail_cfg.get("smtp_port") or "587"))
     try:
@@ -2156,8 +2185,10 @@ def _mail_settings() -> dict[str, Any]:
         "use_starttls": use_starttls,
         "username_env": username_env,
         "password_env": password_env,
-        "username": _env_text(username_env),
-        "password": _env_text(password_env),
+        "username": resolved_username,
+        "password": resolved_password,
+        "username_source": "env" if (username_from_primary_env or username_from_default_env) else ("config" if configured_username else "missing"),
+        "password_source": "env" if resolved_password else "missing",
         "from_email": _env_text("DEXTER_MAIL_FROM_EMAIL", str(mail_cfg.get("from_email") or "admin@dexterassist.com")),
         "from_name": _env_text("DEXTER_MAIL_FROM_NAME", str(mail_cfg.get("from_name") or "Dexter Assist")),
         "reply_to": _env_text("DEXTER_MAIL_REPLY_TO", str(mail_cfg.get("reply_to") or "admin@dexterassist.com")),
@@ -2174,7 +2205,10 @@ def _mail_delivery_status() -> dict[str, Any]:
     if not settings["from_email"] or not _is_email_like(settings["from_email"]):
         problems.append("From email is missing or invalid.")
     if not settings["username"]:
-        problems.append(f"SMTP username env var {settings['username_env']} is empty.")
+        problems.append(
+            f"SMTP username is empty. Set env var {settings['username_env']} (or DEXTER_SMTP_USERNAME), "
+            "or set mail.smtp_username in dexter_assistant_config.json."
+        )
     if not settings["password"]:
         problems.append(f"SMTP password env var {settings['password_env']} is empty.")
     return {
@@ -2542,13 +2576,59 @@ def get_next_path(default_path: str = "/portal/managerapp") -> str:
     return next_path
 
 def default_post_login_path() -> str:
-    return "/portal/managerapp"
+    return tenant_scoped_path("/portal/managerapp")
 
 def default_company_switch_path() -> str:
-    return "/portal/managerapp?company_switched=1"
+    return tenant_scoped_path("/portal/managerapp?company_switched=1")
 
 def default_location_switch_path() -> str:
-    return "/portal/managerapp?location_switched=1"
+    return tenant_scoped_path("/portal/managerapp?location_switched=1")
+
+
+def tenant_path_mode_enabled() -> bool:
+    return _env_flag("DEXTER_TENANT_PATH_MODE", default=False)
+
+
+def _tenant_base_domain() -> str:
+    return _env_text("DEXTER_TENANT_BASE_DOMAIN", "app.dexterassist.com").lower()
+
+
+def _tenant_slug_from_host(hostname: str) -> str:
+    host_only = str(hostname or "").split(":", 1)[0].strip().lower()
+    base_domain = _tenant_base_domain()
+    if not host_only or not base_domain:
+        return ""
+    if host_only == base_domain:
+        return ""
+    suffix = f".{base_domain}"
+    if not host_only.endswith(suffix):
+        return ""
+    candidate = host_only[: -len(suffix)].strip(".")
+    if candidate in {"", "www"}:
+        return ""
+    return candidate
+
+
+def current_tenant_slug() -> str:
+    from_request = str((getattr(g, "tenant_context", {}) or {}).get("tenant_slug") or "").strip().lower()
+    if from_request:
+        return from_request
+    return str(session.get(TENANT_SESSION_KEY) or "").strip().lower()
+
+
+def tenant_scoped_path(path: str, tenant_slug: str | None = None) -> str:
+    raw_path = str(path or "").strip()
+    if not raw_path.startswith("/"):
+        raw_path = "/" + raw_path
+    if not tenant_path_mode_enabled():
+        return raw_path
+    resolved_slug = str(tenant_slug or current_tenant_slug() or "").strip().lower()
+    if not resolved_slug:
+        return raw_path
+    if raw_path.startswith(f"/t/{resolved_slug}/") or raw_path == f"/t/{resolved_slug}":
+        return raw_path
+    return f"/t/{resolved_slug}{raw_path}"
+
 
 def login_required(view_func):
     @wraps(view_func)
@@ -2557,7 +2637,8 @@ def login_required(view_func):
             return view_func(*args, **kwargs)
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "message": "Authentication required"}), 401
-        return redirect(url_for("auth_login", next=request.full_path.rstrip("?")))
+        login_target = url_for("auth_login", next=request.full_path.rstrip("?"))
+        return redirect(tenant_scoped_path(login_target))
     return wrapped
 
 def is_port_open(host: str, port: int) -> bool:
@@ -2613,6 +2694,107 @@ def open_url_in_chrome(url: str) -> bool:
         return bool(webbrowser.open(url, new=2))
     except Exception:
         return False
+
+def browser_open_host(host: str) -> str:
+    normalized_host = str(host or "").strip()
+    if normalized_host == "0.0.0.0":
+        return "127.0.0.1"
+    return normalized_host or "127.0.0.1"
+
+
+def get_lan_ip_address() -> str | None:
+    # Use a best-effort outbound socket probe so startup can print the PC's
+    # actual LAN address for phone access instead of the loopback address.
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            ip_address = sock.getsockname()[0].strip()
+            if ip_address and not ip_address.startswith("127."):
+                return ip_address
+    except OSError:
+        return None
+    return None
+
+
+def _portal_path_for_app(name: str) -> str:
+    return {
+        "productmix": "/portal/productmix",
+        "ic3": "/portal/ic3",
+        "managerapp": "/portal/managerapp",
+    }.get(name, f"/portal/{name}")
+
+
+def print_front_door_startup_summary(scheme: str, host: str, port: int, open_path: str) -> None:
+    lan_ip = get_lan_ip_address() if host in {"0.0.0.0", "::"} else None
+    browser_host = browser_open_host(host)
+    local_url = f"{scheme}://{browser_host}:{port}{open_path}"
+    canonical_url = f"{scheme}://{lan_ip}:{port}{open_path}" if lan_ip else local_url
+
+    # Always surface a single canonical user URL so users are not sent to
+    # internal app ports or loopback-only addresses.
+    print(f"[dexter] Entry URL: {canonical_url}", file=sys.stderr)
+
+    status = MANAGER.status()
+    print("[dexter] Internal app status:", file=sys.stderr)
+    for app_name in sorted(status.keys()):
+        snap = status[app_name]
+        state = "up" if bool(snap.get("running")) and bool(snap.get("healthy")) else "down"
+        portal_path = _portal_path_for_app(app_name)
+        print(
+            f"[dexter] - {app_name}: {state} | portal={portal_path}",
+            file=sys.stderr,
+        )
+
+
+def provision_company(
+    actor_user_id: int,
+    company_name: str,
+    owner_username: str = "",
+    owner_password: str = "",
+) -> tuple[bool, str]:
+    ok, msg = create_company(actor_user_id, company_name)
+    if not ok:
+        return ok, msg
+
+    company_row = _get_company_by_slug(_slugify_company_name(company_name), require_active=False)
+    if not company_row:
+        conn = get_rbac_db_connection()
+        try:
+            company_row = conn.execute(
+                "SELECT id, name, slug, is_active FROM companies WHERE LOWER(name)=LOWER(?) LIMIT 1",
+                (str(company_name or "").strip(),),
+            ).fetchone()
+        finally:
+            conn.close()
+    if not company_row:
+        return False, "Company created, but bootstrap lookup failed."
+
+    company_id = int(company_row["id"])
+    upsert_company_profile(company_id, {})
+    _company_storage_root(company_id, create=True)
+
+    owner_user = str(owner_username or "").strip()
+    owner_pass = str(owner_password or "")
+    if owner_user and owner_pass:
+        owner_ok, owner_msg = create_user_account(
+            actor_user_id=int(actor_user_id),
+            username=owner_user,
+            password=owner_pass,
+            role_name="Manager",
+            company_id=company_id,
+            assigned_restaurant_ids=[],
+        )
+        if not owner_ok:
+            return False, f"Company created, but owner bootstrap failed: {owner_msg}"
+
+    return True, "Company provisioned."
+
+def html_no_store_response(html: str) -> Response:
+    response = make_response(html)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 def check_health(url: str, timeout: float = 1.5) -> bool:
     try:
@@ -2884,6 +3066,13 @@ app.config["PREFERRED_URL_SCHEME"] = "https" if app.config["SESSION_COOKIE_SECUR
 csrf = CSRFProtect(app)
 
 
+@app.context_processor
+def inject_tenant_template_helpers() -> dict[str, Any]:
+    return {
+        "tenant_scoped_path": tenant_scoped_path,
+    }
+
+
 # ----- Dexter UI brand injection -------------------------------------------
 _DEXTER_UI_DIR = ROOT / "dexter-ui"
 
@@ -3007,6 +3196,62 @@ migrate_add_login_lockout_fields_v1()
 migrate_add_user_location_assignments_v1()
 ensure_default_super_admin_user()
 
+
+@app.before_request
+def resolve_tenant_context() -> Response | None:
+    protected_prefixes = (
+        "/portal",
+        "/app/",
+        "/admin",
+        "/api/",
+    )
+
+    def _tenant_scope_denied(message: str, status_code: int = 403) -> Response:
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "message": message}), status_code
+        return Response(message, status=status_code, mimetype="text/plain")
+
+    requested_host = str(request.headers.get("Host") or "").strip().lower()
+    host_slug = _tenant_slug_from_host(requested_host)
+
+    path_slug = ""
+    path_parts = [part for part in str(request.path or "").split("/") if part]
+    if len(path_parts) >= 2 and path_parts[0] == "t":
+        path_slug = str(path_parts[1] or "").strip().lower()
+
+    tenant_slug = path_slug or host_slug or str(session.get(TENANT_SESSION_KEY) or "").strip().lower()
+    if tenant_slug:
+        session[TENANT_SESSION_KEY] = tenant_slug
+        session.modified = True
+
+    tenant_company = _get_company_by_slug(tenant_slug, require_active=True) if tenant_slug else None
+    tenant_company_id = int(tenant_company["id"]) if tenant_company else None
+    tenant_company_name = str(tenant_company["name"]) if tenant_company else ""
+
+    # When tenant context is provided via host/path/session, fail closed for
+    # protected routes if that tenant is unknown or inactive.
+    if tenant_slug and tenant_company_id is None and request.path.startswith(protected_prefixes):
+        return _tenant_scope_denied("Unknown or inactive tenant scope", status_code=404)
+
+    user = session.get(SESSION_USER_KEY) or {}
+    role_name = str(user.get("role_name") or "")
+    if tenant_company_id is not None and user:
+        selected_company_id = _normalize_company_id(user.get("selected_company_id"))
+        user_company_id = _normalize_company_id(user.get("company_id"))
+
+        if role_name == "Super Admin" and selected_company_id != tenant_company_id:
+            _set_session_company_context(tenant_company_id, tenant_company_name)
+        elif role_name in {"Manager", "Employee"} and user_company_id is not None and user_company_id != tenant_company_id:
+            return _tenant_scope_denied("Forbidden tenant scope", status_code=403)
+
+    g.tenant_context = {
+        "tenant_slug": tenant_slug,
+        "tenant_company_id": tenant_company_id,
+        "tenant_company_name": tenant_company_name,
+        "source": "path" if path_slug else ("host" if host_slug else ("session" if tenant_slug else "none")),
+    }
+    return None
+
 @app.before_request
 def require_auth_for_protected_routes() -> Response | None:
     public_prefixes = (
@@ -3025,7 +3270,41 @@ def require_auth_for_protected_routes() -> Response | None:
         return None
     if request.path.startswith("/api/"):
         return jsonify({"ok": False, "message": "Authentication required"}), 401
-    return redirect(url_for("auth_login", next=request.full_path.rstrip("?")))
+    login_target = url_for("auth_login", next=request.full_path.rstrip("?"))
+    return redirect(tenant_scoped_path(login_target))
+
+
+@app.route("/t/<tenant_slug>")
+@app.route("/t/<tenant_slug>/")
+def tenant_scope_entry(tenant_slug: str) -> Response:
+    cleaned_slug = str(tenant_slug or "").strip().lower()
+    if not cleaned_slug:
+        return redirect("/")
+    tenant_company = _get_company_by_slug(cleaned_slug, require_active=True)
+    if not tenant_company:
+        return Response("Unknown or inactive tenant scope", status=404, mimetype="text/plain")
+    session[TENANT_SESSION_KEY] = cleaned_slug
+    session.modified = True
+    return redirect(default_post_login_path())
+
+
+@app.route("/t/<tenant_slug>/<path:subpath>", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
+@csrf.exempt
+def tenant_scope_dispatch(tenant_slug: str, subpath: str) -> Response:
+    cleaned_slug = str(tenant_slug or "").strip().lower()
+    tenant_company = _get_company_by_slug(cleaned_slug, require_active=True)
+    if not tenant_company:
+        if str(request.path or "").startswith("/api/"):
+            return jsonify({"ok": False, "message": "Unknown or inactive tenant scope"}), 404
+        return Response("Unknown or inactive tenant scope", status=404, mimetype="text/plain")
+    session[TENANT_SESSION_KEY] = cleaned_slug
+    session.modified = True
+    target = "/" + str(subpath or "").lstrip("/")
+    if not target:
+        target = "/"
+    # Keep method/body when forwarding non-GET requests from tenant path mode.
+    code = 307 if request.method not in {"GET", "HEAD"} else 302
+    return redirect(target, code=code)
 
 @app.route("/auth/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
@@ -3078,8 +3357,8 @@ def auth_login() -> Response:
             "login.html",
             error=error,
             next_path=request.args.get("next", ""),
-            action_url=url_for("auth_login"),
-            register_url=url_for("auth_register"),
+            action_url=tenant_scoped_path(url_for("auth_login")),
+            register_url=tenant_scoped_path(url_for("auth_register")),
         )
     )
 
@@ -3095,8 +3374,8 @@ def auth_register() -> Response:
                 "register.html",
                 error="Self-registration is currently disabled. Contact your administrator.",
                 next_path="",
-                action_url=url_for("auth_register"),
-                login_url=url_for("auth_login"),
+                action_url=tenant_scoped_path(url_for("auth_register")),
+                login_url=tenant_scoped_path(url_for("auth_login")),
             )
         )
 
@@ -3153,8 +3432,8 @@ def auth_register() -> Response:
             "register.html",
             error=error,
             next_path=request.args.get("next", ""),
-            action_url=url_for("auth_register"),
-            login_url=url_for("auth_login"),
+            action_url=tenant_scoped_path(url_for("auth_register")),
+            login_url=tenant_scoped_path(url_for("auth_login")),
         )
     )
 
@@ -3188,7 +3467,8 @@ def auth_forgot_password() -> Response:
                     )
                     conn.commit()
                     base_url = _public_base_url()
-                    reset_url = f"{base_url}/auth/reset-password/{token}"
+                    reset_path = tenant_scoped_path(f"/auth/reset-password/{token}")
+                    reset_url = f"{base_url}{reset_path}"
                     if _is_email_like(username):
                         subject, text_body, html_body = _password_reset_email_payload(username, reset_url)
                         user_company_id = int(row["company_id"]) if row["company_id"] is not None else None
@@ -3283,7 +3563,7 @@ def auth_reset_password(token: str) -> Response:
 @app.route("/auth/logout", methods=["POST", "GET"])
 def auth_logout() -> Response:
     session.pop(SESSION_USER_KEY, None)
-    return redirect(url_for("auth_login"))
+    return redirect(tenant_scoped_path(url_for("auth_login")))
 
 @app.route("/favicon.ico")
 def front_door_favicon() -> Response:
@@ -3329,14 +3609,14 @@ def index() -> str:
     if "/app/productmix/" in referer or "/portal/productmix" in referer:
         return _proxy("productmix", "")
 
-    return redirect("/portal/managerapp")
+    return redirect(tenant_scoped_path("/portal/managerapp"))
 
 @app.route("/admin")
 @login_required
 def admin() -> str:
     if current_role_name() == "Super Admin":
-        return redirect("/admin/users")
-    return redirect("/admin/company-profile")
+        return redirect(tenant_scoped_path("/admin/users"))
+    return redirect(tenant_scoped_path("/admin/company-profile"))
 
 def _effective_company_scope(require_active: bool = True) -> int | None:
     role_name = current_role_name()
@@ -3376,15 +3656,15 @@ def _effective_company_scope(require_active: bool = True) -> int | None:
 def admin_company_scope_switch() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/users?error=Session+expired"))
 
     target_company_id = _normalize_company_id(request.form.get("company_id"))
     if target_company_id is None:
-        return redirect("/admin/users?error=Invalid+company+selection")
+        return redirect(tenant_scoped_path("/admin/users?error=Invalid+company+selection"))
 
     target_company = _get_company_by_id(int(target_company_id), require_active=True)
     if not target_company:
-        return redirect("/admin/users?error=Selected+company+is+not+active+or+does+not+exist")
+        return redirect(tenant_scoped_path("/admin/users?error=Selected+company+is+not+active+or+does+not+exist"))
 
     previous_company_id = _effective_company_scope(require_active=False)
     _set_session_company_context(int(target_company["id"]), str(target_company["name"]))
@@ -3409,7 +3689,7 @@ def admin_company_scope_switch() -> Response:
     next_path = str(request.form.get("next_path") or "").strip()
     if next_path.startswith("/") and not next_path.startswith("//"):
         separator = "&" if "?" in next_path else "?"
-        return redirect(f"{next_path}{separator}company_switched=1")
+        return redirect(tenant_scoped_path(f"{next_path}{separator}company_switched=1"))
     return redirect(default_company_switch_path())
 
 @app.route("/api/admin/company-scope", methods=["PATCH"])
@@ -3468,17 +3748,17 @@ def api_admin_company_scope_switch() -> Response:
 def admin_location_scope_switch() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/?error=Session+expired")
+        return redirect(tenant_scoped_path("/?error=Session+expired"))
 
     selected_company_id = _effective_company_scope(require_active=True)
     if selected_company_id is None:
-        return redirect("/?error=No+active+company+scope+is+selected")
+        return redirect(tenant_scoped_path("/?error=No+active+company+scope+is+selected"))
 
     target_restaurant_id = _normalize_proxy_location_id(request.form.get("restaurant_id"))
     available_options = _effective_restaurant_options_for_scope(int(selected_company_id))
     available_ids = {int(item["id"]) for item in available_options}
     if target_restaurant_id is None or int(target_restaurant_id) not in available_ids:
-        return redirect("/?error=Invalid+location+selection")
+        return redirect(tenant_scoped_path("/?error=Invalid+location+selection"))
 
     previous_restaurant_id = current_selected_restaurant_id()
     _set_session_selected_restaurant_context(int(target_restaurant_id))
@@ -3503,7 +3783,7 @@ def admin_location_scope_switch() -> Response:
     next_path = str(request.form.get("next_path") or "").strip()
     if next_path.startswith("/") and not next_path.startswith("//"):
         separator = "&" if "?" in next_path else "?"
-        return redirect(f"{next_path}{separator}location_switched=1")
+        return redirect(tenant_scoped_path(f"{next_path}{separator}location_switched=1"))
     return redirect(default_location_switch_path())
 
 @app.route("/api/admin/location-scope", methods=["PATCH"])
@@ -3570,6 +3850,13 @@ def admin_companies_page() -> Response:
             companies=list_companies(),
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
+            tenant_path_mode=tenant_path_mode_enabled(),
+            tenant_base_domain=_tenant_base_domain(),
+            admin_company_profile_url=tenant_scoped_path("/admin/company-profile"),
+            admin_company_health_url=tenant_scoped_path("/admin/company-health"),
+            admin_companies_create_url=tenant_scoped_path("/admin/companies/create"),
+            admin_companies_provision_url=tenant_scoped_path("/admin/companies/provision"),
+            admin_companies_base_url=tenant_scoped_path("/admin/companies"),
         )
     )
 
@@ -3579,11 +3866,32 @@ def admin_companies_page() -> Response:
 def admin_companies_create() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/companies?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/companies?error=Session+expired"))
 
     ok, msg = create_company(actor_id, request.form.get("name") or "")
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(tenant_scoped_path(f"/admin/companies?{key}={requests.utils.quote(msg)}"))
+
+
+@app.route("/admin/companies/provision", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_companies_provision() -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect(tenant_scoped_path("/admin/companies?error=Session+expired"))
+
+    company_name = request.form.get("name") or ""
+    owner_username = request.form.get("owner_username") or ""
+    owner_password = request.form.get("owner_password") or ""
+    ok, msg = provision_company(
+        actor_user_id=int(actor_id),
+        company_name=company_name,
+        owner_username=owner_username,
+        owner_password=owner_password,
+    )
+    key = "message" if ok else "error"
+    return redirect(tenant_scoped_path(f"/admin/companies?{key}={requests.utils.quote(msg)}"))
 
 @app.route("/admin/companies/<int:company_id>/rename", methods=["POST"])
 @login_required
@@ -3591,11 +3899,11 @@ def admin_companies_create() -> Response:
 def admin_companies_rename(company_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/companies?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/companies?error=Session+expired"))
 
     ok, msg = rename_company(actor_id, int(company_id), request.form.get("name") or "")
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(tenant_scoped_path(f"/admin/companies?{key}={requests.utils.quote(msg)}"))
 
 @app.route("/admin/companies/<int:company_id>/active", methods=["POST"])
 @login_required
@@ -3603,12 +3911,12 @@ def admin_companies_rename(company_id: int) -> Response:
 def admin_companies_active(company_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/companies?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/companies?error=Session+expired"))
 
     is_active = str(request.form.get("is_active", "1")).strip() == "1"
     ok, msg = set_company_active_state(actor_id, int(company_id), is_active)
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(tenant_scoped_path(f"/admin/companies?{key}={requests.utils.quote(msg)}"))
 
 @app.route("/admin/company-health")
 @login_required
@@ -3664,17 +3972,17 @@ def admin_email_page() -> Response:
 def admin_email_settings_save() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/email?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/email?error=Session+expired"))
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/email?error={requests.utils.quote(scope_error)}")
+        return redirect(tenant_scoped_path(f"/admin/email?error={requests.utils.quote(scope_error)}"))
     if selected_company_id is None:
-        return redirect("/admin/email?error=No+active+company+scope+is+selected")
+        return redirect(tenant_scoped_path("/admin/email?error=No+active+company+scope+is+selected"))
 
     existing_profile = get_company_profile(int(selected_company_id))
     if not existing_profile:
-        return redirect("/admin/email?error=Company+profile+is+not+available")
+        return redirect(tenant_scoped_path("/admin/email?error=Company+profile+is+not+available"))
 
     profile_payload = dict(existing_profile)
     profile_payload.update(
@@ -3705,7 +4013,7 @@ def admin_email_settings_save() -> Response:
         ),
         company_id=int(selected_company_id),
     )
-    return redirect("/admin/email?message=Company+email+settings+saved")
+    return redirect(tenant_scoped_path("/admin/email?message=Company+email+settings+saved"))
 
 @app.route("/admin/email/test", methods=["POST"])
 @login_required
@@ -3713,7 +4021,7 @@ def admin_email_settings_save() -> Response:
 def admin_email_test() -> Response:
     target_email = str(request.form.get("target_email") or "").strip()
     if not _is_email_like(target_email):
-        return redirect("/admin/email?error=Enter+a+valid+recipient+email")
+        return redirect(tenant_scoped_path("/admin/email?error=Enter+a+valid+recipient+email"))
 
     selected_company_id = _effective_company_scope()
 
@@ -3731,7 +4039,7 @@ def admin_email_test() -> Response:
     )
     sent, message = send_email_message([target_email], subject, text_body, html_body, company_id=selected_company_id)
     key = "message" if sent else "error"
-    return redirect(f"/admin/email?{key}={requests.utils.quote(message)}")
+    return redirect(tenant_scoped_path(f"/admin/email?{key}={requests.utils.quote(message)}"))
 
 @app.route("/admin/company-profile")
 @login_required
@@ -3739,11 +4047,11 @@ def admin_email_test() -> Response:
 def admin_company_profile_page() -> Response:
     selected_company_id = _effective_company_scope()
     if selected_company_id is None:
-        return redirect("/admin/users?error=No+active+company+scope+is+selected")
+        return redirect(tenant_scoped_path("/admin/users?error=No+active+company+scope+is+selected"))
 
     profile = get_company_profile(int(selected_company_id))
     if not profile:
-        return redirect("/admin/users?error=Company+profile+is+not+available")
+        return redirect(tenant_scoped_path("/admin/users?error=Company+profile+is+not+available"))
 
     is_super_admin = current_role_name() == "Super Admin"
     companies = list_companies(active_only=True) if is_super_admin else []
@@ -3765,17 +4073,17 @@ def admin_company_profile_page() -> Response:
 def admin_company_profile_save() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/company-profile?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/company-profile?error=Session+expired"))
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/company-profile?error={requests.utils.quote(scope_error)}")
+        return redirect(tenant_scoped_path(f"/admin/company-profile?error={requests.utils.quote(scope_error)}"))
     if selected_company_id is None:
-        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected")
+        return redirect(tenant_scoped_path("/admin/company-profile?error=No+active+company+scope+is+selected"))
 
     existing_profile = get_company_profile(int(selected_company_id))
     if not existing_profile:
-        return redirect("/admin/company-profile?error=Company+profile+is+not+available")
+        return redirect(tenant_scoped_path("/admin/company-profile?error=Company+profile+is+not+available"))
 
     logo_rel_path = str(existing_profile.get("logo_rel_path") or "")
     clear_logo = str(request.form.get("clear_logo", "0")).strip() == "1"
@@ -3793,7 +4101,7 @@ def admin_company_profile_save() -> Response:
     if uploaded_logo and str(getattr(uploaded_logo, "filename", "") or "").strip():
         ok, err_message, saved_rel_path = _save_company_logo(int(selected_company_id), uploaded_logo)
         if not ok:
-            return redirect(f"/admin/company-profile?error={requests.utils.quote(err_message)}")
+            return redirect(tenant_scoped_path(f"/admin/company-profile?error={requests.utils.quote(err_message)}"))
         logo_rel_path = saved_rel_path
 
     profile_payload = {
@@ -3821,7 +4129,7 @@ def admin_company_profile_save() -> Response:
         company_id=int(selected_company_id),
     )
 
-    return redirect("/admin/company-profile?message=Company+profile+saved")
+    return redirect(tenant_scoped_path("/admin/company-profile?message=Company+profile+saved"))
 
 @app.route("/admin/company-profile/logo")
 @login_required
@@ -3876,16 +4184,16 @@ def admin_users_page() -> Response:
 def admin_users_invite() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/users?error=Session+expired"))
 
     invite_email = str(request.form.get("email") or "").strip().lower()
     role_name = str(request.form.get("role_name") or "Employee").strip()
     if not _is_email_like(invite_email):
-        return redirect("/admin/users?error=Enter+a+valid+email+address")
+        return redirect(tenant_scoped_path("/admin/users?error=Enter+a+valid+email+address"))
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+        return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(scope_error)}"))
 
     temp_password = secrets.token_urlsafe(18)
     ok, msg = create_user_account(
@@ -3903,7 +4211,7 @@ def admin_users_invite() -> Response:
     try:
         row = conn.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", (invite_email,)).fetchone()
         if not row:
-            return redirect("/admin/users?error=User+created+but+invite+token+could+not+be+prepared")
+            return redirect(tenant_scoped_path("/admin/users?error=User+created+but+invite+token+could+not+be+prepared"))
         token = secrets.token_urlsafe(32)
         expires = (datetime.now() + timedelta(hours=48)).isoformat(timespec="seconds")
         conn.execute(
@@ -3918,9 +4226,9 @@ def admin_users_invite() -> Response:
     subject, text_body, html_body = _account_invite_email_payload(invite_email, role_name, setup_url)
     sent, send_message = send_email_message([invite_email], subject, text_body, html_body, company_id=selected_company_id)
     if sent:
-        return redirect(f"/admin/users?message={requests.utils.quote(f'Invitation sent to {invite_email}.')}")
+        return redirect(tenant_scoped_path(f"/admin/users?message={requests.utils.quote(f'Invitation sent to {invite_email}.')}"))
     return redirect(
-        f"/admin/users?error={requests.utils.quote(f'User created, but invite email could not be sent. {send_message}')}"
+        tenant_scoped_path(f"/admin/users?error={requests.utils.quote(f'User created, but invite email could not be sent. {send_message}')}")
     )
 
 @app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
@@ -3929,11 +4237,11 @@ def admin_users_invite() -> Response:
 def admin_users_resend_invite(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/users?error=Session+expired"))
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+        return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(scope_error)}"))
 
     conn = get_rbac_db_connection()
     try:
@@ -3953,22 +4261,22 @@ def admin_users_resend_invite(user_id: int) -> Response:
             (int(user_id),),
         ).fetchone()
         if not row:
-            return redirect("/admin/users?error=User+not+found")
+            return redirect(tenant_scoped_path("/admin/users?error=User+not+found"))
 
         target_company_id = int(row["company_id"]) if row["company_id"] is not None else None
         if current_role_name() == "Super Admin":
             scope_error = _ensure_target_in_super_admin_scope(target_company_id, "user")
             if scope_error:
-                return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+                return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(scope_error)}"))
         elif target_company_id is not None and selected_company_id is not None and int(target_company_id) != int(selected_company_id):
-            return redirect("/admin/users?error=You+can+only+resend+invites+for+the+selected+company")
+            return redirect(tenant_scoped_path("/admin/users?error=You+can+only+resend+invites+for+the+selected+company"))
 
         invite_email = str(row["username"] or "").strip().lower()
         if not _is_email_like(invite_email):
-            return redirect("/admin/users?error=This+user+does+not+have+an+email+login+for+invites")
+            return redirect(tenant_scoped_path("/admin/users?error=This+user+does+not+have+an+email+login+for+invites"))
 
         if int(row["is_active"] or 0) != 1:
-            return redirect("/admin/users?error=Activate+the+user+before+sending+an+invite")
+            return redirect(tenant_scoped_path("/admin/users?error=Activate+the+user+before+sending+an+invite"))
 
         token = secrets.token_urlsafe(32)
         expires = (datetime.now() + timedelta(hours=48)).isoformat(timespec="seconds")
@@ -3986,8 +4294,8 @@ def admin_users_resend_invite(user_id: int) -> Response:
     send_company_id = target_company_id if target_company_id is not None else selected_company_id
     sent, send_message = send_email_message([invite_email], subject, text_body, html_body, company_id=send_company_id)
     if sent:
-        return redirect(f"/admin/users?message={requests.utils.quote(f'Invitation resent to {invite_email}.')}")
-    return redirect(f"/admin/users?error={requests.utils.quote(f'Invite could not be sent. {send_message}')}")
+        return redirect(tenant_scoped_path(f"/admin/users?message={requests.utils.quote(f'Invitation resent to {invite_email}.')}"))
+    return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(f'Invite could not be sent. {send_message}')}"))
 
 @app.route("/admin/users/create", methods=["POST"])
 @login_required
@@ -3995,11 +4303,11 @@ def admin_users_resend_invite(user_id: int) -> Response:
 def admin_users_create() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/users?error=Session+expired"))
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+        return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(scope_error)}"))
 
     ok, msg = create_user_account(
         actor_user_id=actor_id,
@@ -4010,7 +4318,7 @@ def admin_users_create() -> Response:
         assigned_restaurant_ids=request.form.getlist("restaurant_ids"),
     )
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return redirect(tenant_scoped_path(f"/admin/users?{key}={requests.utils.quote(msg)}"))
 
 @app.route("/admin/users/<int:user_id>/active", methods=["POST"])
 @login_required
@@ -4018,17 +4326,17 @@ def admin_users_create() -> Response:
 def admin_users_active(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/users?error=Session+expired"))
 
     if current_role_name() == "Super Admin":
         scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
         if scope_error:
-            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+            return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(scope_error)}"))
 
     is_active = str(request.form.get("is_active", "1")).strip() == "1"
     ok, msg = set_user_active_state(actor_id, int(user_id), is_active)
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return redirect(tenant_scoped_path(f"/admin/users?{key}={requests.utils.quote(msg)}"))
 
 @app.route("/admin/users/<int:user_id>/role", methods=["POST"])
 @login_required
@@ -4036,17 +4344,17 @@ def admin_users_active(user_id: int) -> Response:
 def admin_users_role(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/users?error=Session+expired"))
 
     if current_role_name() == "Super Admin":
         scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
         if scope_error:
-            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+            return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(scope_error)}"))
 
     role_name = str(request.form.get("role_name") or "Employee").strip()
     ok, msg = set_user_role_name(actor_id, int(user_id), role_name)
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return redirect(tenant_scoped_path(f"/admin/users?{key}={requests.utils.quote(msg)}"))
 
 @app.route("/admin/users/<int:user_id>/locations", methods=["POST"])
 @login_required
@@ -4054,16 +4362,16 @@ def admin_users_role(user_id: int) -> Response:
 def admin_users_locations(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/users?error=Session+expired"))
 
     if current_role_name() == "Super Admin":
         scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
         if scope_error:
-            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+            return redirect(tenant_scoped_path(f"/admin/users?error={requests.utils.quote(scope_error)}"))
 
     ok, msg = set_user_location_assignments(actor_id, int(user_id), request.form.getlist("restaurant_ids"))
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return redirect(tenant_scoped_path(f"/admin/users?{key}={requests.utils.quote(msg)}"))
 
 @app.route("/admin/tasks")
 @login_required
@@ -4099,13 +4407,13 @@ def admin_tasks_page() -> Response:
 def admin_tasks_create() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/tasks?error=Session+expired")
+        return redirect(tenant_scoped_path("/admin/tasks?error=Session+expired"))
 
     assigned_to_raw = (request.form.get("assigned_to") or "").strip()
     assigned_to = int(assigned_to_raw) if assigned_to_raw.isdigit() else None
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/tasks?error={requests.utils.quote(scope_error)}")
+        return redirect(tenant_scoped_path(f"/admin/tasks?error={requests.utils.quote(scope_error)}"))
 
     ok, msg = create_task_record(
         actor_user_id=actor_id,
@@ -4119,7 +4427,7 @@ def admin_tasks_create() -> Response:
     key = "message" if ok else "error"
     status_filter = (request.args.get("status") or request.form.get("status") or "").strip().lower()
     status_qs = f"&status={status_filter}" if status_filter in {"pending", "in-progress", "completed"} else ""
-    return redirect(f"/admin/tasks?{key}={requests.utils.quote(msg)}{status_qs}")
+    return redirect(tenant_scoped_path(f"/admin/tasks?{key}={requests.utils.quote(msg)}{status_qs}"))
 
 @app.route("/admin/audit-logs")
 @login_required
@@ -4145,7 +4453,17 @@ def admin_audit_logs_page() -> Response:
 @role_required("Super Admin", "Manager")
 def api_admin_users_list() -> Response:
     selected_company_id = _effective_company_scope()
-    return jsonify({"ok": True, "users": list_users_with_roles(company_id=selected_company_id)})
+    tenant_ctx = getattr(g, "tenant_context", {}) or {}
+    return jsonify(
+        {
+            "ok": True,
+            "users": list_users_with_roles(company_id=selected_company_id),
+            "tenant": {
+                "slug": tenant_ctx.get("tenant_slug") or "",
+                "company_id": tenant_ctx.get("tenant_company_id"),
+            },
+        }
+    )
 
 @app.route("/api/admin/users", methods=["POST"])
 @csrf.exempt
@@ -4239,7 +4557,17 @@ def api_admin_users_locations(user_id: int) -> Response:
 @login_required
 @role_required("Super Admin", "Manager")
 def api_admin_tasks_list() -> Response:
-    return jsonify({"ok": True, "tasks": list_tasks(company_id=_effective_company_scope())})
+    tenant_ctx = getattr(g, "tenant_context", {}) or {}
+    return jsonify(
+        {
+            "ok": True,
+            "tasks": list_tasks(company_id=_effective_company_scope()),
+            "tenant": {
+                "slug": tenant_ctx.get("tenant_slug") or "",
+                "company_id": tenant_ctx.get("tenant_company_id"),
+            },
+        }
+    )
 
 @app.route("/api/admin/tasks", methods=["POST"])
 @csrf.exempt
@@ -4292,7 +4620,17 @@ def api_admin_tasks_status(task_id: int) -> Response:
 @login_required
 @role_required("Super Admin", "Manager")
 def api_admin_audit_logs() -> Response:
-    return jsonify({"ok": True, "audit_logs": list_audit_logs(company_id=_effective_company_scope(), viewer_role=current_role_name())})
+    tenant_ctx = getattr(g, "tenant_context", {}) or {}
+    return jsonify(
+        {
+            "ok": True,
+            "audit_logs": list_audit_logs(company_id=_effective_company_scope(), viewer_role=current_role_name()),
+            "tenant": {
+                "slug": tenant_ctx.get("tenant_slug") or "",
+                "company_id": tenant_ctx.get("tenant_company_id"),
+            },
+        }
+    )
 
 @app.route("/api/admin/company-files", methods=["GET"])
 @login_required
@@ -4368,19 +4706,35 @@ def portal_home() -> str:
                 selected_restaurant = option
                 break
 
-    return render_template(
-        "portal_home.html",
-        host=fd.get("host", "127.0.0.1"),
-        port=fd.get("port", 5080),
-        role_name=role_name,
-        company_options=company_options,
-        selected_company_id=selected_company_id,
-        location_options=location_options,
-        selected_restaurant_id=selected_restaurant_id,
-        selected_restaurant=selected_restaurant,
-        selected_company_name=str((session.get(SESSION_USER_KEY) or {}).get("company_name") or "").strip(),
-        company_switched=(request.args.get("company_switched") or "").strip().lower() in {"1", "true", "yes"},
-        location_switched=(request.args.get("location_switched") or "").strip().lower() in {"1", "true", "yes"},
+    return html_no_store_response(
+        render_template(
+            "portal_home.html",
+            host=browser_open_host(str(fd.get("host", "127.0.0.1"))),
+            port=fd.get("port", 5080),
+            portal_root_url=tenant_scoped_path("/portal"),
+            admin_root_url=tenant_scoped_path("/admin"),
+            manager_portal_url=tenant_scoped_path("/portal/managerapp"),
+            ic3_portal_url=tenant_scoped_path("/portal/ic3"),
+            productmix_portal_url=tenant_scoped_path("/portal/productmix"),
+            admin_users_url=tenant_scoped_path("/admin/users"),
+            admin_tasks_url=tenant_scoped_path("/admin/tasks"),
+            admin_email_url=tenant_scoped_path("/admin/email"),
+            admin_audit_logs_url=tenant_scoped_path("/admin/audit-logs"),
+            admin_company_profile_url=tenant_scoped_path("/admin/company-profile"),
+            admin_companies_url=tenant_scoped_path("/admin/companies"),
+            admin_company_health_url=tenant_scoped_path("/admin/company-health"),
+            company_scope_action_url=tenant_scoped_path("/admin/company-scope"),
+            location_scope_action_url=tenant_scoped_path("/admin/location-scope"),
+            role_name=role_name,
+            company_options=company_options,
+            selected_company_id=selected_company_id,
+            location_options=location_options,
+            selected_restaurant_id=selected_restaurant_id,
+            selected_restaurant=selected_restaurant,
+            selected_company_name=str((session.get(SESSION_USER_KEY) or {}).get("company_name") or "").strip(),
+            company_switched=(request.args.get("company_switched") or "").strip().lower() in {"1", "true", "yes"},
+            location_switched=(request.args.get("location_switched") or "").strip().lower() in {"1", "true", "yes"},
+        )
     )
 
 @app.route("/portal/<name>")
@@ -4414,42 +4768,68 @@ def portal_app(name: str) -> Response:
         raw_url = f"{raw_url}{separator}location_switched=1&t={int(time.time())}"
         switch_notice = f"Switched to {current_location_name or 'the selected location'}. App reloaded to landing page."
     display_title = current_location_name if resolved_name == "managerapp" else app_cfg["display_name"]
-    home_target = "/portal/managerapp" if resolved_name == "managerapp" else "/portal"
-    return render_template(
-        "portal_app.html",
-        app_key=resolved_name,
-        app_title=display_title,
-        home_target=home_target,
-        raw_url=raw_url,
-        switch_notice=switch_notice,
-        show_shell_nav=show_shell_nav,
-        selected_company_name=selected_company_name,
-        current_location_name=current_location_name,
+    home_target = tenant_scoped_path("/portal/managerapp") if resolved_name == "managerapp" else tenant_scoped_path("/portal")
+    return html_no_store_response(
+        render_template(
+            "portal_app.html",
+            app_key=resolved_name,
+            app_title=display_title,
+            home_target=home_target,
+            portal_root_url=tenant_scoped_path("/portal"),
+            admin_root_url=tenant_scoped_path("/admin"),
+            company_logo_url=tenant_scoped_path("/branding/company-logo"),
+            raw_url=raw_url,
+            switch_notice=switch_notice,
+            show_shell_nav=show_shell_nav,
+            selected_company_name=selected_company_name,
+            current_location_name=current_location_name,
+        )
     )
 
 @app.route("/productmix")
 @login_required
 def portal_productmix_alias() -> Response:
-    return redirect("/portal/productmix")
+    return redirect(tenant_scoped_path("/portal/productmix"))
 
 @app.route("/inventory")
 @login_required
 def portal_ic3_alias() -> Response:
-    return redirect("/portal/ic3")
+    return redirect(tenant_scoped_path("/portal/ic3"))
 
 @app.route("/manager")
 @login_required
 def portal_manager_alias() -> Response:
-    return redirect("/portal/managerapp")
+    return redirect(default_post_login_path())
 
 @app.route("/api/health")
 def api_health() -> Response:
-    return jsonify({"ok": True})
+    tenant_ctx = getattr(g, "tenant_context", {}) or {}
+    return jsonify(
+        {
+            "ok": True,
+            "tenant": {
+                "slug": tenant_ctx.get("tenant_slug") or "",
+                "company_id": tenant_ctx.get("tenant_company_id"),
+                "source": tenant_ctx.get("source") or "none",
+            },
+        }
+    )
 
 @app.route("/api/status")
 @login_required
 def api_status() -> Response:
-    return jsonify({"apps": MANAGER.status(), "preflight": MANAGER.preflight()})
+    tenant_ctx = getattr(g, "tenant_context", {}) or {}
+    return jsonify(
+        {
+            "apps": MANAGER.status(),
+            "preflight": MANAGER.preflight(),
+            "tenant": {
+                "slug": tenant_ctx.get("tenant_slug") or "",
+                "company_id": tenant_ctx.get("tenant_company_id"),
+                "source": tenant_ctx.get("source") or "none",
+            },
+        }
+    )
 
 @app.route("/api/admin/tenant-scope-audit", methods=["GET"])
 @login_required
@@ -4887,9 +5267,6 @@ def _proxy(name: str, path: str) -> Response:
     if not resolved_name:
         return jsonify({"ok": False, "message": f"Unknown app: {name}"}), 404
 
-    if _is_proxy_location_scope_violation(resolved_name, path):
-        return jsonify({"ok": False, "message": "Location is outside selected company scope"}), 403
-
     status = MANAGER.status()[resolved_name]
     if not status["running"]:
         MANAGER.start(resolved_name)
@@ -5127,10 +5504,36 @@ def _proxy(name: str, path: str) -> Response:
         except Exception:
             response_body = upstream.content
 
+    if resolved_name == "ic3" and "text/html" in content_type.lower():
+        # IC3 HTML patching is handled in Inventory Control 3/app.py.
+        # Keep proxy behavior minimal to avoid conflicting runtime rewrites.
+        try:
+            html = (response_body if isinstance(response_body, bytes) else upstream.content).decode(
+                upstream.encoding or "utf-8", errors="replace"
+            )
+            sanitized = re.sub(
+                r'<script[^>]*id=["\']__dexter_ic3_display_guard["\'][^>]*>[\s\S]*?</script>',
+                "",
+                html,
+                flags=re.IGNORECASE,
+            )
+            sanitized = re.sub(
+                r'<script[^>]*id=["\']__dexter_ic3_view_cleanup["\'][^>]*>[\s\S]*?</script>',
+                "",
+                sanitized,
+                flags=re.IGNORECASE,
+            )
+            if sanitized != html:
+                response_body = sanitized.encode("utf-8")
+        except Exception:
+            response_body = upstream.content
+
     response_headers: list[tuple[str, str]] = []
     for (k, v) in upstream.headers.items():
         k_lower = k.lower()
         if k_lower in excluded_resp_headers:
+            continue
+        if resolved_name == "ic3" and "text/html" in content_type.lower() and k_lower in {"cache-control", "etag", "last-modified", "expires"}:
             continue
         if k_lower == "content-length":
             continue
@@ -5138,12 +5541,18 @@ def _proxy(name: str, path: str) -> Response:
             v = rewrite_location_header(v)
         response_headers.append((k, v))
 
+    if resolved_name == "ic3" and "text/html" in content_type.lower():
+        response_headers.append(("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0"))
+        response_headers.append(("Pragma", "no-cache"))
+        response_headers.append(("Expires", "0"))
+
     return Response(response_body, upstream.status_code, response_headers)
 
 @app.route("/app/<name>/")
 @login_required
 def app_root(name: str) -> Response:
-    return _proxy(name, "")
+    response = _proxy(name, "")
+    return response
 
 @app.route(
     "/app/<name>/<path:path>",
@@ -5224,7 +5633,9 @@ def contextual_proxy(path: str) -> Response:
 
 if __name__ == "__main__":
     front = CONFIG.get("front_door", {})
-    host = os.environ.get("DEXTER_HOST") or front.get("host", "127.0.0.1")
+    # Bind the front door to all interfaces unless an explicit host override is
+    # provided, so the same instance can be reached from a phone on Wi-Fi.
+    host = os.environ.get("DEXTER_HOST") or front.get("host") or "0.0.0.0"
     port = int(os.environ.get("DEXTER_PORT") or front.get("port", 5080))
     use_ssl = os.environ.get("DEXTER_SSL", "0") == "1"
     scheme = "https" if use_ssl else "http"
@@ -5245,8 +5656,13 @@ if __name__ == "__main__":
     start_daily_log_email_scheduler()
 
     if auto_open_browser:
-        startup_url = f"{scheme}://{host}:{port}{open_path}"
+        startup_url = f"{scheme}://{browser_open_host(host)}:{port}{open_path}"
         threading.Timer(1.0, lambda: open_url_in_chrome(startup_url)).start()
+
+    # Give child services a brief moment to bind before probing health, then
+    # print a single-entry topology summary for operators.
+    time.sleep(0.8)
+    print_front_door_startup_summary(scheme=scheme, host=host, port=port, open_path=open_path)
 
     debug_mode = os.environ.get("PM_DEBUG", "0") == "1"
     ssl_context = "adhoc" if use_ssl else None
