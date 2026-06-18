@@ -236,15 +236,3 @@ venv/
 sortphotos/
 
 !Dexter Assistant/Inventory Control 3/*.pyc
-
-# === Secrets and auth files — NEVER commit ===
-users.json
-**/.mgr_secret
-Dexter Assistant/dexter_assistant_users.json
-Dexter Assistant/dexter_assistant_rbac.db
-.DS_Store
-**/.DS_Store
-
-# === Backup churn — excluded to keep repo lean ===
-Dexter Assistant/Inventory Control 3/backups/
-Dexter Assist 6-3-26/Dexter Assistant/Inventory Control 3/backups/
