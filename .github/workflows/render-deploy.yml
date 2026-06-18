@@ -1,0 +1,25 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches:
+      - checkpoint/dexter-assist-20260601-173327
+    paths:
+      - "Dexter Assistant/**"
+      - ".github/workflows/render-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate deploy hook secret
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL is not set in GitHub secrets."
+            exit 1
+          fi
+
+      - name: Trigger Render deploy hook
+        run: |
+          curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
