@@ -1,0 +1,50 @@
+{
+  "employeeInfo": {
+    "firstName": "Rebecca",
+    "middleName": "",
+    "lastName": "Otero",
+    "dateOfHire": "2026-06-15",
+    "id": 1781548224340.3098,
+    "locationId": "pm_1",
+    "jobTitle": "Bartender; Host; Server; Training",
+    "email": "",
+    "phone": ""
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  },
+  "documents": {
+    "legal": {
+      "i9": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "w2": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "alcoholServingPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "foodHandlersPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "additionalPermits": []
+    },
+    "medicalCallIns": [],
+    "essentialPaperwork": []
+  }
+}
