@@ -1,0 +1,100 @@
+========================================================
+  AIO-Python — Multi-Computer Setup & Daily Workflow
+  Created: 2026-06-17
+========================================================
+
+GITHUB REPO:
+  https://github.com/nightowlcoding/AIO-Python
+  Branch: checkpoint/dexter-assist-20260601-173327
+
+--------------------------------------------------------
+STEP 1 — Install tools on the new computer
+--------------------------------------------------------
+  - Git:    https://git-scm.com/downloads
+  - Python: https://python.org  (match version on main laptop)
+  - VS Code (optional but recommended)
+
+  Then configure git identity (run once):
+    git config --global user.name "Your Name"
+    git config --global user.email "your@email.com"
+
+--------------------------------------------------------
+STEP 2 — Clone the repo
+--------------------------------------------------------
+  macOS / Linux:
+    cd ~
+    git clone https://github.com/nightowlcoding/AIO-Python.git "AIO-Python"
+    cd AIO-Python
+
+  Windows:
+    cd "C:\Users\YourName"
+    git clone https://github.com/nightowlcoding/AIO-Python.git "Coding Files\AIO-Python"
+    cd "Coding Files\AIO-Python"
+
+  GitHub will prompt you to log in via browser — sign in to the nightowlcoding account.
+
+--------------------------------------------------------
+STEP 3 — Switch to the working branch
+--------------------------------------------------------
+  git checkout checkpoint/dexter-assist-20260601-173327
+
+--------------------------------------------------------
+STEP 4 — Set up Python environment
+--------------------------------------------------------
+  Windows:
+    python -m venv .venv
+    .venv\Scripts\Activate.ps1
+    pip install -r requirements.txt
+
+  macOS / Linux:
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+
+--------------------------------------------------------
+STEP 5 — Copy local-only files (one time only)
+--------------------------------------------------------
+  These files are NOT in GitHub (sensitive):
+    - .env  →  copy manually via USB or AirDrop/OneDrive
+
+  These files ARE in GitHub (no manual copy needed):
+    - users.json
+    - Dexter Assistant/dexter_assistant_users.json
+    - Dexter Assistant/dexter_assistant_rbac.db
+    - All uploaded order invoices, inventory data, CSVs
+
+--------------------------------------------------------
+DAILY WORKFLOW (do this every session)
+--------------------------------------------------------
+  START OF SESSION — pull latest from GitHub:
+    git pull origin checkpoint/dexter-assist-20260601-173327
+
+  END OF SESSION — push your changes to GitHub:
+    git add -A
+    git commit -m "brief description of what changed"
+    git push origin checkpoint/dexter-assist-20260601-173327
+
+  RULE: Always pull first, push when done.
+  Never edit the same file on two computers at the same time.
+
+--------------------------------------------------------
+WHAT IS SYNCED TO GITHUB
+--------------------------------------------------------
+  Included (available on all computers):
+    - All source code (.py, .js, .html, etc.)
+    - Dexter Assistant app and subapps
+    - Inventory Control 3 live data (data/ folder)
+    - Inventory Control 3 backups (backups/ folder)
+    - OrderInvoices/
+    - UploadedCSVs/
+    - uploads/
+    - inventory_data/
+    - users.json, .mgr_secret, auth database
+
+  Excluded (machine-local only):
+    - .env  (secrets/API keys — copy manually)
+    - .venv / venv  (recreate with pip install)
+    - __pycache__  (auto-regenerated)
+    - *.log files  (runtime only)
+
+========================================================
