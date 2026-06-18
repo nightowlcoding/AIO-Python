@@ -3611,10 +3611,60 @@ def api_admin_company_file_download() -> Response:
 @login_required
 def portal_home() -> str:
     fd = CONFIG.get("front_door", {})
+    role_name = current_role_name()
+    selected_company_id = _effective_company_scope(require_active=True)
+
+    company_options: list[dict[str, Any]] = []
+    if role_name == "Super Admin":
+        company_options = list_companies(active_only=True)
+    elif selected_company_id is not None:
+        company = _get_company_by_id(int(selected_company_id), require_active=True)
+        if company:
+            company_options = [
+                {
+                    "id": int(company["id"]),
+                    "name": str(company["name"]),
+                    "slug": str(company["slug"]),
+                    "is_active": int(company["is_active"]),
+                }
+            ]
+
+    location_options = _effective_restaurant_options_for_scope(selected_company_id)
+    selected_restaurant_id = _effective_selected_restaurant_id_for_scope(selected_company_id, ensure_default=True)
+    selected_restaurant = None
+    if selected_restaurant_id is not None:
+        for option in location_options:
+            if int(option["id"]) == int(selected_restaurant_id):
+                selected_restaurant = option
+                break
+
     return render_template(
         "portal_home.html",
         host=fd.get("host", "127.0.0.1"),
         port=fd.get("port", 5080),
+        portal_root_url="/portal",
+        admin_root_url="/admin",
+        manager_portal_url="/portal/managerapp",
+        ic3_portal_url="/portal/ic3",
+        productmix_portal_url="/portal/productmix",
+        admin_users_url="/admin/users",
+        admin_tasks_url="/admin/tasks",
+        admin_email_url="/admin/email",
+        admin_audit_logs_url="/admin/audit-logs",
+        admin_company_profile_url="/admin/company-profile",
+        admin_companies_url="/admin/companies",
+        admin_company_health_url="/admin/company-health",
+        company_scope_action_url="/admin/company-scope",
+        location_scope_action_url="/admin/location-scope",
+        role_name=role_name,
+        company_options=company_options,
+        selected_company_id=selected_company_id,
+        location_options=location_options,
+        selected_restaurant_id=selected_restaurant_id,
+        selected_restaurant=selected_restaurant,
+        selected_company_name=_selected_company_name_for_scope(),
+        company_switched=(request.args.get("company_switched") or "").strip().lower() in {"1", "true", "yes"},
+        location_switched=(request.args.get("location_switched") or "").strip().lower() in {"1", "true", "yes"},
     )
 
 @app.route("/portal/<name>")
@@ -3656,6 +3706,8 @@ def portal_app(name: str) -> Response:
         raw_url=raw_url,
         switch_notice=switch_notice,
         show_shell_nav=show_shell_nav,
+        selected_company_name=_selected_company_name_for_scope(),
+        current_location_name=current_location_name,
     )
 
 @app.route("/productmix")
