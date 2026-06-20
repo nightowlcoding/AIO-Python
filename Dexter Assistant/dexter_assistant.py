@@ -2398,6 +2398,24 @@ app.config["SESSION_COOKIE_NAME"] = str(os.environ.get("DEXTER_SESSION_COOKIE_NA
 app.config["PREFERRED_URL_SCHEME"] = "https" if app.config["SESSION_COOKIE_SECURE"] else "http"
 csrf = CSRFProtect(app)
 
+# ----- Auto-sync git scheduler for database persistence -----
+try:
+    from auto_sync_git import create_auto_sync_scheduler
+    _autosync_interval = int(os.environ.get("DEXTER_AUTOSYNC_INTERVAL_MINUTES", "30"))
+    _autosync_enabled = _env_flag("DEXTER_AUTOSYNC_ENABLED", default=True)
+    if _autosync_enabled:
+        _autosync_scheduler = create_auto_sync_scheduler(app, ROOT.parent, interval_minutes=_autosync_interval)
+        if _autosync_scheduler:
+            print(f"[dexter] Auto-sync git scheduler enabled (interval: {_autosync_interval} minutes)", file=sys.stderr)
+        else:
+            print("[dexter] Auto-sync scheduler not available (APScheduler not installed)", file=sys.stderr)
+    else:
+        print("[dexter] Auto-sync git scheduler disabled via DEXTER_AUTOSYNC_ENABLED=0", file=sys.stderr)
+except ImportError as e:
+    print(f"[dexter] Warning: Could not import auto_sync_git module: {e}", file=sys.stderr)
+except Exception as e:
+    print(f"[dexter] Warning: Failed to initialize auto-sync scheduler: {e}", file=sys.stderr)
+
 
 # ----- Dexter UI brand injection -------------------------------------------
 _DEXTER_UI_DIR = ROOT / "dexter-ui"
@@ -4422,6 +4440,54 @@ def _proxy(name: str, path: str) -> Response:
         response_headers.append((k, v))
 
     return Response(response_body, upstream.status_code, response_headers)
+
+# ----- Auto-sync API endpoints -----
+@app.route("/api/admin/autosync/status", methods=["GET"])
+@login_required
+def autosync_status():
+    """Get auto-sync status and configuration"""
+    try:
+        autosync_enabled = _env_flag("DEXTER_AUTOSYNC_ENABLED", default=True)
+        autosync_interval = int(os.environ.get("DEXTER_AUTOSYNC_INTERVAL_MINUTES", "30"))
+        
+        return jsonify({
+            "ok": True,
+            "autosync_enabled": autosync_enabled,
+            "autosync_interval_minutes": autosync_interval,
+            "tracked_folders": [
+                "ProductMixRestaurantDB/",
+                "daily_logs/",
+                "inventory_data/",
+                "Dexter Assist 6-3-26/Dexter Assistant/Inventory Control 3/data/"
+            ]
+        })
+    except Exception as e:
+        logger.error(f"Failed to get autosync status: {e}")
+        return jsonify({"ok": False, "message": str(e)}), 500
+
+@app.route("/api/admin/autosync/sync-now", methods=["POST"])
+@login_required
+def autosync_sync_now():
+    """Manually trigger an immediate git sync"""
+    try:
+        from auto_sync_git import GitAutoSync
+        syncer = GitAutoSync(ROOT.parent)
+        result = syncer.sync_database_files()
+        
+        return jsonify({
+            "ok": result.get("success", False),
+            "message": result.get("message", ""),
+            "synced_at": result.get("synced_at", ""),
+            "files_changed": result.get("files_changed", [])
+        })
+    except ImportError:
+        return jsonify({
+            "ok": False,
+            "message": "Auto-sync module not available"
+        }), 503
+    except Exception as e:
+        logger.error(f"Manual sync failed: {e}")
+        return jsonify({"ok": False, "message": str(e)}), 500
 
 @app.route("/app/<name>/")
 @login_required
