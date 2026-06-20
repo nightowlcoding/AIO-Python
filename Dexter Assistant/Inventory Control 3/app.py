@@ -2782,6 +2782,16 @@ def _dexter_selected_location_from_headers() -> str:
     return str(request.headers.get("X-Dexter-Restaurant-Name") or "").strip()
 
 
+def _dexter_selected_restaurant_id_from_headers() -> int | None:
+    raw_id = str(request.headers.get("X-Dexter-Restaurant-Id") or "").strip()
+    if not raw_id:
+        return None
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        return None
+
+
 def _effective_runtime_location(fallback: str = "Kingsville") -> str:
     dexter_location = _dexter_selected_location_from_headers()
     if dexter_location:
@@ -2799,25 +2809,67 @@ def _collect_requested_location_values() -> set[str]:
         return set()
 
     requested_values: set[str] = set()
-    for key in ("location", "location_id", "restaurant_id"):
+    selected_restaurant_id = _dexter_selected_restaurant_id_from_headers()
+    selected_location = _normalize_runtime_location_text(_dexter_selected_location_from_headers())
+
+    for key in ("location",):
         for raw_value in request.args.getlist(key):
             normalized = _normalize_runtime_location_text(raw_value)
             if normalized:
                 requested_values.add(normalized)
 
-    for key in ("location", "location_id", "restaurant_id"):
+    for key in ("location",):
         for raw_value in request.form.getlist(key):
             normalized = _normalize_runtime_location_text(raw_value)
             if normalized:
                 requested_values.add(normalized)
 
+    # Some forms submit numeric location/restaurant IDs while Dexter scope is a location label.
+    # Treat matching IDs as in-scope and only fail on explicit ID mismatch.
+    for key in ("location_id", "restaurant_id"):
+        for raw_value in request.args.getlist(key) + request.form.getlist(key):
+            text_value = str(raw_value or "").strip()
+            if not text_value:
+                continue
+            try:
+                requested_id = int(text_value)
+            except (TypeError, ValueError):
+                normalized = _normalize_runtime_location_text(text_value)
+                if normalized:
+                    requested_values.add(normalized)
+                continue
+
+            if selected_restaurant_id is not None and requested_id == selected_restaurant_id:
+                if selected_location:
+                    requested_values.add(selected_location)
+            else:
+                requested_values.add(f"__id_mismatch__{requested_id}")
+
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         payload = request.get_json(silent=True)
         if isinstance(payload, dict):
-            for key in ("location", "location_id", "restaurant_id"):
-                normalized = _normalize_runtime_location_text(payload.get(key))
-                if normalized:
-                    requested_values.add(normalized)
+            normalized = _normalize_runtime_location_text(payload.get("location"))
+            if normalized:
+                requested_values.add(normalized)
+
+            for key in ("location_id", "restaurant_id"):
+                raw_value = payload.get(key)
+                text_value = str(raw_value or "").strip()
+                if not text_value:
+                    continue
+                try:
+                    requested_id = int(text_value)
+                except (TypeError, ValueError):
+                    normalized = _normalize_runtime_location_text(text_value)
+                    if normalized:
+                        requested_values.add(normalized)
+                    continue
+
+                if selected_restaurant_id is not None and requested_id == selected_restaurant_id:
+                    if selected_location:
+                        requested_values.add(selected_location)
+                else:
+                    requested_values.add(f"__id_mismatch__{requested_id}")
 
     return requested_values
 
