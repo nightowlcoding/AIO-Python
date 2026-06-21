@@ -2772,7 +2772,17 @@ def _normalize_runtime_location_text(raw_value) -> str:
     text = str(raw_value or "").strip()
     if not text:
         return ""
-    return text.lower()
+    normalized = text.lower()
+    compact = re.sub(r"[^a-z0-9]+", "", normalized)
+
+    # Dexter headers may include extended labels (for example, "Kingsville Main"),
+    # while IC3 request payloads often send just "Kingsville" or "Alice".
+    if "kingsville" in compact:
+        return "kingsville"
+    if "alice" in compact:
+        return "alice"
+
+    return re.sub(r"\s+", " ", normalized)
 
 
 def _dexter_selected_location_from_headers() -> str:
