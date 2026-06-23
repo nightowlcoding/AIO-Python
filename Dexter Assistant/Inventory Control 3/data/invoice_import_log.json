@@ -80580,5 +80580,19 @@
         "unit_price": 58.77
       }
     ]
+  },
+  {
+    "import_id": "INV-20260621-015206",
+    "timestamp": "2026-06-21T01:52:06.886602",
+    "filename": "Kingsville_2026-05-20_order.csv",
+    "location": "Kingsville",
+    "delivery_date": "2026-05-20",
+    "matched_count": 0,
+    "new_products_created": 0,
+    "new_product_numbers": [],
+    "total_products": 0,
+    "products": {},
+    "product_prices": {},
+    "line_items": []
   }
 ]

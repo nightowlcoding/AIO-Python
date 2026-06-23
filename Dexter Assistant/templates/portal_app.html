@@ -164,6 +164,26 @@
             background: #fff;
             display: block;
         }
+        .frame-fallback {
+            margin: 10px 12px 0;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #1e293b;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            display: none;
+        }
+        .frame-fallback a {
+            color: #0f766e;
+            font-weight: 800;
+            text-decoration: none;
+            margin-left: 6px;
+        }
+        .frame-fallback a:hover {
+            text-decoration: underline;
+        }
         .toast-wrap { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:9999; pointer-events:none; }
         .toast { background:#1f2937; color:#fff; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:600; opacity:0; transform:translateY(10px); transition:opacity 0.2s,transform 0.2s; pointer-events:none; max-width:320px; }
         .toast.show { opacity:1; transform:translateY(0); }
@@ -206,6 +226,10 @@
     {% if switch_notice %}
     <div class="switch-banner">{{ switch_notice }}</div>
     {% endif %}
+    <div class="frame-fallback" id="frameFallback" role="status" aria-live="polite">
+        Embedded view did not render correctly.
+        <a href="{{ raw_url }}" target="_top" rel="noopener">Open app directly</a>
+    </div>
     <div class="toast-wrap" id="toastWrap"></div>
     <iframe id="appFrame" src="{{ raw_url }}"></iframe>
     <script>
@@ -246,9 +270,14 @@
             var frame = document.getElementById('appFrame');
             if (!frame) return;
             var tb = document.getElementById('topbar');
-            var used = (tb ? tb.offsetHeight : 0);
+            var scopeBar = document.querySelector('.scope-mini-bar');
+            var switchBanner = document.querySelector('.switch-banner');
+            var used = (tb ? tb.offsetHeight : 0) +
+                (scopeBar ? scopeBar.offsetHeight : 0) +
+                (switchBanner ? switchBanner.offsetHeight : 0);
             var vh = window.innerHeight - used;
             var isMobile = window.innerWidth <= 820;
+            var minHeight = isMobile ? 360 : 420;
             if (isMobile) {
                 // Disable iframe internal scroll so iOS can't trap touches inside it.
                 frame.setAttribute('scrolling', 'no');
@@ -266,12 +295,34 @@
                         doc.documentElement ? doc.documentElement.scrollHeight : 0
                     );
                     if (contentH && contentH > 50) {
-                        frame.style.height = Math.max(contentH, isMobile ? 0 : vh) + 'px';
+                        frame.style.height = Math.max(contentH, vh, minHeight) + 'px';
                         return;
                     }
                 }
             } catch (e) { /* cross-origin or not ready */ }
-            frame.style.height = vh + 'px';
+            frame.style.height = Math.max(vh, minHeight) + 'px';
+        }
+        function showFrameFallback() {
+            var fallback = document.getElementById('frameFallback');
+            if (!fallback) return;
+            fallback.style.display = 'block';
+        }
+        function hideFrameFallback() {
+            var fallback = document.getElementById('frameFallback');
+            if (!fallback) return;
+            fallback.style.display = 'none';
+        }
+        function frameHasMeaningfulContent() {
+            var frame = document.getElementById('appFrame');
+            if (!frame) return false;
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc || !doc.body) return false;
+                var text = (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+                return doc.body.children.length > 0 || text.length > 40;
+            } catch (e) {
+                return true; // Cross-origin access should not be treated as failure.
+            }
         }
         setFrameHeight();
         window.addEventListener('resize', setFrameHeight);
@@ -299,6 +350,11 @@
                     setFrameHeight();
                     setTimeout(setFrameHeight, 300);
                     setTimeout(setFrameHeight, 1000);
+                    if (frameHasMeaningfulContent()) {
+                        hideFrameFallback();
+                    } else {
+                        showFrameFallback();
+                    }
                     try {
                         var doc = frame.contentDocument;
                         if (doc && window.ResizeObserver) {
@@ -316,6 +372,11 @@
                     } catch (e) { /* cross-origin */ }
                 });
             }
+            setTimeout(function() {
+                if (!frameHasMeaningfulContent()) {
+                    showFrameFallback();
+                }
+            }, 3500);
             setInterval(setFrameHeight, 1500);
         })();
     </script>

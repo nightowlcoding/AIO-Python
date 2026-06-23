@@ -60,6 +60,8 @@ def _load_persistent_secret_key() -> str:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = _load_persistent_secret_key()
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+app.config['TEMPLATES_AUTO_RELOAD'] = os.environ.get('MGR_TEMPLATE_RELOAD', '0') == '1'
+app.jinja_env.auto_reload = app.config['TEMPLATES_AUTO_RELOAD']
 
 # Cookie isolation: Manager App is proxied behind Dexter on the same browser
 # origin (localhost:5080). Distinct cookie names + path scope prevent the
@@ -112,6 +114,19 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 
 db = database.Database()
+
+
+def _log_manager_app_startup(host, port, debug_mode):
+    template_searchpath = []
+    try:
+        template_searchpath = list(app.jinja_loader.searchpath)
+    except Exception:
+        template_searchpath = []
+
+    print(f"[managerapp] Starting from: {Path(__file__).resolve()}")
+    print(f"[managerapp] Templates: {template_searchpath}")
+    print(f"[managerapp] debug={debug_mode} templates_auto_reload={app.config.get('TEMPLATES_AUTO_RELOAD')} jinja_auto_reload={app.jinja_env.auto_reload}")
+    print(f"[managerapp] Listening on {host}:{port}")
 
 
 def _dexter_company_name_from_header() -> str:
@@ -567,86 +582,127 @@ def _upsert_employee_profiles_from_daily_entries(company_id, location_id, log_da
     }
 
 def save_daily_log(company_id, log_data, location_id=None):
-	"""Save daily log to CSV file - matching desktop dailylog.py format"""
-	if location_id:
-		data_dir = f"company_data/{company_id}/locations/{location_id}/daily_logs"
-	else:
-		data_dir = f"company_data/{company_id}/daily_logs"
-	os.makedirs(data_dir, exist_ok=True)
-    
-	date_str = log_data['date'].replace('-', '')
-	shift = log_data.get('shift', 'Day')
-	filepath = f"{data_dir}/{date_str}_{shift}.csv"
-    
-	with open(filepath, 'w', newline='') as f:
-		writer = csv.writer(f)
-        
-		# Header matching desktop format
-		writer.writerow(['Date', log_data['date']])
-		writer.writerow(['Shift', shift])
-		writer.writerow(['Notes', log_data.get('notes', '')])
-		writer.writerow([])
-        
-		# Employee entries section
-		writer.writerow(['Employee Entries'])
-		writer.writerow(['Name', 'Shift', 'Area', 'Cash', 'C.C. Tips', 'Cash Diff', 'Visa', 'Mastercard', 'Amex', 'Discover',
-						'Credit Total', 'Beer', 'Liquor', 'Wine', 'Food', 'Voids'])
-        
-		employees = log_data.get('employees', [])
-		for emp in employees:
-			writer.writerow([
-				emp.get('name', ''),
-				emp.get('shift', 'Day'),
-				emp.get('area', ''),
-				emp.get('cash', 0),
-				emp.get('cc_tips', 0),
-				emp.get('cash_diff', 0),
-				emp.get('visa', 0),
-				emp.get('mastercard', 0),
-				emp.get('amex', 0),
-				emp.get('discover', 0),
-				emp.get('credit', 0),
-				emp.get('beer', 0),
-				emp.get('liquor', 0),
-				emp.get('wine', 0),
-				emp.get('food', 0),
-				emp.get('voids', 0)
-			])
-        
-		# Cash drawer count
-		writer.writerow([])
-		writer.writerow(['Cash Drawer Count'])
-		writer.writerow(['Pennies', log_data.get('pennies', 0)])
-		writer.writerow(['Nickels', log_data.get('nickels', 0)])
-		writer.writerow(['Dimes', log_data.get('dimes', 0)])
-		writer.writerow(['Quarters', log_data.get('quarters', 0)])
-		writer.writerow(['Ones', log_data.get('ones', 0)])
-		writer.writerow(['Fives', log_data.get('fives', 0)])
-		writer.writerow(['Tens', log_data.get('tens', 0)])
-		writer.writerow(['Twenties', log_data.get('twenties', 0)])
-		writer.writerow(['Fifties', log_data.get('fifties', 0)])
-		writer.writerow(['Hundreds', log_data.get('hundreds', 0)])
-		writer.writerow(['Drawer Total', log_data.get('drawer_total', 0)])
-        
-		# Cash Deductions
-		writer.writerow([])
-		writer.writerow(['Cash Deductions'])
-		deduction_descs = log_data.get('deduction_descs', [])
-		deduction_locations = log_data.get('deduction_locations', [])
-		deduction_amounts = log_data.get('deduction_amounts', [])
-		for i, desc in enumerate(deduction_descs):
-			if desc:
-				location = deduction_locations[i] if i < len(deduction_locations) else ''
-				amount = deduction_amounts[i] if i < len(deduction_amounts) else '0'
-				writer.writerow([desc, location, amount])
-        
-		# Deposit summary
-		writer.writerow([])
-		writer.writerow(['Deposit Summary'])
-		total_deductions = sum(float(amt) for amt in deduction_amounts if amt)
-		writer.writerow(['Cash Adjustments', total_deductions])
-		writer.writerow(['Cash in Drawer', log_data.get('drawer_total', 0)])
-		writer.writerow(['DEPOSIT AMOUNT', log_data.get('deposit_amount', 0)])
+    """Save daily log to CSV file - matching desktop dailylog.py format"""
+    if location_id:
+        data_dir = f"company_data/{company_id}/locations/{location_id}/daily_logs"
+    else:
+        data_dir = f"company_data/{company_id}/daily_logs"
+    os.makedirs(data_dir, exist_ok=True)
+
+    date_str = log_data['date'].replace('-', '')
+    shift = log_data.get('shift', 'Day')
+    filepath = f"{data_dir}/{date_str}_{shift}.csv"
+
+    with open(filepath, 'w', newline='') as f:
+        writer = csv.writer(f)
+
+        # Header matching desktop format
+        writer.writerow(['Date', log_data['date']])
+        writer.writerow(['Shift', shift])
+        writer.writerow(['Notes', log_data.get('notes', '')])
+        writer.writerow([])
+
+        # Employee entries section
+        writer.writerow(['Employee Entries'])
+        writer.writerow(['Name', 'Shift', 'Area', 'Cash', 'C.C. Tips', 'Cash Diff', 'Visa', 'Mastercard', 'Amex', 'Discover',
+                         'Credit Total', 'Beer', 'Liquor', 'Wine', 'Food', 'Voids'])
+
+        employees = log_data.get('employees', [])
+        for emp in employees:
+            writer.writerow([
+                emp.get('name', ''),
+                emp.get('shift', 'Day'),
+                emp.get('area', ''),
+                emp.get('cash', 0),
+                emp.get('cc_tips', 0),
+                emp.get('cash_diff', 0),
+                emp.get('visa', 0),
+                emp.get('mastercard', 0),
+                emp.get('amex', 0),
+                emp.get('discover', 0),
+                emp.get('credit', 0),
+                emp.get('beer', 0),
+                emp.get('liquor', 0),
+                emp.get('wine', 0),
+                emp.get('food', 0),
+                emp.get('voids', 0),
+            ])
+
+        # Cash drawer count
+        writer.writerow([])
+        writer.writerow(['Cash Drawer Count'])
+        writer.writerow(['Pennies', log_data.get('pennies', 0)])
+        writer.writerow(['Nickels', log_data.get('nickels', 0)])
+        writer.writerow(['Dimes', log_data.get('dimes', 0)])
+        writer.writerow(['Quarters', log_data.get('quarters', 0)])
+        writer.writerow(['Rolled Coins', log_data.get('rolled_coins', 0)])
+        writer.writerow(['Ones', log_data.get('ones', 0)])
+        writer.writerow(['Fives', log_data.get('fives', 0)])
+        writer.writerow(['Tens', log_data.get('tens', 0)])
+        writer.writerow(['Twenties', log_data.get('twenties', 0)])
+        writer.writerow(['Fifties', log_data.get('fifties', 0)])
+        writer.writerow(['Hundreds', log_data.get('hundreds', 0)])
+        writer.writerow(['Drawer Total', log_data.get('drawer_total', 0)])
+
+        # Shift Drawer Checkpoints
+        writer.writerow([])
+        writer.writerow(['Shift Drawer Checkpoints'])
+        writer.writerow(['Checkpoint', 'Pennies', 'Nickels', 'Dimes', 'Quarters', 'Ones', 'Fives', 'Tens', 'Twenties', 'Fifties', 'Hundreds', 'Rolled Coins', 'Drawer Total', 'Timestamp'])
+        checkpoints = log_data.get('drawer_checkpoints', {})
+        for checkpoint_key in ['start_day', 'end_day', 'start_night', 'end_night']:
+            checkpoint = checkpoints.get(checkpoint_key, {})
+            if checkpoint and checkpoint.get('ones') is not None and checkpoint.get('ones') != '':
+                writer.writerow([
+                    checkpoint_key,
+                    checkpoint.get('pennies', 0),
+                    checkpoint.get('nickels', 0),
+                    checkpoint.get('dimes', 0),
+                    checkpoint.get('quarters', 0),
+                    checkpoint.get('ones', 0),
+                    checkpoint.get('fives', 0),
+                    checkpoint.get('tens', 0),
+                    checkpoint.get('twenties', 0),
+                    checkpoint.get('fifties', 0),
+                    checkpoint.get('hundreds', 0),
+                    checkpoint.get('rolled_coins', 0),
+                    checkpoint.get('drawer_total', 0),
+                    checkpoint.get('timestamp', '')
+                ])
+
+        # Cash Deductions
+        writer.writerow([])
+        writer.writerow(['Cash Deductions'])
+        deduction_descs = log_data.get('deduction_descs', [])
+        deduction_locations = log_data.get('deduction_locations', [])
+        deduction_amounts = log_data.get('deduction_amounts', [])
+        for i, desc in enumerate(deduction_descs):
+            if desc:
+                location = deduction_locations[i] if i < len(deduction_locations) else ''
+                amount = deduction_amounts[i] if i < len(deduction_amounts) else '0'
+                writer.writerow([desc, location, amount])
+
+        # Tax Exempt
+        writer.writerow([])
+        writer.writerow(['Tax Exempt'])
+        writer.writerow(['Holder Name', 'Exempt Number', 'Transaction Notes', 'Total'])
+        tax_exempt_names = log_data.get('tax_exempt_names', [])
+        tax_exempt_numbers = log_data.get('tax_exempt_numbers', [])
+        tax_exempt_notes = log_data.get('tax_exempt_notes', [])
+        tax_exempt_amounts = log_data.get('tax_exempt_amounts', [])
+        for i, holder_name in enumerate(tax_exempt_names):
+            exempt_number = tax_exempt_numbers[i] if i < len(tax_exempt_numbers) else ''
+            transaction_notes = tax_exempt_notes[i] if i < len(tax_exempt_notes) else ''
+            amount = tax_exempt_amounts[i] if i < len(tax_exempt_amounts) else '0'
+            if holder_name or exempt_number or transaction_notes or str(amount).strip():
+                writer.writerow([holder_name, exempt_number, transaction_notes, amount])
+
+        # Deposit summary
+        writer.writerow([])
+        writer.writerow(['Deposit Summary'])
+        total_deductions = sum(float(amt) for amt in deduction_amounts if amt)
+        writer.writerow(['Cash Adjustments', total_deductions])
+        writer.writerow(['Cash in Drawer', log_data.get('drawer_total', 0)])
+        writer.writerow(['DEPOSIT AMOUNT', log_data.get('deposit_amount', 0)])
 
 def load_daily_log(company_id, date_str, location_id=None, shift=None):
     """Load daily log from CSV file - matching desktop dailylog.py format"""
@@ -691,6 +747,7 @@ def load_daily_log(company_id, date_str, location_id=None, shift=None):
         'nickels': 0,
         'dimes': 0,
         'quarters': 0,
+        'rolled_coins': 0,
         'ones': 0,
         'fives': 0,
         'tens': 0,
@@ -698,9 +755,14 @@ def load_daily_log(company_id, date_str, location_id=None, shift=None):
         'fifties': 0,
         'hundreds': 0,
         'drawer_total': 0,
+        'drawer_checkpoints': {},
         'deduction_descs': [],
         'deduction_locations': [],
         'deduction_amounts': [],
+        'tax_exempt_names': [],
+        'tax_exempt_numbers': [],
+        'tax_exempt_notes': [],
+        'tax_exempt_amounts': [],
         'deposit_amount': 0
     }
 
@@ -727,11 +789,17 @@ def load_daily_log(company_id, date_str, location_id=None, shift=None):
                 elif row[0] == 'Cash Drawer Count':
                     section = 'drawer'
                     continue
+                elif row[0] == 'Shift Drawer Checkpoints':
+                    section = 'checkpoints'
+                    continue
                 elif row[0] == 'Deductions':
                     section = 'deductions'
                     continue
                 elif row[0] == 'Cash Deductions':
                     section = 'deductions'
+                    continue
+                elif row[0] == 'Tax Exempt':
+                    section = 'tax_exempt'
                     continue
                 elif row[0] == 'Deposit Summary':
                     section = 'deposit'
@@ -762,10 +830,34 @@ def load_daily_log(company_id, date_str, location_id=None, shift=None):
                 # Parse drawer data
                 elif section == 'drawer' and len(row) >= 2:
                     key = row[0].lower().replace(' ', '_')
-                    if key in ['pennies', 'nickels', 'dimes', 'quarters', 'ones', 'fives', 'tens', 'twenties', 'fifties', 'hundreds']:
+                    if key in ['pennies', 'nickels', 'dimes', 'quarters', 'rolled_coins', 'ones', 'fives', 'tens', 'twenties', 'fifties', 'hundreds']:
                         log_data[key] = float(row[1]) if row[1] else 0
                     elif key == 'drawer_total':
                         log_data['drawer_total'] = float(row[1]) if row[1] else 0
+
+                # Parse checkpoint data
+                elif section == 'checkpoints' and len(row) >= 2 and row[0] != 'Checkpoint':
+                    checkpoint_key = row[0]
+                    if checkpoint_key in ['start_day', 'end_day', 'start_night', 'end_night']:
+                        has_rolled_coins_column = len(row) >= 14
+                        drawer_total_idx = 12 if has_rolled_coins_column else 11
+                        timestamp_idx = 13 if has_rolled_coins_column else 12
+                        checkpoint_data = {
+                            'pennies': float(row[1]) if len(row) > 1 and row[1] else 0,
+                            'nickels': float(row[2]) if len(row) > 2 and row[2] else 0,
+                            'dimes': float(row[3]) if len(row) > 3 and row[3] else 0,
+                            'quarters': float(row[4]) if len(row) > 4 and row[4] else 0,
+                            'ones': float(row[5]) if len(row) > 5 and row[5] else 0,
+                            'fives': float(row[6]) if len(row) > 6 and row[6] else 0,
+                            'tens': float(row[7]) if len(row) > 7 and row[7] else 0,
+                            'twenties': float(row[8]) if len(row) > 8 and row[8] else 0,
+                            'fifties': float(row[9]) if len(row) > 9 and row[9] else 0,
+                            'hundreds': float(row[10]) if len(row) > 10 and row[10] else 0,
+                            'rolled_coins': float(row[11]) if has_rolled_coins_column and len(row) > 11 and row[11] else 0,
+                            'drawer_total': float(row[drawer_total_idx]) if len(row) > drawer_total_idx and row[drawer_total_idx] else 0,
+                            'timestamp': row[timestamp_idx] if len(row) > timestamp_idx else ''
+                        }
+                        log_data['drawer_checkpoints'][checkpoint_key] = checkpoint_data
 
                 # Parse deductions (support both old 2-column and new 3-column format)
                 elif section == 'deductions' and len(row) >= 2 and row[0] not in ['Total Deductions']:
@@ -778,6 +870,26 @@ def load_daily_log(company_id, date_str, location_id=None, shift=None):
                         # Old 2-column format (desc, amount)
                         log_data['deduction_locations'].append('')
                         log_data['deduction_amounts'].append(float(row[1]) if row[1] else 0)
+
+                # Parse tax exempt rows
+                elif section == 'tax_exempt' and len(row) >= 1:
+                    if row[0] in ['Holder Name', 'Employee Entries', 'Cash Drawer Count', 'Deductions', 'Cash Deductions', 'Deposit Summary']:
+                        continue
+
+                    holder_name = row[0] if len(row) > 0 else ''
+                    exempt_number = row[1] if len(row) > 1 else ''
+                    transaction_notes = row[2] if len(row) > 2 else ''
+                    amount_raw = row[3] if len(row) > 3 else ''
+                    amount = 0
+                    if str(amount_raw).strip():
+                        cleaned_amount = str(amount_raw).strip().replace('$', '').replace(',', '')
+                        amount = float(cleaned_amount) if cleaned_amount else 0
+
+                    if holder_name or exempt_number or transaction_notes or amount:
+                        log_data['tax_exempt_names'].append(holder_name)
+                        log_data['tax_exempt_numbers'].append(exempt_number)
+                        log_data['tax_exempt_notes'].append(transaction_notes)
+                        log_data['tax_exempt_amounts'].append(amount)
 
                 # Parse deposit
                 elif section == 'deposit' and len(row) >= 2:
@@ -1389,6 +1501,10 @@ def daily_log():
             employee_data_json = request.form.get('employee_data', '[]')
             employees = json.loads(employee_data_json) if employee_data_json else []
             
+            # Parse checkpoint data from JSON
+            checkpoint_data_json = request.form.get('drawer_checkpoints', '{}')
+            drawer_checkpoints = json.loads(checkpoint_data_json) if checkpoint_data_json else {}
+            
             log_data = {
                 'date': request.form.get('date'),
                 'shift': request.form.get('shift', 'Day'),
@@ -1399,6 +1515,7 @@ def daily_log():
                 'nickels': request.form.get('nickels', 0),
                 'dimes': request.form.get('dimes', 0),
                 'quarters': request.form.get('quarters', 0),
+                'rolled_coins': request.form.get('rolled_coins', 0),
                 'ones': request.form.get('ones', 0),
                 'fives': request.form.get('fives', 0),
                 'tens': request.form.get('tens', 0),
@@ -1406,10 +1523,17 @@ def daily_log():
                 'fifties': request.form.get('fifties', 0),
                 'hundreds': request.form.get('hundreds', 0),
                 'drawer_total': request.form.get('drawer_total', 0),
+                # Shift checkpoints
+                'drawer_checkpoints': drawer_checkpoints,
                 # Cash Deductions
                 'deduction_descs': request.form.getlist('deduction_desc'),
                 'deduction_locations': request.form.getlist('deduction_location'),
                 'deduction_amounts': request.form.getlist('deduction_amount'),
+                # Tax Exempt
+                'tax_exempt_names': request.form.getlist('tax_exempt_name'),
+                'tax_exempt_numbers': request.form.getlist('tax_exempt_number'),
+                'tax_exempt_notes': request.form.getlist('tax_exempt_notes'),
+                'tax_exempt_amounts': request.form.getlist('tax_exempt_amount'),
                 # Deposit
                 'deposit_amount': request.form.get('deposit_amount', 0)
             }
@@ -1447,10 +1571,19 @@ def daily_log():
     
     # Load existing data for selected date and location
     log_data = load_daily_log(current_user.current_company_id, selected_date, selected_location)
+    previous_end_night_checkpoint = {}
+    try:
+        previous_date = (datetime.strptime(selected_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+        previous_night_log = load_daily_log(current_user.current_company_id, previous_date, selected_location, shift='Night')
+        if previous_night_log:
+            previous_end_night_checkpoint = previous_night_log.get('drawer_checkpoints', {}).get('end_night', {}) or {}
+    except Exception:
+        previous_end_night_checkpoint = {}
     
     return render_template('daily_log.html', 
                          date=selected_date, 
                          log_data=log_data,
+                         previous_end_night_checkpoint=previous_end_night_checkpoint,
                          locations=locations_list,
                          selected_location_id=selected_location)
 
@@ -1649,6 +1782,18 @@ def api_daily_summary():
     except:
         return jsonify({'success': False, 'error': 'Invalid date format'})
     
+    def _normalize_shift_name(value):
+        text = str(value or '').strip().lower()
+        if text == 'day':
+            return 'Day'
+        if text == 'night':
+            return 'Night'
+        if text == 'full':
+            return 'Full'
+        return str(value or '').strip() or 'Day'
+
+    normalized_shift_filter = _normalize_shift_name(shift_filter)
+
     # Group files by date to combine Day and Night shifts
     date_files = {}
     import sys
@@ -1727,10 +1872,10 @@ def api_daily_summary():
                             if section == 'employees' and row[0] != 'Name' and row[0] and len(row) >= 15:
                                 try:
                                     # Get employee shift from row (column index 1)
-                                    emp_shift = row[1] if len(row) > 1 and row[1] else 'Day'
+                                    emp_shift = _normalize_shift_name(row[1] if len(row) > 1 and row[1] else 'Day')
                                     
                                     # Filter by shift if not Full
-                                    if shift_filter != 'Full' and emp_shift != shift_filter:
+                                    if normalized_shift_filter != 'Full' and emp_shift != normalized_shift_filter:
                                         continue
                                     
                                     employee = {
@@ -1816,13 +1961,21 @@ def api_daily_summary():
                 
                 print(f"DEBUG - Date {date_key}: total_cash_adjustments = {total_cash_adjustments}, combined_deductions = {combined_deductions}")  # Debug
                 
-                # Determine shift label based on what was filtered
-                if shift_filter == 'Full':
-                    # Check if we have both Day and Night employees
-                    shifts_present = set(emp.get('shift', 'Day') for emp in combined_employees)
-                    shift_label = 'Full' if len(shifts_present) > 1 else list(shifts_present)[0]
+                # Determine shift label based on what was filtered.
+                # Full means a true combined day+night view only.
+                shifts_present = {
+                    _normalize_shift_name(emp.get('shift', 'Day'))
+                    for emp in combined_employees
+                }
+                has_day = 'Day' in shifts_present
+                has_night = 'Night' in shifts_present
+
+                if normalized_shift_filter == 'Full':
+                    if not (has_day and has_night):
+                        continue
+                    shift_label = 'Full'
                 else:
-                    shift_label = shift_filter
+                    shift_label = normalized_shift_filter
                 
                 print(f"Date: {date_key}, Combined Deposit: {combined_deposit}")  # Debug
                 
@@ -1919,6 +2072,113 @@ def api_cash_deductions():
     # Sort by date
     daily_deductions.sort(key=lambda x: x['date'], reverse=True)
     return jsonify({'success': True, 'total_deductions': round(total_deductions, 2), 'daily': daily_deductions})
+
+
+@app.route('/api/reports/tax-exempt')
+@login_required
+@company_required
+def api_tax_exempt_report():
+    """Get total tax exempt amount for a date range."""
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    location_id = _resolve_effective_location_id(_effective_location_options(current_user.current_company_id))
+    if location_id:
+        data_dir = f"company_data/{current_user.current_company_id}/locations/{location_id}/daily_logs"
+    else:
+        data_dir = f"company_data/{current_user.current_company_id}/daily_logs"
+
+    if not os.path.exists(data_dir):
+        return jsonify({'success': True, 'total_tax_exempt': 0.0, 'daily': []})
+
+    try:
+        start = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+        end = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+    except Exception:
+        return jsonify({'success': False, 'error': 'Invalid date format'})
+
+    def _parse_float(raw_value):
+        try:
+            cleaned = str(raw_value or '').strip().replace('$', '').replace(',', '')
+            if not cleaned:
+                return None
+            return float(cleaned)
+        except Exception:
+            return None
+
+    daily_totals = {}
+
+    for filename in os.listdir(data_dir):
+        if not filename.endswith('.csv') or filename.startswith('.'):
+            continue
+
+        date_str = filename.split('_')[0]
+        if len(date_str) != 8 or not date_str.isdigit():
+            continue
+
+        try:
+            file_date = datetime.strptime(date_str, '%Y%m%d')
+            if start and file_date < start:
+                continue
+            if end and file_date > end:
+                continue
+
+            date_key = file_date.strftime('%Y-%m-%d')
+            file_total = 0.0
+            in_tax_exempt_section = False
+
+            filepath = f"{data_dir}/{filename}"
+            with open(filepath, 'r') as handle:
+                rows = list(csv.reader(handle))
+
+            for row in rows:
+                if not row:
+                    continue
+
+                label = str(row[0] or '').strip()
+                if label == 'Tax Exempt':
+                    in_tax_exempt_section = True
+                    continue
+
+                if in_tax_exempt_section and label in {
+                    'Employee Entries',
+                    'Cash Drawer Count',
+                    'Deductions',
+                    'Cash Deductions',
+                    'Deposit Summary',
+                }:
+                    in_tax_exempt_section = False
+                    continue
+
+                if not in_tax_exempt_section:
+                    continue
+
+                # Support rows shaped like:
+                # holder_name, exempt_number, transaction_notes, total
+                # and gracefully fallback to the right-most parseable number.
+                parsed_amount = None
+                if len(row) >= 4:
+                    parsed_amount = _parse_float(row[3])
+                if parsed_amount is None:
+                    for candidate in reversed(row):
+                        parsed_amount = _parse_float(candidate)
+                        if parsed_amount is not None:
+                            break
+
+                if parsed_amount is not None:
+                    file_total += parsed_amount
+
+            daily_totals[date_key] = round(daily_totals.get(date_key, 0.0) + file_total, 2)
+        except Exception:
+            continue
+
+    daily = [
+        {'date': date_key, 'total': amount}
+        for date_key, amount in daily_totals.items()
+    ]
+    daily.sort(key=lambda item: item['date'], reverse=True)
+    total_tax_exempt = round(sum(item['total'] for item in daily), 2)
+    return jsonify({'success': True, 'total_tax_exempt': total_tax_exempt, 'daily': daily})
 
 
 @app.route('/api/reports/employee-performance')
@@ -3101,8 +3361,10 @@ if __name__ == '__main__':
     port = int(os.environ.get('MGR_PORT', '8000'))
     debug_mode = os.environ.get('MGR_DEBUG', '0') == '1'
 
+    _log_manager_app_startup(host, port, debug_mode)
+
     if debug_mode:
-        app.run(debug=True, host=host, port=port, use_reloader=False)
+        app.run(debug=True, host=host, port=port, use_reloader=True)
     else:
         try:
             from waitress import serve  # type: ignore[import]

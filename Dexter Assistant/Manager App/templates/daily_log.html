@@ -203,61 +203,63 @@
                             <i class="bi bi-chevron-down float-end" id="totalsIcon"></i>
                         </h6>
                     </div>
-                    <div class="card-body" id="totalsBody" style="display: none;">
-                        <!-- Day Shift Section -->
-                        <h6 class="text-primary mb-2"><i class="bi bi-sun"></i> Day Shift</h6>
-                        <table class="table table-sm table-borderless small mb-2">
-                            <tr><td>Cash:</td><td class="text-end">$<span id="day_total_cash">0.00</span></td></tr>
-                            <tr><td>CC Tips:</td><td class="text-end">$<span id="day_total_cc_tips">0.00</span></td></tr>
-                            <tr><td>Visa:</td><td class="text-end">$<span id="day_total_visa">0.00</span></td></tr>
-                            <tr><td>Mastercard:</td><td class="text-end">$<span id="day_total_mastercard">0.00</span></td></tr>
-                            <tr><td>Amex:</td><td class="text-end">$<span id="day_total_amex">0.00</span></td></tr>
-                            <tr><td>Discover:</td><td class="text-end">$<span id="day_total_discover">0.00</span></td></tr>
-                            <tr class="table-primary"><td><strong>Total Credit:</strong></td><td class="text-end"><strong>$<span id="day_total_credit">0.00</span></strong></td></tr>
-                            <tr><td>Beer:</td><td class="text-end">$<span id="day_total_beer">0.00</span></td></tr>
-                            <tr><td>Liquor:</td><td class="text-end">$<span id="day_total_liquor">0.00</span></td></tr>
-                            <tr><td>Wine:</td><td class="text-end">$<span id="day_total_wine">0.00</span></td></tr>
-                            <tr><td>Food:</td><td class="text-end">$<span id="day_total_food">0.00</span></td></tr>
-                            <tr class="table-primary"><td><strong>Total Net Sales:</strong></td><td class="text-end"><strong>$<span id="day_total_sales_calc">0.00</span></strong></td></tr>
-                        </table>
-                        
-                        <hr>
-                        
-                        <!-- Night Shift Section -->
-                        <h6 class="text-dark mb-2"><i class="bi bi-moon-stars"></i> Night Shift</h6>
-                        <table class="table table-sm table-borderless small mb-2">
-                            <tr><td>Cash:</td><td class="text-end">$<span id="night_total_cash">0.00</span></td></tr>
-                            <tr><td>CC Tips:</td><td class="text-end">$<span id="night_total_cc_tips">0.00</span></td></tr>
-                            <tr><td>Visa:</td><td class="text-end">$<span id="night_total_visa">0.00</span></td></tr>
-                            <tr><td>Mastercard:</td><td class="text-end">$<span id="night_total_mastercard">0.00</span></td></tr>
-                            <tr><td>Amex:</td><td class="text-end">$<span id="night_total_amex">0.00</span></td></tr>
-                            <tr><td>Discover:</td><td class="text-end">$<span id="night_total_discover">0.00</span></td></tr>
-                            <tr class="table-secondary"><td><strong>Total Credit:</strong></td><td class="text-end"><strong>$<span id="night_total_credit">0.00</span></strong></td></tr>
-                            <tr><td>Beer:</td><td class="text-end">$<span id="night_total_beer">0.00</span></td></tr>
-                            <tr><td>Liquor:</td><td class="text-end">$<span id="night_total_liquor">0.00</span></td></tr>
-                            <tr><td>Wine:</td><td class="text-end">$<span id="night_total_wine">0.00</span></td></tr>
-                            <tr><td>Food:</td><td class="text-end">$<span id="night_total_food">0.00</span></td></tr>
-                            <tr class="table-secondary"><td><strong>Total Net Sales:</strong></td><td class="text-end"><strong>$<span id="night_total_sales_calc">0.00</span></strong></td></tr>
-                        </table>
-                        
-                        <hr>
-                        
-                        <!-- Combined Totals -->
-                        <h6 class="text-success mb-2"><i class="bi bi-calculator-fill"></i> Combined Totals</h6>
-                        <table class="table table-sm table-borderless small mb-0">
-                            <tr><td>Cash:</td><td class="text-end">$<span id="total_cash">0.00</span></td></tr>
-                            <tr><td>CC Tips:</td><td class="text-end">$<span id="total_cc_tips">0.00</span></td></tr>
-                            <tr><td>Visa:</td><td class="text-end">$<span id="total_visa">0.00</span></td></tr>
-                            <tr><td>Mastercard:</td><td class="text-end">$<span id="total_mastercard">0.00</span></td></tr>
-                            <tr><td>Amex:</td><td class="text-end">$<span id="total_amex">0.00</span></td></tr>
-                            <tr><td>Discover:</td><td class="text-end">$<span id="total_discover">0.00</span></td></tr>
-                            <tr class="table-success"><td><strong>Total Credit:</strong></td><td class="text-end"><strong>$<span id="total_credit">0.00</span></strong></td></tr>
-                            <tr><td>Beer:</td><td class="text-end">$<span id="total_beer">0.00</span></td></tr>
-                            <tr><td>Liquor:</td><td class="text-end">$<span id="total_liquor">0.00</span></td></tr>
-                            <tr><td>Wine:</td><td class="text-end">$<span id="total_wine">0.00</span></td></tr>
-                            <tr><td>Food:</td><td class="text-end">$<span id="total_food">0.00</span></td></tr>
-                            <tr class="table-success"><td><strong>Total Net Sales:</strong></td><td class="text-end"><strong>$<span id="total_sales_calc">0.00</span></strong></td></tr>
-                        </table>
+                    <div class="card-body p-2" id="totalsBody" style="display: none;">
+                        <div class="row g-2">
+                            <!-- Day Shift Column -->
+                            <div class="col-4">
+                                <div class="fw-semibold text-primary mb-1 text-center" style="font-size:0.8rem;"><i class="bi bi-sun-fill"></i> Day</div>
+                                <table class="table table-sm table-borderless mb-0" style="font-size:0.78rem;">
+                                    <tr><td class="py-0 text-muted">Cash</td><td class="py-0 text-end fw-semibold">$<span id="day_total_cash">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">CC Tips</td><td class="py-0 text-end fw-semibold">$<span id="day_total_cc_tips">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Visa</td><td class="py-0 text-end">$<span id="day_total_visa">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">MC</td><td class="py-0 text-end">$<span id="day_total_mastercard">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Amex</td><td class="py-0 text-end">$<span id="day_total_amex">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Disc</td><td class="py-0 text-end">$<span id="day_total_discover">0.00</span></td></tr>
+                                    <tr class="table-primary"><td class="py-0"><strong>Credit</strong></td><td class="py-0 text-end"><strong>$<span id="day_total_credit">0.00</span></strong></td></tr>
+                                    <tr><td class="py-0 text-muted">Beer</td><td class="py-0 text-end">$<span id="day_total_beer">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Liquor</td><td class="py-0 text-end">$<span id="day_total_liquor">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Wine</td><td class="py-0 text-end">$<span id="day_total_wine">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Food</td><td class="py-0 text-end">$<span id="day_total_food">0.00</span></td></tr>
+                                    <tr class="table-primary"><td class="py-0"><strong>Net Sales</strong></td><td class="py-0 text-end"><strong>$<span id="day_total_sales_calc">0.00</span></strong></td></tr>
+                                </table>
+                            </div>
+                            <!-- Night Shift Column -->
+                            <div class="col-4">
+                                <div class="fw-semibold text-dark mb-1 text-center" style="font-size:0.8rem;"><i class="bi bi-moon-stars-fill"></i> Night</div>
+                                <table class="table table-sm table-borderless mb-0" style="font-size:0.78rem;">
+                                    <tr><td class="py-0 text-muted">Cash</td><td class="py-0 text-end fw-semibold">$<span id="night_total_cash">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">CC Tips</td><td class="py-0 text-end fw-semibold">$<span id="night_total_cc_tips">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Visa</td><td class="py-0 text-end">$<span id="night_total_visa">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">MC</td><td class="py-0 text-end">$<span id="night_total_mastercard">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Amex</td><td class="py-0 text-end">$<span id="night_total_amex">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Disc</td><td class="py-0 text-end">$<span id="night_total_discover">0.00</span></td></tr>
+                                    <tr class="table-secondary"><td class="py-0"><strong>Credit</strong></td><td class="py-0 text-end"><strong>$<span id="night_total_credit">0.00</span></strong></td></tr>
+                                    <tr><td class="py-0 text-muted">Beer</td><td class="py-0 text-end">$<span id="night_total_beer">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Liquor</td><td class="py-0 text-end">$<span id="night_total_liquor">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Wine</td><td class="py-0 text-end">$<span id="night_total_wine">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Food</td><td class="py-0 text-end">$<span id="night_total_food">0.00</span></td></tr>
+                                    <tr class="table-secondary"><td class="py-0"><strong>Net Sales</strong></td><td class="py-0 text-end"><strong>$<span id="night_total_sales_calc">0.00</span></strong></td></tr>
+                                </table>
+                            </div>
+                            <!-- Combined Total Column -->
+                            <div class="col-4">
+                                <div class="fw-semibold text-success mb-1 text-center" style="font-size:0.8rem;"><i class="bi bi-calculator-fill"></i> Total</div>
+                                <table class="table table-sm table-borderless mb-0" style="font-size:0.78rem;">
+                                    <tr><td class="py-0 text-muted">Cash</td><td class="py-0 text-end fw-semibold">$<span id="total_cash">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">CC Tips</td><td class="py-0 text-end fw-semibold">$<span id="total_cc_tips">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Visa</td><td class="py-0 text-end">$<span id="total_visa">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">MC</td><td class="py-0 text-end">$<span id="total_mastercard">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Amex</td><td class="py-0 text-end">$<span id="total_amex">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Disc</td><td class="py-0 text-end">$<span id="total_discover">0.00</span></td></tr>
+                                    <tr class="table-success"><td class="py-0"><strong>Credit</strong></td><td class="py-0 text-end"><strong>$<span id="total_credit">0.00</span></strong></td></tr>
+                                    <tr><td class="py-0 text-muted">Beer</td><td class="py-0 text-end">$<span id="total_beer">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Liquor</td><td class="py-0 text-end">$<span id="total_liquor">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Wine</td><td class="py-0 text-end">$<span id="total_wine">0.00</span></td></tr>
+                                    <tr><td class="py-0 text-muted">Food</td><td class="py-0 text-end">$<span id="total_food">0.00</span></td></tr>
+                                    <tr class="table-success"><td class="py-0"><strong>Net Sales</strong></td><td class="py-0 text-end"><strong>$<span id="total_sales_calc">0.00</span></strong></td></tr>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -322,6 +324,80 @@
                         <div class="mt-3">
                             <div class="alert alert-warning mb-0">
                                 <strong>Total Cash Deductions:</strong> $<span id="totalCashDeductions">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tax Exempt Section -->
+                <div class="card mt-3">
+                    <div class="card-header bg-info text-dark" style="cursor: pointer;" onclick="toggleSection('taxExemptBody')">
+                        <h6 class="mb-0">
+                            <i class="bi bi-receipt-cutoff"></i> Tax Exempt
+                            <i class="bi bi-chevron-down float-end" id="taxExemptIcon"></i>
+                        </h6>
+                    </div>
+                    <div class="card-body" id="taxExemptBody" style="display: none;">
+                        <div id="taxExemptContainer" class="mb-3">
+                            {% if log_data and log_data.tax_exempt_names %}
+                                {% for i in range(log_data.tax_exempt_names|length) %}
+                                    <div class="row mb-2 tax-exempt-row g-2">
+                                        <div class="col-12 col-md-3">
+                                            <input type="text" class="form-control form-control-sm" name="tax_exempt_name"
+                                                   placeholder="Holder Name" value="{{ log_data.tax_exempt_names[i] }}">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <input type="text" class="form-control form-control-sm" name="tax_exempt_number"
+                                                   placeholder="Exempt Number" value="{{ log_data.tax_exempt_numbers[i] if log_data.tax_exempt_numbers and i < log_data.tax_exempt_numbers|length else '' }}">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <input type="text" class="form-control form-control-sm" name="tax_exempt_notes"
+                                                   placeholder="Transaction Notes" value="{{ log_data.tax_exempt_notes[i] if log_data.tax_exempt_notes and i < log_data.tax_exempt_notes|length else '' }}">
+                                        </div>
+                                        <div class="col-8 col-md-2">
+                                            <input type="number" class="form-control form-control-sm tax-exempt-amount" name="tax_exempt_amount"
+                                                   placeholder="0.00" step="0.01" value="{{ log_data.tax_exempt_amounts[i] if log_data.tax_exempt_amounts and i < log_data.tax_exempt_amounts|length else 0 }}" onchange="calculateTaxExemptTotal()">
+                                        </div>
+                                        <div class="col-4 col-md-1">
+                                            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateTaxExemptTotal()">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="row mb-2 tax-exempt-row g-2">
+                                    <div class="col-12 col-md-3">
+                                        <input type="text" class="form-control form-control-sm" name="tax_exempt_name"
+                                               placeholder="Holder Name">
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <input type="text" class="form-control form-control-sm" name="tax_exempt_number"
+                                               placeholder="Exempt Number">
+                                    </div>
+                                    <div class="col-12 col-md-3">
+                                        <input type="text" class="form-control form-control-sm" name="tax_exempt_notes"
+                                               placeholder="Transaction Notes">
+                                    </div>
+                                    <div class="col-8 col-md-2">
+                                        <input type="number" class="form-control form-control-sm tax-exempt-amount" name="tax_exempt_amount"
+                                               placeholder="0.00" step="0.01" onchange="calculateTaxExemptTotal()">
+                                    </div>
+                                    <div class="col-4 col-md-1">
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateTaxExemptTotal()">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="addTaxExemptRow()">
+                            <i class="bi bi-plus-circle"></i> Add Tax Exempt Ticket
+                        </button>
+
+                        <div class="mt-3">
+                            <div class="alert alert-info mb-0">
+                                <strong>Total Tax Exempt:</strong> $<span id="totalTaxExempt">0.00</span>
                             </div>
                         </div>
                     </div>
@@ -540,85 +616,112 @@
                             <i class="bi bi-chevron-down float-end" id="cashDrawerIcon"></i>
                         </h4>
                     </div>
-                    <div class="card-body" id="cashDrawerBody" style="display: none;">
-                        <div class="row g-4">
+                    <div class="card-body py-2" id="cashDrawerBody" style="display: none;">
+                        <!-- Shift Checkpoints -->
+                        <div class="row mb-2">
+                            <div class="col-12">
+                                <div class="d-grid gap-1" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); display: grid;">
+                                    <button type="button" class="btn btn-sm btn-danger" id="checkpointStartDay" onclick="captureCheckpoint('start_day')" title="Capture start of day count">
+                                        <i class="bi bi-play-fill"></i> Start Day
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger" id="checkpointEndDay" onclick="captureCheckpoint('end_day')" title="Capture end of day count">
+                                        <i class="bi bi-stop-fill"></i> End Day
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger" id="checkpointStartNight" onclick="captureCheckpoint('start_night')" title="Capture start of night count">
+                                        <i class="bi bi-play-fill"></i> Start Night
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger" id="checkpointEndNight" onclick="captureCheckpoint('end_night')" title="Capture end of night count">
+                                        <i class="bi bi-stop-fill"></i> End Night
+                                    </button>
+                                </div>
+                                <div id="checkpointMetaDisplay" class="small text-muted mt-1" style="display: none;">
+                                    <i class="bi bi-info-circle"></i> <span id="checkpointMetaText"></span>
+                                </div>
+                                <div id="checkpointComparisonDisplay" class="small mt-1" style="display: none;">
+                                    <i class="bi bi-arrow-left-right"></i> <span id="checkpointComparisonText"></span>
+                                </div>
+                                <div class="small fw-semibold mt-1 text-info">
+                                    Drawer Total: $<span id="drawerTotal">0.00</span>
+                                </div>
+                                <input type="hidden" name="drawer_total" id="drawerTotalInput" value="0">
+                                <input type="hidden" name="drawer_checkpoints" id="drawerCheckpointsInput" value="{}">
+                            </div>
+                        </div>
+
+                        <div class="row g-2 align-items-start">
                             <!-- Coins Section -->
-                            <div class="col-md-6">
-                                <h6 class="text-success mb-3"><i class="bi bi-coin"></i> Coins</h6>
+                            <div class="col-6">
+                                <h6 class="text-success mb-2"><i class="bi bi-coin"></i> Coins</h6>
                                 <div class="row g-2">
                                     <div class="col-6">
-                                        <label class="form-label small">Pennies ($0.01)</label>
+                                        <label class="form-label small">Pennies</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="pennies" 
-                                               data-value="0.01" value="{{ log_data.pennies if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="0.01" value="{{ log_data.pennies if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
-                                        <label class="form-label small">Nickels ($0.05)</label>
+                                        <label class="form-label small">Nickels</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="nickels" 
-                                               data-value="0.05" value="{{ log_data.nickels if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="0.05" value="{{ log_data.nickels if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
-                                        <label class="form-label small">Dimes ($0.10)</label>
+                                        <label class="form-label small">Dimes</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="dimes" 
-                                               data-value="0.10" value="{{ log_data.dimes if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="0.10" value="{{ log_data.dimes if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
-                                        <label class="form-label small">Quarters ($0.25)</label>
+                                        <label class="form-label small">Quarters</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="quarters" 
-                                               data-value="0.25" value="{{ log_data.quarters if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="0.25" value="{{ log_data.quarters if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small">Rolled Coins</label>
+                                        <input type="number" class="form-control form-control-sm denomination" name="rolled_coins"
+                                               data-value="1" step="0.01" min="0" max="9999.99" value="{{ log_data.rolled_coins if log_data else 0 }}"
+                                               oninput="enforceCurrencyAmount(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                 </div>
                             </div>
                             
                             <!-- Bills Section -->
-                            <div class="col-md-6">
-                                <h6 class="text-success mb-3"><i class="bi bi-cash-stack"></i> Bills</h6>
+                            <div class="col-6">
+                                <h6 class="text-success mb-2"><i class="bi bi-cash-stack"></i> Bills</h6>
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <label class="form-label small">$1 Bills</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="ones" 
-                                               data-value="1" value="{{ log_data.ones if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="1" value="{{ log_data.ones if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label small">$5 Bills</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="fives" 
-                                               data-value="5" value="{{ log_data.fives if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="5" value="{{ log_data.fives if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label small">$10 Bills</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="tens" 
-                                               data-value="10" value="{{ log_data.tens if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="10" value="{{ log_data.tens if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label small">$20 Bills</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="twenties" 
-                                               data-value="20" value="{{ log_data.twenties if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="20" value="{{ log_data.twenties if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label small">$50 Bills</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="fifties" 
-                                               data-value="50" value="{{ log_data.fifties if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="50" value="{{ log_data.fifties if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label small">$100 Bills</label>
                                         <input type="number" class="form-control form-control-sm denomination" name="hundreds" 
-                                               data-value="100" value="{{ log_data.hundreds if log_data else 0 }}" onchange="calculateDrawerTotal()">
+                                               data-value="100" value="{{ log_data.hundreds if log_data else 0 }}" maxlength="4" min="0" max="9999" oninput="enforceMaxDigits(this); calculateDrawerTotal()" onchange="calculateDrawerTotal()">
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="row mt-4">
-                            <div class="col-12">
-                                <div class="alert alert-info">
-                                    <strong>Drawer Total:</strong> $<span id="drawerTotal">0.00</span>
-                                    <input type="hidden" name="drawer_total" id="drawerTotalInput" value="0">
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
         
         <!-- Actions -->
         <div class="daily-log-actions d-flex gap-2 mt-4 flex-column flex-md-row">
@@ -764,6 +867,25 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Charts -->
+        <div class="print-section" id="printChartsSection">
+            <h3>Charts</h3>
+            <div class="print-chart-grid">
+                <div class="print-chart-card">
+                    <h4>Sales Categories (Beer, Liquor, Wine, Food)</h4>
+                    <div id="print_chart_categories"></div>
+                </div>
+                <div class="print-chart-card">
+                    <h4>Sales by Period (Day vs Night)</h4>
+                    <div id="print_chart_period"></div>
+                </div>
+                <div class="print-chart-card">
+                    <h4>Revenue by Area (Bar, Dining, To Go)</h4>
+                    <div id="print_chart_area"></div>
+                </div>
+            </div>
+        </div>
         
         <!-- Cash Deductions -->
         <div class="print-section" id="printDeductionsSection">
@@ -782,6 +904,29 @@
                     <tr class="total-row">
                         <td colspan="2"><strong>Total Deductions</strong></td>
                         <td><strong>$<span id="print_total_deductions"></span></strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!-- Tax Exempt -->
+        <div class="print-section" id="printTaxExemptSection">
+            <h3>Tax Exempt</h3>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Holder Name</th>
+                        <th>Exempt Number</th>
+                        <th>Notes</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody id="print_tax_exempt">
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="3"><strong>Total Tax Exempt</strong></td>
+                        <td><strong>$<span id="print_total_tax_exempt"></span></strong></td>
                     </tr>
                 </tfoot>
             </table>
@@ -818,6 +963,12 @@
 // Employee data array
 let employees = {{ log_data.employees|tojson if log_data and log_data.employees else '[]'|safe }};
 const initialServerEmployeeCount = Array.isArray(employees) ? employees.length : 0;
+
+// Checkpoint data from server
+let drawerCheckpoints = {{ log_data.drawer_checkpoints|tojson if log_data and log_data.drawer_checkpoints else '{}'|safe }};
+const previousEndNightCheckpoint = {{ previous_end_night_checkpoint|tojson if previous_end_night_checkpoint else '{}'|safe }};
+let activeCheckpoint = null;
+
 let editingIndex = null; // Track which employee is being edited
 let pendingEmployeeUndo = null;
 let dailyLogDraftTimer = null;
@@ -1047,6 +1198,14 @@ function markDailyLogDirty() {
     dailyLogHasUnsavedChanges = true;
 }
 
+function buildManagerAppApiUrl(path) {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    if (window.location.pathname.startsWith('/app/managerapp/')) {
+        return `/app/managerapp${normalizedPath}`;
+    }
+    return normalizedPath;
+}
+
 async function fetchDailyLogVersion() {
     const context = getDailyLogLiveContext();
     const params = new URLSearchParams({ date: context.date });
@@ -1054,7 +1213,7 @@ async function fetchDailyLogVersion() {
         params.set('location_id', context.locationId);
     }
 
-    const response = await fetch(`/api/daily-log/version?${params.toString()}`, {
+    const response = await fetch(`${buildManagerAppApiUrl('/api/daily-log/version')}?${params.toString()}`, {
         headers: { 'Accept': 'application/json' },
         cache: 'no-store'
     });
@@ -1258,6 +1417,52 @@ function restoreCashDeductions(rows) {
     });
 }
 
+function captureTaxExemptRows() {
+    return Array.from(document.querySelectorAll('.tax-exempt-row')).map(row => ({
+        name: row.querySelector('input[name="tax_exempt_name"]')?.value || '',
+        number: row.querySelector('input[name="tax_exempt_number"]')?.value || '',
+        notes: row.querySelector('input[name="tax_exempt_notes"]')?.value || '',
+        amount: row.querySelector('input[name="tax_exempt_amount"]')?.value || '0'
+    }));
+}
+
+function restoreTaxExemptRows(rows) {
+    const container = document.getElementById('taxExemptContainer');
+    if (!container || !Array.isArray(rows) || rows.length === 0) {
+        return;
+    }
+
+    const existing = container.querySelectorAll('.tax-exempt-row');
+    if (existing.length > 0) {
+        container.innerHTML = '';
+    }
+
+    rows.forEach((row) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'row mb-2 tax-exempt-row g-2';
+        wrapper.innerHTML = `
+            <div class="col-12 col-md-3">
+                <input type="text" class="form-control form-control-sm" name="tax_exempt_name" placeholder="Holder Name" value="${row.name || ''}">
+            </div>
+            <div class="col-12 col-md-3">
+                <input type="text" class="form-control form-control-sm" name="tax_exempt_number" placeholder="Exempt Number" value="${row.number || ''}">
+            </div>
+            <div class="col-12 col-md-3">
+                <input type="text" class="form-control form-control-sm" name="tax_exempt_notes" placeholder="Transaction Notes" value="${row.notes || ''}">
+            </div>
+            <div class="col-8 col-md-2">
+                <input type="number" class="form-control form-control-sm tax-exempt-amount" name="tax_exempt_amount" placeholder="0.00" step="0.01" value="${row.amount || '0'}" onchange="calculateTaxExemptTotal()">
+            </div>
+            <div class="col-4 col-md-1">
+                <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateTaxExemptTotal()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(wrapper);
+    });
+}
+
 function saveDailyLogDraft() {
     if (!dailyLogDraftReady) {
         return;
@@ -1288,6 +1493,7 @@ function saveDailyLogDraft() {
             nickels: document.querySelector('input[name="nickels"]')?.value || '0',
             dimes: document.querySelector('input[name="dimes"]')?.value || '0',
             quarters: document.querySelector('input[name="quarters"]')?.value || '0',
+            rolled_coins: document.querySelector('input[name="rolled_coins"]')?.value || '0',
             ones: document.querySelector('input[name="ones"]')?.value || '0',
             fives: document.querySelector('input[name="fives"]')?.value || '0',
             tens: document.querySelector('input[name="tens"]')?.value || '0',
@@ -1295,7 +1501,10 @@ function saveDailyLogDraft() {
             fifties: document.querySelector('input[name="fifties"]')?.value || '0',
             hundreds: document.querySelector('input[name="hundreds"]')?.value || '0'
         },
-        deductions: captureCashDeductions()
+        checkpoints: drawerCheckpoints,
+        activeCheckpoint: activeCheckpoint,
+        deductions: captureCashDeductions(),
+        taxExempt: captureTaxExemptRows()
     };
 
     try {
@@ -1380,8 +1589,20 @@ function restoreDailyLogDraft() {
             });
         }
 
+        if (draft.checkpoints && typeof draft.checkpoints === 'object') {
+            drawerCheckpoints = draft.checkpoints;
+            if (draft.activeCheckpoint) {
+                activeCheckpoint = draft.activeCheckpoint;
+            }
+            document.getElementById('drawerCheckpointsInput').value = JSON.stringify(drawerCheckpoints);
+        }
+
         if (Array.isArray(draft.deductions) && draft.deductions.length > 0) {
             restoreCashDeductions(draft.deductions);
+        }
+
+        if (Array.isArray(draft.taxExempt) && draft.taxExempt.length > 0) {
+            restoreTaxExemptRows(draft.taxExempt);
         }
 
         dailyLogHasUnsavedChanges = true;
@@ -1392,6 +1613,8 @@ function restoreDailyLogDraft() {
         updateTotals();
         calculateDrawerTotal();
         calculateDeposit();
+        calculateTaxExemptTotal();
+        updateCheckpointUI();
         syncDailyLogSummary();
 
         const savedAt = draft.savedAt ? new Date(draft.savedAt) : null;
@@ -2133,7 +2356,7 @@ async function importBulkExcelFile(file) {
         
         console.log('Uploading file to /api/import-file...');
         
-        const response = await fetch('/api/import-file', {
+        const response = await fetch(buildManagerAppApiUrl('/api/import-file'), {
             method: 'POST',
             body: formData
         });
@@ -2704,6 +2927,32 @@ function addEmployeeRow() {
     container.appendChild(row);
 }
 
+function enforceMaxDigits(input) {
+    // Remove non-numeric characters and limit to 4 digits
+    let value = input.value.replace(/[^\d]/g, '');
+    if (value.length > 4) {
+        value = value.slice(0, 4);
+    }
+    input.value = value;
+}
+
+function enforceCurrencyAmount(input) {
+    let value = String(input.value || '').replace(/[^\d.]/g, '');
+    const pieces = value.split('.');
+    if (pieces.length > 2) {
+        value = `${pieces[0]}.${pieces.slice(1).join('')}`;
+    }
+
+    let [whole, decimal] = value.split('.');
+    whole = (whole || '').slice(0, 4);
+    if (decimal !== undefined) {
+        decimal = decimal.slice(0, 2);
+        input.value = `${whole}.${decimal}`;
+    } else {
+        input.value = whole;
+    }
+}
+
 function calculateDrawerTotal() {
     let total = 0;
     document.querySelectorAll('.denomination').forEach(input => {
@@ -2776,6 +3025,18 @@ function calculateDeposit() {
     // Update cash assistant difference
     calculateCashAssistant();
     syncDailyLogSummary();
+}
+
+function calculateTaxExemptTotal() {
+    let totalTaxExempt = 0;
+    document.querySelectorAll('.tax-exempt-amount').forEach(input => {
+        totalTaxExempt += parseFloat(input.value) || 0;
+    });
+
+    const totalTaxExemptEl = document.getElementById('totalTaxExempt');
+    if (totalTaxExemptEl) {
+        totalTaxExemptEl.textContent = totalTaxExempt.toFixed(2);
+    }
 }
 
 function calculateCashAssistant() {
@@ -2868,6 +3129,37 @@ function addCashDeductionRow() {
         </div>
         <div class="col-1">
             <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateDeposit()">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(row);
+    applyNumericKeyboardHints(row);
+}
+
+function addTaxExemptRow() {
+    const container = document.getElementById('taxExemptContainer');
+    const row = document.createElement('div');
+    row.className = 'row mb-2 tax-exempt-row g-2 small';
+    row.innerHTML = `
+        <div class="col-4">
+            <input type="text" class="form-control form-control-sm" name="tax_exempt_name"
+                   placeholder="Holder Name">
+        </div>
+        <div class="col-3">
+            <input type="text" class="form-control form-control-sm" name="tax_exempt_number"
+                   placeholder="Exempt Number">
+        </div>
+        <div class="col-3">
+            <input type="text" class="form-control form-control-sm" name="tax_exempt_notes"
+                   placeholder="Transaction Notes">
+        </div>
+        <div class="col-1">
+            <input type="number" class="form-control form-control-sm tax-exempt-amount" name="tax_exempt_amount"
+                   placeholder="0.00" step="0.01" onchange="calculateTaxExemptTotal()">
+        </div>
+        <div class="col-1">
+            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.parentElement.remove(); calculateTaxExemptTotal()">
                 <i class="bi bi-trash"></i>
             </button>
         </div>
@@ -2984,6 +3276,189 @@ function calculateRevenueCenters() {
     }
 }
 
+// Checkpoint management
+
+function captureCheckpoint(checkpointKey) {
+    const ones = parseFloat(document.querySelector('input[name="ones"]')?.value) || 0;
+    const timestamp = new Date().toISOString();
+    const currentDrawerTotal = parseFloat(document.getElementById('drawerTotalInput')?.value) || 0;
+    
+    drawerCheckpoints[checkpointKey] = {
+        pennies: parseFloat(document.querySelector('input[name="pennies"]')?.value) || 0,
+        nickels: parseFloat(document.querySelector('input[name="nickels"]')?.value) || 0,
+        dimes: parseFloat(document.querySelector('input[name="dimes"]')?.value) || 0,
+        quarters: parseFloat(document.querySelector('input[name="quarters"]')?.value) || 0,
+        rolled_coins: parseFloat(document.querySelector('input[name="rolled_coins"]')?.value) || 0,
+        ones: ones,
+        fives: parseFloat(document.querySelector('input[name="fives"]')?.value) || 0,
+        tens: parseFloat(document.querySelector('input[name="tens"]')?.value) || 0,
+        twenties: parseFloat(document.querySelector('input[name="twenties"]')?.value) || 0,
+        fifties: parseFloat(document.querySelector('input[name="fifties"]')?.value) || 0,
+        hundreds: parseFloat(document.querySelector('input[name="hundreds"]')?.value) || 0,
+        drawer_total: currentDrawerTotal,
+        timestamp: timestamp
+    };
+    
+    // Update hidden form field
+    const checkpointInput = document.getElementById('drawerCheckpointsInput');
+    if (checkpointInput) {
+        checkpointInput.value = JSON.stringify(drawerCheckpoints);
+    }
+    
+    // Set as active checkpoint
+    activeCheckpoint = checkpointKey;
+    updateCheckpointUI();
+    markDailyLogDirty();
+}
+
+function loadCheckpoint(checkpointKey) {
+    const checkpoint = drawerCheckpoints[checkpointKey];
+    if (!checkpoint) return;
+
+    const applyValue = (name, value) => {
+        const field = document.querySelector(`input[name="${name}"]`);
+        if (field) {
+            field.value = value;
+        }
+    };
+
+    applyValue('pennies', checkpoint.pennies);
+    applyValue('nickels', checkpoint.nickels);
+    applyValue('dimes', checkpoint.dimes);
+    applyValue('quarters', checkpoint.quarters);
+    applyValue('rolled_coins', checkpoint.rolled_coins || 0);
+    applyValue('ones', checkpoint.ones);
+    applyValue('fives', checkpoint.fives);
+    applyValue('tens', checkpoint.tens);
+    applyValue('twenties', checkpoint.twenties);
+    applyValue('fifties', checkpoint.fifties);
+    applyValue('hundreds', checkpoint.hundreds);
+    
+    activeCheckpoint = checkpointKey;
+    calculateDrawerTotal();
+    updateCheckpointUI();
+}
+
+function updateCheckpointUI() {
+    // Update button colors based on checkpoint ones value
+    const checkpointLabels = {
+        'start_day': 'checkpointStartDay',
+        'end_day': 'checkpointEndDay',
+        'start_night': 'checkpointStartNight',
+        'end_night': 'checkpointEndNight'
+    };
+    
+    for (const [key, btnId] of Object.entries(checkpointLabels)) {
+        const btn = document.getElementById(btnId);
+        if (!btn) continue;
+        
+        const checkpoint = drawerCheckpoints[key];
+        const ones = checkpoint ? (checkpoint.ones || 0) : 0;
+        const hasData = ones > 0;
+        
+        btn.classList.remove('btn-danger', 'btn-success');
+        btn.classList.add(hasData ? 'btn-success' : 'btn-danger');
+        
+        // Add click handler to load checkpoint if it has data
+        if (hasData && activeCheckpoint !== key) {
+            btn.onclick = function(e) {
+                e.preventDefault();
+                loadCheckpoint(key);
+            };
+        } else if (!hasData) {
+            btn.onclick = function(e) {
+                e.preventDefault();
+                captureCheckpoint(key);
+            };
+        }
+    }
+    
+    // Update meta display
+    if (activeCheckpoint && drawerCheckpoints[activeCheckpoint]) {
+        const checkpoint = drawerCheckpoints[activeCheckpoint];
+        const timestamp = checkpoint.timestamp ? new Date(checkpoint.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        const displayNames = {
+            'start_day': 'Start Day',
+            'end_day': 'End Day',
+            'start_night': 'Start Night',
+            'end_night': 'End Night'
+        };
+        const displayText = `${displayNames[activeCheckpoint] || activeCheckpoint} | ${timestamp || 'no time'}`;
+        document.getElementById('checkpointMetaText').textContent = displayText;
+        document.getElementById('checkpointMetaDisplay').style.display = 'block';
+        updateCheckpointComparison(activeCheckpoint);
+    } else {
+        document.getElementById('checkpointMetaDisplay').style.display = 'none';
+        document.getElementById('checkpointComparisonDisplay').style.display = 'none';
+    }
+}
+
+function getComparisonSource(checkpointKey) {
+    if (checkpointKey === 'start_day') {
+        if (previousEndNightCheckpoint && Object.keys(previousEndNightCheckpoint).length > 0) {
+            return { label: 'Previous Day End Night', checkpoint: previousEndNightCheckpoint };
+        }
+        return null;
+    }
+    if (checkpointKey === 'end_day' && drawerCheckpoints.start_day) {
+        return { label: 'Start Day', checkpoint: drawerCheckpoints.start_day };
+    }
+    if (checkpointKey === 'start_night' && drawerCheckpoints.end_day) {
+        return { label: 'End Day', checkpoint: drawerCheckpoints.end_day };
+    }
+    if (checkpointKey === 'end_night' && drawerCheckpoints.start_night) {
+        return { label: 'Start Night', checkpoint: drawerCheckpoints.start_night };
+    }
+    return null;
+}
+
+function updateCheckpointComparison(checkpointKey) {
+    const comparisonWrap = document.getElementById('checkpointComparisonDisplay');
+    const comparisonText = document.getElementById('checkpointComparisonText');
+    if (!comparisonWrap || !comparisonText) {
+        return;
+    }
+
+    const current = drawerCheckpoints[checkpointKey];
+    if (!current) {
+        comparisonWrap.style.display = 'none';
+        return;
+    }
+
+    const source = getComparisonSource(checkpointKey);
+    if (!source || !source.checkpoint) {
+        comparisonText.textContent = 'No comparison baseline found yet.';
+        comparisonWrap.classList.remove('text-success', 'text-danger');
+        comparisonWrap.classList.add('text-muted');
+        comparisonWrap.style.display = 'block';
+        return;
+    }
+
+    const currentTotal = parseFloat(current.drawer_total) || 0;
+    const sourceTotal = parseFloat(source.checkpoint.drawer_total) || 0;
+    const delta = currentTotal - sourceTotal;
+    const deltaSign = delta >= 0 ? '+' : '-';
+    const deltaAbs = Math.abs(delta).toFixed(2);
+    const displayNames = {
+        'start_day': 'Start Day',
+        'end_day': 'End Day',
+        'start_night': 'Start Night',
+        'end_night': 'End Night'
+    };
+    const currentLabel = displayNames[checkpointKey] || checkpointKey;
+
+    comparisonText.textContent = `${source.label} -> ${currentLabel}: $${sourceTotal.toFixed(2)} to $${currentTotal.toFixed(2)} (${deltaSign}$${deltaAbs})`;
+    comparisonWrap.classList.remove('text-muted', 'text-success', 'text-danger');
+    if (delta > 0) {
+        comparisonWrap.classList.add('text-success');
+    } else if (delta < 0) {
+        comparisonWrap.classList.add('text-danger');
+    } else {
+        comparisonWrap.classList.add('text-muted');
+    }
+    comparisonWrap.style.display = 'block';
+}
+
 function clearForm() {
     if (confirm('Are you sure you want to clear all data?')) {
         employees = [];
@@ -2991,8 +3466,14 @@ function clearForm() {
         updateTotals();
         document.querySelectorAll('.denomination').forEach(input => input.value = 0);
         document.querySelectorAll('.cash-deduction-amount').forEach(input => input.value = 0);
+        document.querySelectorAll('.tax-exempt-amount').forEach(input => input.value = 0);
+        drawerCheckpoints = {};
+        activeCheckpoint = null;
+        document.getElementById('drawerCheckpointsInput').value = '{}';
         calculateDrawerTotal();
         calculateDeposit();
+        calculateTaxExemptTotal();
+        updateCheckpointUI();
         clearDailyLogDraft();
     }
 }
@@ -3052,7 +3533,7 @@ async function importExcelFile(file) {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await fetch('/api/import-file', {
+    const response = await fetch(buildManagerAppApiUrl('/api/import-file'), {
         method: 'POST',
         body: formData
     });
@@ -3265,6 +3746,15 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTotals();
     calculateDrawerTotal();
     calculateDeposit();
+    calculateTaxExemptTotal();
+    
+    // Initialize hidden checkpoint form field with server data
+    const checkpointInput = document.getElementById('drawerCheckpointsInput');
+    if (checkpointInput) {
+        checkpointInput.value = JSON.stringify(drawerCheckpoints);
+    }
+    
+    updateCheckpointUI();
     syncDailyLogSummary();
     
     // Load employee names for autocomplete
@@ -3292,6 +3782,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Sync checkpoint colors when denomination values change
+    const denominationInputs = document.querySelectorAll('.denomination');
+    denominationInputs.forEach(input => {
+        input.addEventListener('change', updateCheckpointUI);
+    });
+
     restoreDailyLogDraft();
 
     const draftInputs = document.querySelectorAll('#dailyLogForm input, #dailyLogForm select, #dailyLogForm textarea');
@@ -3307,7 +3803,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Load employee names from backend for autocomplete
 function loadEmployeeNames() {
     // Try backend first
-    fetch('/api/employee-names')
+    fetch(buildManagerAppApiUrl('/api/employee-names'))
         .then(response => {
             console.log('Employee names API response status:', response.status);
             return response.json();
@@ -3408,6 +3904,74 @@ function preparePrintSummary() {
         }
         section.classList.toggle('print-hidden', Boolean(hidden));
     };
+
+    const parseMoney = (value) => {
+        return Math.abs(parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0);
+    };
+
+    const buildPrintBarChartSvg = (labels, values, colors) => {
+        const width = 600;
+        const rowHeight = 24;
+        const topPad = 8;
+        const leftPad = 110;
+        const rightPad = 86;
+        const barMaxWidth = width - leftPad - rightPad;
+        const height = topPad + labels.length * rowHeight + 8;
+        const maxValue = Math.max(...values, 1);
+
+        const rows = labels.map((label, idx) => {
+            const y = topPad + idx * rowHeight;
+            const value = values[idx] || 0;
+            const barWidth = (value / maxValue) * barMaxWidth;
+            const color = colors[idx % colors.length];
+            return `
+                <text x="4" y="${y + 15}" font-size="11" fill="#1f2937">${label}</text>
+                <rect x="${leftPad}" y="${y + 4}" width="${barMaxWidth}" height="12" fill="#f1f5f9" rx="2"></rect>
+                <rect x="${leftPad}" y="${y + 4}" width="${barWidth.toFixed(2)}" height="12" fill="${color}" rx="2"></rect>
+                <text x="${width - rightPad + 4}" y="${y + 14}" font-size="11" fill="#111827" text-anchor="start">$${value.toFixed(2)}</text>
+            `;
+        }).join('');
+
+        return `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}">
+                ${rows}
+            </svg>
+        `;
+    };
+
+    const renderPrintCharts = (data) => {
+        const categoriesWrap = document.getElementById('print_chart_categories');
+        const periodWrap = document.getElementById('print_chart_period');
+        const areaWrap = document.getElementById('print_chart_area');
+        if (!categoriesWrap || !periodWrap || !areaWrap) {
+            return;
+        }
+
+        categoriesWrap.innerHTML = buildPrintBarChartSvg(
+            ['Beer', 'Liquor', 'Wine', 'Food'],
+            [data.totalBeer, data.totalLiquor, data.totalWine, data.totalFood],
+            ['#0284c7', '#0f766e', '#9333ea', '#ca8a04']
+        );
+
+        periodWrap.innerHTML = buildPrintBarChartSvg(
+            ['Day', 'Night'],
+            [data.daySales, data.nightSales],
+            ['#2563eb', '#7c3aed']
+        );
+
+        areaWrap.innerHTML = buildPrintBarChartSvg(
+            ['Bar', 'Dining', 'To Go'],
+            [data.totalBar, data.totalDining, data.totalToGo],
+            ['#dc2626', '#16a34a', '#ea580c']
+        );
+
+        const allValues = [
+            data.totalBeer, data.totalLiquor, data.totalWine, data.totalFood,
+            data.daySales, data.nightSales,
+            data.totalBar, data.totalDining, data.totalToGo,
+        ];
+        setPrintSectionHidden('printChartsSection', allValues.every(v => (v || 0) === 0));
+    };
     
     // Helper function to safely get text content
     const getText = (id) => {
@@ -3478,6 +4042,18 @@ function preparePrintSummary() {
             .map(value => Math.abs(parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0));
         setPrintSectionHidden('printRevenueSection', revenueValues.every(value => value === 0));
 
+        renderPrintCharts({
+            totalBeer: parseMoney(getText('total_beer')),
+            totalLiquor: parseMoney(getText('total_liquor')),
+            totalWine: parseMoney(getText('total_wine')),
+            totalFood: parseMoney(getText('total_food')),
+            daySales: parseMoney(getText('day_total_sales_calc')),
+            nightSales: parseMoney(getText('night_total_sales_calc')),
+            totalBar: parseMoney(totalBar),
+            totalDining: parseMoney(totalDining),
+            totalToGo: parseMoney(totalToGo),
+        });
+
         console.log('Revenue centers populated');
     }, 100);
     
@@ -3503,6 +4079,31 @@ function preparePrintSummary() {
     });
     document.getElementById('print_total_deductions').textContent = totalDeductions.toFixed(2);
     setPrintSectionHidden('printDeductionsSection', totalDeductions === 0 && deductionsBody.children.length === 0);
+
+    // Populate tax exempt
+    const taxExemptBody = document.getElementById('print_tax_exempt');
+    taxExemptBody.innerHTML = '';
+    let totalTaxExempt = 0;
+    document.querySelectorAll('.tax-exempt-row').forEach(row => {
+        const holderName = row.querySelector('input[name="tax_exempt_name"]')?.value || '';
+        const exemptNumber = row.querySelector('input[name="tax_exempt_number"]')?.value || '';
+        const notes = row.querySelector('input[name="tax_exempt_notes"]')?.value || '';
+        const amount = parseFloat(row.querySelector('input[name="tax_exempt_amount"]')?.value) || 0;
+
+        if (holderName || exemptNumber || notes || amount > 0) {
+            totalTaxExempt += amount;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${holderName}</td>
+                <td>${exemptNumber}</td>
+                <td>${notes}</td>
+                <td>$${amount.toFixed(2)}</td>
+            `;
+            taxExemptBody.appendChild(tr);
+        }
+    });
+    document.getElementById('print_total_tax_exempt').textContent = totalTaxExempt.toFixed(2);
+    setPrintSectionHidden('printTaxExemptSection', totalTaxExempt === 0 && taxExemptBody.children.length === 0);
     
     // Populate expected deposit
     document.getElementById('print_deposit_cash').textContent = getText('deposit_total_cash');
@@ -3522,7 +4123,7 @@ function printDailyLogSummary() {
 
         var pw = window.open('', '_blank', 'width=900,height=1100');
         if (!pw) {
-            alert('Allow popups for this page to print the Daily Log.');
+            window.print();
             return;
         }
 
@@ -3544,31 +4145,71 @@ function printDailyLogSummary() {
         doc.body.style.cssText = 'margin:0;padding:0;background:#fff;';
         doc.body.appendChild(container);
 
-        pw.focus();
-        pw.print();
-        pw.addEventListener('afterprint', function() { pw.close(); });
+        // Fit report content to a single letter page if it overflows.
+        var pageHeightPx = Math.round((11 - (0.34 * 2)) * 96);
+        var contentHeightPx = container.scrollHeight;
+        if (contentHeightPx > pageHeightPx && contentHeightPx > 0) {
+            var scale = pageHeightPx / contentHeightPx;
+            if (scale < 1) {
+                container.style.transformOrigin = 'top left';
+                container.style.transform = 'scale(' + scale.toFixed(4) + ')';
+                container.style.width = (100 / scale).toFixed(3) + '%';
+            }
+        }
+
+        window.setTimeout(function() {
+            pw.focus();
+            pw.print();
+            pw.addEventListener('afterprint', function() { pw.close(); });
+        }, 80);
     }, 250);
 }
 </script>
 
 <style id="dxDailyLogPrintCss" type="text/css">
-@page { size: letter portrait; margin: 0.14in; }
-body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe UI, Trebuchet MS, sans-serif; font-size: 6.5pt; line-height: 1.1; }
-#printSummary { display: grid; grid-template-columns: 1fr; gap: 0.04in; width: 100%; box-sizing: border-box; }
+@page { size: letter portrait; margin: 0.34in 0.42in; }
+#printSummary {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+    font-family: Segoe UI, Trebuchet MS, sans-serif;
+    font-size: 6.5pt;
+    line-height: 1.1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.03in;
+    width: 100%;
+    box-sizing: border-box;
+}
 .print-hidden { display: none !important; }
-.print-header { margin: 0; padding-bottom: 0.03in; border-bottom: 2px solid #000; }
+.print-header { margin: 0; padding-bottom: 0.02in; border-bottom: 2px solid #000; }
 .print-header-inner { display: flex; align-items: center; gap: 0.1in; }
-.print-logo { height: 44px; width: auto; object-fit: contain; flex-shrink: 0; }
+.print-logo { height: 36px; width: auto; object-fit: contain; flex-shrink: 0; }
 .print-header-text { flex: 1; text-align: center; }
-.print-header h2 { margin: 0; font-size: 11pt; font-weight: 700; }
-.print-header p { margin: 0.01in 0 0; font-size: 6.5pt; }
+.print-header h2 { margin: 0; font-size: 10pt; font-weight: 700; }
+.print-header p { margin: 0.01in 0 0; font-size: 6.2pt; }
 .print-section { margin: 0; break-inside: avoid; page-break-inside: avoid; }
-.print-section h3 { font-size: 6.5pt; font-weight: 700; margin: 0 0 0.025in; border-bottom: 1px solid #333; padding-bottom: 1px; }
+.print-section h3 { font-size: 6.2pt; font-weight: 700; margin: 0 0 0.02in; border-bottom: 1px solid #333; padding-bottom: 1px; }
 .print-table { width: 100%; border-collapse: collapse; margin: 0; font-size: 4.9pt; table-layout: fixed; }
 .print-table th, .print-table td { border: 1px solid #555; padding: 1px 1px; text-align: left; vertical-align: middle; overflow: hidden; }
 .print-table th { background: #e8e8e8; font-weight: 700; font-size: 4.7pt; }
 .print-table .total-row { background: #f0f0f0; font-weight: 700; }
 .print-table .text-danger { color: #000 !important; }
+.print-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.02in;
+}
+.print-chart-card {
+    border: 1px solid #666;
+    padding: 0.02in;
+}
+.print-chart-card h4 {
+    margin: 0 0 0.01in;
+    font-size: 5.1pt;
+    font-weight: 700;
+}
 #print_employees th:nth-child(1), #print_employees td:nth-child(1) { width: 17%; }
 #print_employees th:nth-child(2), #print_employees td:nth-child(2) { width: 7%; }
 #print_employees th:nth-child(3), #print_employees td:nth-child(3) { width: 7%; }
@@ -3586,6 +4227,61 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
     background-color: #f8f9fa !important;
 }
 
+/* Improve readability in Totals + Deposit cards */
+#totalsBody h6 {
+    font-size: .625rem !important;
+}
+
+#totalsBody .table,
+#totalsBody .table * {
+    font-size: .625rem !important;
+}
+
+#totalsBody table td,
+#totalsBody table th {
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+}
+
+#totalsBody table.small,
+#totalsBody table.small td,
+#totalsBody table.small th {
+    font-size: .625rem !important;
+}
+
+#depositBody > .row > .col-12 .d-flex strong,
+#depositBody > .row > .col-12 .d-flex span,
+#depositBody #depositFormulaText {
+    font-size: .625rem !important;
+}
+
+#depositBody .fs-5 {
+    font-size: .625rem !important;
+}
+
+@media (max-width: 768px) {
+    #totalsBody h6 {
+        font-size: .625rem !important;
+    }
+
+    #totalsBody .table,
+    #totalsBody .table *,
+    #totalsBody table td,
+    #totalsBody table th,
+    #totalsBody table.small,
+    #totalsBody table.small td,
+    #totalsBody table.small th,
+    #depositBody > .row > .col-12 .d-flex strong,
+    #depositBody > .row > .col-12 .d-flex span,
+    #depositBody #depositFormulaText {
+        font-size: .625rem !important;
+    }
+
+    #depositBody .fs-5 {
+        font-size: .625rem !important;
+    }
+}
+
 .print-only {
     display: none;
 }
@@ -3601,7 +4297,7 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
 @media print {
     @page {
         size: letter portrait;
-        margin: 0.16in;
+        margin: 0.34in 0.42in;
     }
 
     html,
@@ -3626,9 +4322,11 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
             'employees employees'
             'totals totals'
             'revenue revenue'
+            'charts charts'
             'deductions deductions'
+            'taxexempt taxexempt'
             'deposit deposit';
-        gap: 0.05in;
+        gap: 0.03in;
         padding: 0;
         margin: 0;
         width: 100%;
@@ -3680,6 +4378,14 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
         grid-area: deductions;
     }
 
+    #printChartsSection {
+        grid-area: charts;
+    }
+
+    #printTaxExemptSection {
+        grid-area: taxexempt;
+    }
+
     #printDepositSection {
         grid-area: deposit;
     }
@@ -3691,9 +4397,9 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
     }
 
     .print-section h3 {
-        font-size: 7pt;
+        font-size: 6.2pt;
         font-weight: 700;
-        margin: 0 0 0.03in;
+        margin: 0 0 0.02in;
         border-bottom: 1px solid #333;
         padding-bottom: 1px;
     }
@@ -3702,7 +4408,7 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
         width: 100%;
         border-collapse: collapse;
         margin: 0;
-        font-size: 5.35pt;
+        font-size: 4.9pt;
         table-layout: fixed;
     }
 
@@ -3718,7 +4424,7 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
     .print-table th {
         background: #efefef !important;
         font-weight: 700;
-        font-size: 5.2pt;
+        font-size: 4.7pt;
     }
 
     .print-table .total-row {
@@ -3733,6 +4439,23 @@ body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Segoe 
     #print_employees tr td,
     #print_employees tr th {
         padding: 1px;
+    }
+
+    .print-chart-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.02in;
+    }
+
+    .print-chart-card {
+        border: 1px solid #666;
+        padding: 0.02in;
+    }
+
+    .print-chart-card h4 {
+        margin: 0 0 0.01in;
+        font-size: 5.1pt;
+        font-weight: 700;
     }
 
     #print_employees td:first-child,

@@ -51,6 +51,7 @@
                         <option value="daily">Daily Summary</option>
                         <option value="employee">Employee Performance</option>
                         <option value="cash">Cash Deductions</option>
+                        <option value="tax_exempt">Tax Exempt</option>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -116,6 +117,36 @@
 
 <script>
 let currentReportData = [];
+const MANAGER_APP_BASE = '/app/managerapp';
+
+function buildManagerAppUrl(path) {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${MANAGER_APP_BASE}${normalizedPath}`;
+}
+
+function extractErrorMessage(payload, fallbackMessage) {
+    if (payload && typeof payload === 'object' && typeof payload.error === 'string' && payload.error.trim()) {
+        return payload.error;
+    }
+    return fallbackMessage;
+}
+
+async function fetchManagerJson(path) {
+    const response = await fetch(buildManagerAppUrl(path), {
+        credentials: 'same-origin'
+    });
+
+    if (!response.ok) {
+        throw new Error(`Request failed (${response.status})`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        throw new Error('Session expired. Please log in again.');
+    }
+
+    return response.json();
+}
 
 // Load employee names on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -124,8 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Load employee names from backend for autocomplete
 function loadEmployeeNames() {
-    fetch('/api/employee-names')
-        .then(response => response.json())
+    fetchManagerJson('/api/employee-names')
         .then(data => {
             // Always use the employee objects from employees.json for consistency
             let names = [];
@@ -207,17 +237,18 @@ function generateReport() {
         fetchEmployeePerformance(startDate, endDate, employeeName);
     } else if (reportType === 'cash') {
         fetchCashDeductions(startDate, endDate);
+    } else if (reportType === 'tax_exempt') {
+        fetchTaxExempt(startDate, endDate);
     }
 }
 
 function fetchCashDeductions(startDate, endDate) {
-    fetch(`/api/reports/cash-deductions?start_date=${startDate}&end_date=${endDate}`)
-        .then(response => response.json())
+    fetchManagerJson(`/api/reports/cash-deductions?start_date=${startDate}&end_date=${endDate}`)
         .then(data => {
             if (data.success) {
                 displayCashDeductions(data);
             } else {
-                alert('Error generating report: ' + (data.error || 'Unknown error'));
+                alert('Error generating report: ' + extractErrorMessage(data, 'Unknown error'));
             }
             document.getElementById('loadingIndicator').style.display = 'none';
         })
@@ -244,7 +275,7 @@ function displayCashDeductions(data) {
     // Table body with clickable date
     tbody.innerHTML = data.daily.map(row => `
         <tr>
-            <td><a href="/daily-log?date=${row.date}" class="text-decoration-none" title="Open Daily Log for ${row.date}">${row.date}</a></td>
+            <td><a href="${buildManagerAppUrl(`/daily-log?date=${row.date}`)}" class="text-decoration-none" title="Open Daily Log for ${row.date}">${row.date}</a></td>
             <td>$${row.deductions.toFixed(2)}</td>
         </tr>
     `).join('');
@@ -258,15 +289,62 @@ function displayCashDeductions(data) {
     document.getElementById('reportTitle').innerHTML = '<i class="bi bi-cash-coin"></i> Cash Deductions Report';
 }
 
+function fetchTaxExempt(startDate, endDate) {
+    fetchManagerJson(`/api/reports/tax-exempt?start_date=${startDate}&end_date=${endDate}`)
+        .then(data => {
+            if (data.success) {
+                displayTaxExempt(data);
+            } else {
+                alert('Error generating report: ' + extractErrorMessage(data, 'Unknown error'));
+            }
+            document.getElementById('loadingIndicator').style.display = 'none';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to generate report: ' + error.message);
+            document.getElementById('loadingIndicator').style.display = 'none';
+        });
+}
+
+function displayTaxExempt(data) {
+    const thead = document.getElementById('reportTableHead');
+    const tbody = document.getElementById('reportTableBody');
+    const summaryStats = document.getElementById('summaryStats');
+
+    currentReportData = [data];
+
+    thead.innerHTML = `
+        <tr>
+            <th>Date</th>
+            <th>Total Tax Exempt</th>
+        </tr>
+    `;
+
+    tbody.innerHTML = data.daily.map(row => `
+        <tr>
+            <td><a href="${buildManagerAppUrl(`/daily-log?date=${row.date}`)}" class="text-decoration-none" title="Open Daily Log for ${row.date}">${row.date}</a></td>
+            <td>$${row.total.toFixed(2)}</td>
+        </tr>
+    `).join('');
+
+    summaryStats.innerHTML = `
+        <div class="alert alert-info mt-3">
+            <strong>Total Tax Exempt:</strong> $${data.total_tax_exempt.toFixed(2)}
+        </div>
+    `;
+
+    document.getElementById('reportContainer').style.display = 'block';
+    document.getElementById('reportTitle').innerHTML = '<i class="bi bi-receipt-cutoff"></i> Tax Exempt Report';
+}
+
 function fetchDailySummary(startDate, endDate, shiftFilter) {
-    fetch(`/api/reports/daily-summary?start_date=${startDate}&end_date=${endDate}&shift_filter=${shiftFilter}&location_id=${selectedLocationId}`)
-        .then(response => response.json())
+    fetchManagerJson(`/api/reports/daily-summary?start_date=${startDate}&end_date=${endDate}&shift_filter=${shiftFilter}&location_id=${selectedLocationId}`)
         .then(data => {
             if (data.success) {
                 currentReportData = data.data;
                 displayDailySummary(data.data);
             } else {
-                alert('Error generating report: ' + (data.error || 'Unknown error'));
+                alert('Error generating report: ' + extractErrorMessage(data, 'Unknown error'));
             }
             document.getElementById('loadingIndicator').style.display = 'none';
         })
@@ -284,23 +362,13 @@ function fetchEmployeePerformance(startDate, endDate, employeeName) {
         url += `&employee_name=${encodeURIComponent(employeeName)}`;
     }
     
-    fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                throw new Error('Session expired. Please log in again.');
-            }
-            return response.json();
-        })
+    fetchManagerJson(url)
         .then(data => {
             if (data.success) {
                 currentReportData = data.data;
                 displayEmployeePerformance(data.data);
             } else {
-                alert('Error generating report: ' + (data.error || 'Unknown error'));
+                alert('Error generating report: ' + extractErrorMessage(data, 'Unknown error'));
             }
             document.getElementById('loadingIndicator').style.display = 'none';
         })
@@ -345,7 +413,7 @@ function displayDailySummary(data) {
     // Populate table body
     tbody.innerHTML = data.map(row => `
         <tr>
-            <td><a href="/daily-log?date=${row.date}" class="text-decoration-none" title="Open Daily Log for ${row.date}">${row.date}</a></td>
+            <td><a href="${buildManagerAppUrl(`/daily-log?date=${row.date}`)}" class="text-decoration-none" title="Open Daily Log for ${row.date}">${row.date}</a></td>
             <td><span class="badge bg-${row.shift === 'Day' ? 'primary' : row.shift === 'Night' ? 'dark' : 'info'}">${row.shift}</span></td>
             <td>${row.employees}</td>
             <td>$${row.total_sales.toFixed(2)}</td>
@@ -711,6 +779,15 @@ function exportToCSV() {
             });
             // Optionally add total at the end
             csv += `Total,${currentReportData[0].total_deductions.toFixed(2)}\n`;
+        }
+    } else if (reportType === 'tax_exempt') {
+        filename = 'tax_exempt_report.csv';
+        csv = 'Date,Total Tax Exempt\n';
+        if (currentReportData.length > 0 && currentReportData[0].daily) {
+            currentReportData[0].daily.forEach(row => {
+                csv += `${row.date},${row.total.toFixed(2)}\n`;
+            });
+            csv += `Total,${currentReportData[0].total_tax_exempt.toFixed(2)}\n`;
         }
     }
     

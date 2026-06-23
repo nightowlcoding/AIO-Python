@@ -7,10 +7,12 @@ import inspect
 import os
 import re
 import sqlite3
+import smtplib
 import socket
 import secrets
 import subprocess
 import sys
+import ssl
 import threading
 import time
 import webbrowser
@@ -18,11 +20,14 @@ from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
+from email.message import EmailMessage
+from email.utils import formataddr
 from urllib.error import URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import urlopen
 
 import requests
+from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -30,6 +35,7 @@ from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".env")
 CONFIG_PATH = ROOT / "dexter_assistant_config.json"
 RUNTIME_LOG_DIR = ROOT / "runtime_logs"
 FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
@@ -43,6 +49,27 @@ MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
 MAX_COMPANY_LOGO_BYTES = 2 * 1024 * 1024
 ALLOWED_COMPANY_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _load_persistent_front_door_secret_key() -> str:
+    env_key = os.environ.get("DEXTER_SECRET_KEY") or os.environ.get("SECRET_KEY")
+    if env_key:
+        return env_key
+
+    secret_path = ROOT / ".dexter_secret"
+    try:
+        existing = secret_path.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except FileNotFoundError:
+        pass
+
+    new_key = secrets.token_hex(32)
+    try:
+        secret_path.write_text(new_key, encoding="utf-8")
+    except OSError:
+        pass
+    return new_key
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -144,6 +171,18 @@ CREATE TABLE IF NOT EXISTS company_profiles (
     tax_id TEXT,
     notes TEXT,
     logo_rel_path TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+);
+
+CREATE TABLE IF NOT EXISTS company_email_settings (
+    company_id INTEGER PRIMARY KEY,
+    email_enabled INTEGER NOT NULL DEFAULT 1 CHECK (email_enabled IN (0, 1)),
+    email_from_name TEXT,
+    email_reply_to TEXT,
+    daily_log_email_enabled INTEGER NOT NULL DEFAULT 0 CHECK (daily_log_email_enabled IN (0, 1)),
+    daily_log_email_recipients TEXT,
+    daily_log_email_time TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (company_id) REFERENCES companies(id)
 );
@@ -432,6 +471,44 @@ def migrate_add_company_profiles_v1() -> None:
             FROM companies c
             LEFT JOIN company_profiles cp ON cp.company_id = c.id
             WHERE cp.company_id IS NULL
+            """
+        )
+
+        _mark_migration_complete(conn, migration_key)
+        conn.commit()
+    finally:
+        conn.close()
+
+def migrate_add_company_email_settings_v1() -> None:
+    migration_key = "company_email_settings_v1"
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS company_email_settings (
+                company_id INTEGER PRIMARY KEY,
+                email_enabled INTEGER NOT NULL DEFAULT 1 CHECK (email_enabled IN (0, 1)),
+                email_from_name TEXT,
+                email_reply_to TEXT,
+                daily_log_email_enabled INTEGER NOT NULL DEFAULT 0 CHECK (daily_log_email_enabled IN (0, 1)),
+                daily_log_email_recipients TEXT,
+                daily_log_email_time TEXT,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (company_id) REFERENCES companies(id)
+            )
+            """
+        )
+
+        if _is_migration_complete(conn, migration_key):
+            return
+
+        conn.execute(
+            """
+            INSERT INTO company_email_settings (company_id, updated_at)
+            SELECT c.id, datetime('now')
+            FROM companies c
+            LEFT JOIN company_email_settings ces ON ces.company_id = c.id
+            WHERE ces.company_id IS NULL
             """
         )
 
@@ -1291,6 +1368,217 @@ def upsert_company_profile(company_id: int, profile_data: dict[str, Any]) -> Non
         conn.commit()
     finally:
         conn.close()
+
+def _mail_config() -> dict[str, Any]:
+    mail_cfg = CONFIG.get("mail", {})
+    return dict(mail_cfg) if isinstance(mail_cfg, dict) else {}
+
+def _default_company_email_settings() -> dict[str, Any]:
+    mail_cfg = _mail_config()
+    return {
+        "email_enabled": bool(mail_cfg.get("enabled", True)),
+        "email_from_name": str(mail_cfg.get("from_name") or "").strip(),
+        "email_reply_to": str(mail_cfg.get("reply_to") or "").strip(),
+        "daily_log_email_enabled": bool(mail_cfg.get("daily_log_email_enabled", False)),
+        "daily_log_email_recipients": str(mail_cfg.get("daily_log_email_recipients") or "").strip(),
+        "daily_log_email_time": str(mail_cfg.get("daily_log_email_time") or "01:00").strip(),
+    }
+
+def get_company_email_settings(company_id: int) -> dict[str, Any]:
+    defaults = _default_company_email_settings()
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT company_id, email_enabled, email_from_name, email_reply_to,
+                   daily_log_email_enabled, daily_log_email_recipients, daily_log_email_time,
+                   updated_at
+            FROM company_email_settings
+            WHERE company_id = ?
+            LIMIT 1
+            """,
+            (int(company_id),),
+        ).fetchone()
+        if not row:
+            return defaults
+        return {
+            "email_enabled": bool(int(row["email_enabled"])),
+            "email_from_name": str(row["email_from_name"] or defaults["email_from_name"]),
+            "email_reply_to": str(row["email_reply_to"] or defaults["email_reply_to"]),
+            "daily_log_email_enabled": bool(int(row["daily_log_email_enabled"])),
+            "daily_log_email_recipients": str(row["daily_log_email_recipients"] or defaults["daily_log_email_recipients"]),
+            "daily_log_email_time": str(row["daily_log_email_time"] or defaults["daily_log_email_time"]),
+            "updated_at": str(row["updated_at"] or ""),
+        }
+    finally:
+        conn.close()
+
+def upsert_company_email_settings(company_id: int, settings_data: dict[str, Any]) -> None:
+    defaults = _default_company_email_settings()
+    cleaned = {
+        "email_enabled": 1 if str(settings_data.get("email_enabled", defaults["email_enabled"])).strip().lower() in {"1", "true", "yes", "on"} else 0,
+        "email_from_name": str(settings_data.get("email_from_name") or defaults["email_from_name"]).strip(),
+        "email_reply_to": str(settings_data.get("email_reply_to") or defaults["email_reply_to"]).strip(),
+        "daily_log_email_enabled": 1 if str(settings_data.get("daily_log_email_enabled", defaults["daily_log_email_enabled"])).strip().lower() in {"1", "true", "yes", "on"} else 0,
+        "daily_log_email_recipients": str(settings_data.get("daily_log_email_recipients") or defaults["daily_log_email_recipients"]).strip(),
+        "daily_log_email_time": str(settings_data.get("daily_log_email_time") or defaults["daily_log_email_time"]).strip() or "01:00",
+    }
+
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO company_email_settings (
+                company_id, email_enabled, email_from_name, email_reply_to,
+                daily_log_email_enabled, daily_log_email_recipients, daily_log_email_time, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(company_id) DO UPDATE SET
+                email_enabled = excluded.email_enabled,
+                email_from_name = excluded.email_from_name,
+                email_reply_to = excluded.email_reply_to,
+                daily_log_email_enabled = excluded.daily_log_email_enabled,
+                daily_log_email_recipients = excluded.daily_log_email_recipients,
+                daily_log_email_time = excluded.daily_log_email_time,
+                updated_at = datetime('now')
+            """,
+            (
+                int(company_id),
+                cleaned["email_enabled"],
+                cleaned["email_from_name"],
+                cleaned["email_reply_to"],
+                cleaned["daily_log_email_enabled"],
+                cleaned["daily_log_email_recipients"],
+                cleaned["daily_log_email_time"],
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def build_mail_status() -> dict[str, Any]:
+    mail_cfg = _mail_config()
+    smtp_host = str(mail_cfg.get("smtp_host") or "").strip()
+    smtp_port = int(mail_cfg.get("smtp_port") or 0)
+    username_env = str(mail_cfg.get("username_env") or "DEXTER_SMTP_USERNAME").strip() or "DEXTER_SMTP_USERNAME"
+    password_env = str(mail_cfg.get("password_env") or "DEXTER_SMTP_PASSWORD").strip() or "DEXTER_SMTP_PASSWORD"
+    smtp_username = str(os.environ.get(username_env) or mail_cfg.get("smtp_username") or "").strip()
+    smtp_password = str(os.environ.get(password_env) or "").strip()
+    from_email = str(mail_cfg.get("from_email") or smtp_username).strip()
+    from_name = str(mail_cfg.get("from_name") or "").strip()
+    reply_to = str(mail_cfg.get("reply_to") or from_email).strip()
+    public_base_url = str(mail_cfg.get("public_base_url") or "").strip() or request.host_url.rstrip("/")
+    use_ssl = bool(mail_cfg.get("use_ssl", False))
+    use_starttls = bool(mail_cfg.get("use_starttls", False))
+
+    problems: list[str] = []
+    if not smtp_host:
+        problems.append("SMTP host is not configured.")
+    if not smtp_port:
+        problems.append("SMTP port is not configured.")
+    if not smtp_username:
+        problems.append(f"SMTP username env var {username_env} is not set.")
+    if not smtp_password:
+        problems.append(f"SMTP password env var {password_env} is not set.")
+    if not from_email:
+        problems.append("From email is not configured.")
+    if not (use_ssl or use_starttls):
+        problems.append("SMTP encryption is not configured.")
+
+    settings = {
+        "smtp_host": smtp_host,
+        "smtp_port": smtp_port,
+        "username": smtp_username,
+        "from_email": from_email,
+        "from_name": from_name,
+        "reply_to": reply_to,
+        "use_ssl": use_ssl,
+        "use_starttls": use_starttls,
+        "public_base_url": public_base_url,
+        "username_env": username_env,
+        "password_env": password_env,
+    }
+    return {
+        "ready": len(problems) == 0,
+        "problems": problems,
+        "settings": settings,
+    }
+
+def _send_email_via_smtp(target_email: str, subject: str, body: str, reply_to: str | None = None) -> tuple[bool, str]:
+    mail_status = build_mail_status()
+    if not mail_status["ready"]:
+        return False, "SMTP is not ready."
+
+    settings = mail_status["settings"]
+    smtp_host = str(settings["smtp_host"])
+    smtp_port = int(settings["smtp_port"])
+    smtp_username = str(settings["username"])
+    smtp_password = str(os.environ.get(str(settings["password_env"]), "") or "")
+    from_name = str(settings.get("from_name") or "")
+    from_email = str(settings.get("from_email") or smtp_username)
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = formataddr((from_name, from_email)) if from_name else from_email
+    message["To"] = str(target_email).strip()
+    if reply_to:
+        message["Reply-To"] = str(reply_to).strip()
+    message.set_content(body)
+
+    context = ssl.create_default_context()
+    try:
+        if bool(settings.get("use_ssl")):
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=context, timeout=15) as smtp:
+                smtp.login(smtp_username, smtp_password)
+                smtp.send_message(message)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as smtp:
+                if bool(settings.get("use_starttls")):
+                    smtp.starttls(context=context)
+                smtp.login(smtp_username, smtp_password)
+                smtp.send_message(message)
+        return True, "Email sent."
+    except Exception as exc:  # noqa: BLE001
+        return False, f"Failed to send email: {exc}"
+
+def _set_password_reset_token_for_user(user_id: int) -> tuple[bool, str, str | None]:
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, username FROM users WHERE id = ? LIMIT 1",
+            (int(user_id),),
+        ).fetchone()
+        if not row:
+            return False, "User not found.", None
+
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.now() + timedelta(hours=1)).isoformat(timespec="seconds")
+        conn.execute(
+            """
+            UPDATE users
+            SET password_reset_token = ?,
+                password_reset_expires = ?,
+                is_active = 1,
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (token, expires, int(user_id)),
+        )
+        conn.commit()
+        base_url = str(_mail_config().get("public_base_url") or request.host_url.rstrip("/"))
+        reset_url = f"{base_url}/auth/reset-password/{token}"
+        return True, str(row["username"]), reset_url
+    finally:
+        conn.close()
+
+def _invite_email_body(company_name: str, username: str, reset_url: str, from_name: str) -> str:
+    return (
+        f"Hello {username},\n\n"
+        f"{from_name or 'Dexter Ops'} has created your account for {company_name}.\n"
+        f"Use the secure link below to set your password:\n\n"
+        f"{reset_url}\n\n"
+        "If you did not request this invite, you can ignore this email.\n"
+    )
 
 def _save_company_logo(company_id: int, uploaded_file) -> tuple[bool, str, str]:
     filename = str(getattr(uploaded_file, "filename", "") or "").strip()
@@ -2379,14 +2667,7 @@ class AppManager:
 CONFIG = load_config()
 MANAGER = AppManager(CONFIG)
 app = Flask(__name__, static_folder=None)
-_secret = os.environ.get("DEXTER_SECRET_KEY") or os.environ.get("SECRET_KEY")
-if not _secret:
-    _secret = os.urandom(32)
-    print(
-        "[dexter] WARNING: DEXTER_SECRET_KEY env var not set. "
-        "Using a random secret — all sessions will be invalidated on restart.",
-        file=sys.stderr,
-    )
+_secret = _load_persistent_front_door_secret_key()
 app.secret_key = _secret
 app.config["WTF_CSRF_SECRET_KEY"] = _secret
 _session_hours = int(CONFIG.get("front_door", {}).get("session_hours", 8))
@@ -2460,7 +2741,7 @@ _DEXTER_UI_HEAD = (
 )
 _DEXTER_UI_BODY = (
     '<script src="/dexter-ui/theme.js" defer></script>'
-    '<div class="dx-version-badge" aria-hidden="true">Dexter · Launcher · v0.9-demo</div>'
+    '<div class="dx-version-badge" aria-hidden="true">Dexter · Launcher · v0.9</div>'
 )
 _DEXTER_UI_MARKER = "__dexter_ui_installed"
 
@@ -2535,6 +2816,7 @@ migrate_add_task_fields_v1()
 migrate_add_password_reset_fields_v1()
 migrate_add_company_scope_v1()
 migrate_add_company_profiles_v1()
+migrate_add_company_email_settings_v1()
 migrate_add_login_lockout_fields_v1()
 migrate_add_user_location_assignments_v1()
 ensure_default_super_admin_user()
@@ -2858,6 +3140,84 @@ def admin() -> str:
     if current_role_name() == "Super Admin":
         return redirect("/admin/users")
     return redirect("/admin/company-profile")
+
+@app.route("/admin/email", methods=["GET"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_email_page() -> Response:
+    is_super_admin = current_role_name() == "Super Admin"
+    companies = list_companies(active_only=True) if is_super_admin else []
+    selected_company_id = _effective_company_scope()
+    if is_super_admin and selected_company_id is None and companies:
+        selected_company_id = int(companies[0]["id"])
+
+    company_mail = get_company_email_settings(int(selected_company_id)) if selected_company_id is not None else _default_company_email_settings()
+    mail_status = build_mail_status()
+    public_base_url = str(mail_status["settings"].get("public_base_url") or request.host_url.rstrip("/"))
+
+    return Response(
+        render_template(
+            "admin_email.html",
+            is_super_admin=is_super_admin,
+            companies=companies,
+            selected_company_id=selected_company_id,
+            company_mail=company_mail,
+            mail_status=mail_status,
+            public_base_url=public_base_url,
+            message=request.args.get("message", ""),
+            error=request.args.get("error", ""),
+        )
+    )
+
+@app.route("/admin/email/settings", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_email_settings_save() -> Response:
+    selected_company_id, scope_error = _strict_company_scope_for_mutation()
+    if scope_error:
+        return redirect(f"/admin/email?error={requests.utils.quote(scope_error)}")
+    if selected_company_id is None:
+        return redirect("/admin/email?error=No+active+company+scope+is+selected")
+
+    upsert_company_email_settings(
+        int(selected_company_id),
+        {
+            "email_enabled": request.form.get("email_enabled"),
+            "email_from_name": request.form.get("email_from_name"),
+            "email_reply_to": request.form.get("email_reply_to"),
+            "daily_log_email_enabled": request.form.get("daily_log_email_enabled"),
+            "daily_log_email_recipients": request.form.get("daily_log_email_recipients"),
+            "daily_log_email_time": request.form.get("daily_log_email_time"),
+        },
+    )
+    return redirect("/admin/email?message=Email+settings+saved")
+
+@app.route("/admin/email/test", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_email_test_send() -> Response:
+    selected_company_id = _effective_company_scope()
+    if selected_company_id is None:
+        return redirect("/admin/email?error=No+active+company+scope+is+selected")
+
+    target_email = str(request.form.get("target_email") or "").strip()
+    if not target_email or "@" not in target_email:
+        return redirect("/admin/email?error=Enter+a+valid+target+email")
+
+    company_mail = get_company_email_settings(int(selected_company_id))
+    mail_status = build_mail_status()
+    settings = mail_status["settings"]
+    company_name = _selected_company_name_for_scope() or "Dexter Ops"
+    subject = f"Test email from {company_name}"
+    body = (
+        f"This is a test email from {company_name}.\n\n"
+        f"SMTP host: {settings['smtp_host']}\n"
+        f"Company reply-to: {company_mail.get('email_reply_to') or settings['reply_to']}\n"
+        f"Public base URL: {settings['public_base_url']}\n"
+    )
+    ok, msg = _send_email_via_smtp(target_email, subject, body, reply_to=str(company_mail.get("email_reply_to") or settings["reply_to"]))
+    key = "message" if ok else "error"
+    return redirect(f"/admin/email?{key}={requests.utils.quote(msg)}")
 
 def _effective_company_scope(require_active: bool = True) -> int | None:
     role_name = current_role_name()
@@ -3262,6 +3622,7 @@ def admin_users_page() -> Response:
     if is_super_admin and selected_company_id is None and companies:
         selected_company_id = int(companies[0]["id"])
     available_locations = _list_restaurants_for_company_id(selected_company_id)
+    mail_status = build_mail_status()
 
     return Response(
         render_template(
@@ -3271,6 +3632,7 @@ def admin_users_page() -> Response:
             companies=companies,
             selected_company_id=selected_company_id,
             available_locations=available_locations,
+            mail_status=mail_status,
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
         )
@@ -3298,6 +3660,66 @@ def admin_users_create() -> Response:
     )
     key = "message" if ok else "error"
     return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+
+@app.route("/admin/users/invite", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_users_invite() -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/users?error=Session+expired")
+
+    email = str(request.form.get("email") or "").strip()
+    if not email or "@" not in email:
+        return redirect("/admin/users?error=Enter+a+valid+invite+email")
+
+    role_name = str(request.form.get("role_name") or "Employee").strip()
+    if role_name not in {"Super Admin", "Manager", "Employee"}:
+        return redirect("/admin/users?error=Invalid+role+name")
+
+    selected_company_id, scope_error = _strict_company_scope_for_mutation()
+    if scope_error:
+        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+
+    if role_name == "Super Admin":
+        selected_company_id = None
+
+    temp_password = secrets.token_urlsafe(16)
+    ok, msg = create_user_account(
+        actor_user_id=actor_id,
+        username=email,
+        password=temp_password,
+        role_name=role_name,
+        company_id=selected_company_id,
+        assigned_restaurant_ids=request.form.getlist("restaurant_ids"),
+    )
+    if not ok:
+        return redirect(f"/admin/users?error={requests.utils.quote(msg)}")
+
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", (email,)).fetchone()
+        if not row:
+            return redirect("/admin/users?error=Invite+created+but+user+could+not+be+reloaded")
+        user_id = int(row["id"])
+    finally:
+        conn.close()
+
+    ok_token, username, reset_url = _set_password_reset_token_for_user(user_id)
+    if not ok_token or not reset_url:
+        return redirect("/admin/users?error=Invite+created+but+reset+link+could+not+be+generated")
+
+    mail_status = build_mail_status()
+    company_name = _selected_company_name_for_scope() or "Dexter Ops"
+    subject = f"Your {company_name} account invitation"
+    body = _invite_email_body(company_name, username, reset_url, str(mail_status["settings"].get("from_name") or "Dexter Ops"))
+    if mail_status["ready"]:
+        send_ok, send_msg = _send_email_via_smtp(email, subject, body, reply_to=str(mail_status["settings"].get("reply_to") or email))
+        if send_ok:
+            return redirect("/admin/users?message=Invite+sent")
+        return redirect(f"/admin/users?error={requests.utils.quote(send_msg)}")
+
+    return redirect(f"/admin/users?message={requests.utils.quote('Invite link ready: ' + reset_url)}")
 
 @app.route("/admin/users/<int:user_id>/active", methods=["POST"])
 @login_required
@@ -3351,6 +3773,57 @@ def admin_users_locations(user_id: int) -> Response:
     ok, msg = set_user_location_assignments(actor_id, int(user_id), request.form.getlist("restaurant_ids"))
     key = "message" if ok else "error"
     return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+
+@app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_users_resend_invite(user_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/users?error=Session+expired")
+
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT u.id, u.username, u.company_id, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE u.id = ?
+            LIMIT 1
+            """,
+            (int(user_id),),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        return redirect("/admin/users?error=User+not+found")
+
+    if current_role_name() == "Super Admin":
+        scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
+        if scope_error:
+            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+
+    username = str(row["username"] or "").strip()
+    if "@" not in username:
+        return redirect("/admin/users?error=This+user+does+not+use+an+email+username")
+
+    ok_token, _, reset_url = _set_password_reset_token_for_user(int(user_id))
+    if not ok_token or not reset_url:
+        return redirect("/admin/users?error=Could+not+generate+invite+link")
+
+    mail_status = build_mail_status()
+    company_name = _selected_company_name_for_scope() or "Dexter Ops"
+    subject = f"Your {company_name} account invitation"
+    body = _invite_email_body(company_name, username, reset_url, str(mail_status["settings"].get("from_name") or "Dexter Ops"))
+    if mail_status["ready"]:
+        send_ok, send_msg = _send_email_via_smtp(username, subject, body, reply_to=str(mail_status["settings"].get("reply_to") or username))
+        if send_ok:
+            return redirect("/admin/users?message=Invite+resent")
+        return redirect(f"/admin/users?error={requests.utils.quote(send_msg)}")
+
+    return redirect(f"/admin/users?message={requests.utils.quote('Invite link ready: ' + reset_url)}")
 
 @app.route("/admin/tasks")
 @login_required
@@ -4462,7 +4935,7 @@ def autosync_status():
             ]
         })
     except Exception as e:
-        logger.error(f"Failed to get autosync status: {e}")
+        print(f"[dexter autosync] Failed to get autosync status: {e}", file=sys.stderr)
         return jsonify({"ok": False, "message": str(e)}), 500
 
 @app.route("/api/admin/autosync/sync-now", methods=["POST"])
@@ -4486,7 +4959,7 @@ def autosync_sync_now():
             "message": "Auto-sync module not available"
         }), 503
     except Exception as e:
-        logger.error(f"Manual sync failed: {e}")
+        print(f"[dexter autosync] Manual sync failed: {e}", file=sys.stderr)
         return jsonify({"ok": False, "message": str(e)}), 500
 
 @app.route("/app/<name>/")
