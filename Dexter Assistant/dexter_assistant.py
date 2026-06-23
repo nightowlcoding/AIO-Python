@@ -4988,6 +4988,17 @@ def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str,
         result["error"] = "Source file missing"
         return result
 
+    # Render can mount paths such that a "source" path and target path are the same inode.
+    if dst.exists():
+        try:
+            if src.samefile(dst):
+                result["copied"] = True
+                result["skipped"] = "Source and destination are identical"
+                result["bytes"] = int(dst.stat().st_size)
+                return result
+        except OSError:
+            pass
+
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists() and dst.is_file():
         rel = str(dst).lstrip("/\\").replace(":", "_")
