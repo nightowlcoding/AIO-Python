@@ -1504,6 +1504,21 @@ def build_mail_status() -> dict[str, Any]:
         "settings": settings,
     }
 
+def _build_public_endpoint_url(endpoint: str, **values: Any) -> str:
+    relative_path = url_for(endpoint, **values)
+    public_base_url = str(_mail_config().get("public_base_url") or "").strip()
+    if public_base_url:
+        return urljoin(public_base_url.rstrip("/") + "/", relative_path.lstrip("/"))
+    return url_for(endpoint, _external=True, **values)
+
+def _redirect_admin_users(*, message: str | None = None, error: str | None = None) -> Response:
+    target = url_for("admin_users_page")
+    if message is not None:
+        return redirect(f"{target}?message={requests.utils.quote(message)}")
+    if error is not None:
+        return redirect(f"{target}?error={requests.utils.quote(error)}")
+    return redirect(target)
+
 def _send_email_via_smtp(target_email: str, subject: str, body: str, reply_to: str | None = None) -> tuple[bool, str]:
     mail_status = build_mail_status()
     if not mail_status["ready"]:
@@ -1565,8 +1580,7 @@ def _set_password_reset_token_for_user(user_id: int) -> tuple[bool, str, str | N
             (token, expires, int(user_id)),
         )
         conn.commit()
-        base_url = str(_mail_config().get("public_base_url") or request.host_url.rstrip("/"))
-        reset_url = f"{base_url}/auth/reset-password/{token}"
+        reset_url = _build_public_endpoint_url("auth_reset_password", token=token)
         return True, str(row["username"]), reset_url
     finally:
         conn.close()
@@ -3000,8 +3014,7 @@ def auth_forgot_password() -> Response:
                         (token, expires, int(row["id"])),
                     )
                     conn.commit()
-                    base_url = request.host_url.rstrip("/")
-                    reset_url = f"{base_url}/auth/reset-password/{token}"
+                    reset_url = _build_public_endpoint_url("auth_reset_password", token=token)
                 else:
                     error = "If that username exists, a reset link has been generated. Ask an admin."
             finally:
@@ -3644,11 +3657,11 @@ def admin_users_page() -> Response:
 def admin_users_create() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return _redirect_admin_users(error="Session expired")
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+        return _redirect_admin_users(error=scope_error)
 
     ok, msg = create_user_account(
         actor_user_id=actor_id,
@@ -3659,7 +3672,7 @@ def admin_users_create() -> Response:
         assigned_restaurant_ids=request.form.getlist("restaurant_ids"),
     )
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return _redirect_admin_users(**{key: msg})
 
 @app.route("/admin/users/invite", methods=["POST"])
 @login_required
@@ -3667,19 +3680,19 @@ def admin_users_create() -> Response:
 def admin_users_invite() -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return _redirect_admin_users(error="Session expired")
 
     email = str(request.form.get("email") or "").strip()
     if not email or "@" not in email:
-        return redirect("/admin/users?error=Enter+a+valid+invite+email")
+        return _redirect_admin_users(error="Enter a valid invite email")
 
     role_name = str(request.form.get("role_name") or "Employee").strip()
     if role_name not in {"Super Admin", "Manager", "Employee"}:
-        return redirect("/admin/users?error=Invalid+role+name")
+        return _redirect_admin_users(error="Invalid role name")
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+        return _redirect_admin_users(error=scope_error)
 
     if role_name == "Super Admin":
         selected_company_id = None
@@ -3694,20 +3707,20 @@ def admin_users_invite() -> Response:
         assigned_restaurant_ids=request.form.getlist("restaurant_ids"),
     )
     if not ok:
-        return redirect(f"/admin/users?error={requests.utils.quote(msg)}")
+        return _redirect_admin_users(error=msg)
 
     conn = get_rbac_db_connection()
     try:
         row = conn.execute("SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", (email,)).fetchone()
         if not row:
-            return redirect("/admin/users?error=Invite+created+but+user+could+not+be+reloaded")
+            return _redirect_admin_users(error="Invite created but user could not be reloaded")
         user_id = int(row["id"])
     finally:
         conn.close()
 
     ok_token, username, reset_url = _set_password_reset_token_for_user(user_id)
     if not ok_token or not reset_url:
-        return redirect("/admin/users?error=Invite+created+but+reset+link+could+not+be+generated")
+        return _redirect_admin_users(error="Invite created but reset link could not be generated")
 
     mail_status = build_mail_status()
     company_name = _selected_company_name_for_scope() or "Dexter Ops"
@@ -3716,10 +3729,10 @@ def admin_users_invite() -> Response:
     if mail_status["ready"]:
         send_ok, send_msg = _send_email_via_smtp(email, subject, body, reply_to=str(mail_status["settings"].get("reply_to") or email))
         if send_ok:
-            return redirect("/admin/users?message=Invite+sent")
-        return redirect(f"/admin/users?error={requests.utils.quote(send_msg)}")
+            return _redirect_admin_users(message="Invite sent")
+        return _redirect_admin_users(error=send_msg)
 
-    return redirect(f"/admin/users?message={requests.utils.quote('Invite link ready: ' + reset_url)}")
+    return _redirect_admin_users(message=f"Invite link ready: {reset_url}")
 
 @app.route("/admin/users/<int:user_id>/active", methods=["POST"])
 @login_required
@@ -3727,17 +3740,17 @@ def admin_users_invite() -> Response:
 def admin_users_active(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return _redirect_admin_users(error="Session expired")
 
     if current_role_name() == "Super Admin":
         scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
         if scope_error:
-            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+            return _redirect_admin_users(error=scope_error)
 
     is_active = str(request.form.get("is_active", "1")).strip() == "1"
     ok, msg = set_user_active_state(actor_id, int(user_id), is_active)
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return _redirect_admin_users(**{key: msg})
 
 @app.route("/admin/users/<int:user_id>/role", methods=["POST"])
 @login_required
@@ -3745,17 +3758,17 @@ def admin_users_active(user_id: int) -> Response:
 def admin_users_role(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return _redirect_admin_users(error="Session expired")
 
     if current_role_name() == "Super Admin":
         scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
         if scope_error:
-            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+            return _redirect_admin_users(error=scope_error)
 
     role_name = str(request.form.get("role_name") or "Employee").strip()
     ok, msg = set_user_role_name(actor_id, int(user_id), role_name)
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return _redirect_admin_users(**{key: msg})
 
 @app.route("/admin/users/<int:user_id>/locations", methods=["POST"])
 @login_required
@@ -3763,16 +3776,16 @@ def admin_users_role(user_id: int) -> Response:
 def admin_users_locations(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return _redirect_admin_users(error="Session expired")
 
     if current_role_name() == "Super Admin":
         scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
         if scope_error:
-            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+            return _redirect_admin_users(error=scope_error)
 
     ok, msg = set_user_location_assignments(actor_id, int(user_id), request.form.getlist("restaurant_ids"))
     key = "message" if ok else "error"
-    return redirect(f"/admin/users?{key}={requests.utils.quote(msg)}")
+    return _redirect_admin_users(**{key: msg})
 
 @app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
 @login_required
@@ -3780,7 +3793,7 @@ def admin_users_locations(user_id: int) -> Response:
 def admin_users_resend_invite(user_id: int) -> Response:
     actor_id = current_user_id()
     if actor_id is None:
-        return redirect("/admin/users?error=Session+expired")
+        return _redirect_admin_users(error="Session expired")
 
     conn = get_rbac_db_connection()
     try:
@@ -3798,20 +3811,20 @@ def admin_users_resend_invite(user_id: int) -> Response:
         conn.close()
 
     if not row:
-        return redirect("/admin/users?error=User+not+found")
+        return _redirect_admin_users(error="User not found")
 
     if current_role_name() == "Super Admin":
         scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
         if scope_error:
-            return redirect(f"/admin/users?error={requests.utils.quote(scope_error)}")
+            return _redirect_admin_users(error=scope_error)
 
     username = str(row["username"] or "").strip()
     if "@" not in username:
-        return redirect("/admin/users?error=This+user+does+not+use+an+email+username")
+        return _redirect_admin_users(error="This user does not use an email username")
 
     ok_token, _, reset_url = _set_password_reset_token_for_user(int(user_id))
     if not ok_token or not reset_url:
-        return redirect("/admin/users?error=Could+not+generate+invite+link")
+        return _redirect_admin_users(error="Could not generate invite link")
 
     mail_status = build_mail_status()
     company_name = _selected_company_name_for_scope() or "Dexter Ops"
@@ -3820,10 +3833,10 @@ def admin_users_resend_invite(user_id: int) -> Response:
     if mail_status["ready"]:
         send_ok, send_msg = _send_email_via_smtp(username, subject, body, reply_to=str(mail_status["settings"].get("reply_to") or username))
         if send_ok:
-            return redirect("/admin/users?message=Invite+resent")
-        return redirect(f"/admin/users?error={requests.utils.quote(send_msg)}")
+            return _redirect_admin_users(message="Invite resent")
+        return _redirect_admin_users(error=send_msg)
 
-    return redirect(f"/admin/users?message={requests.utils.quote('Invite link ready: ' + reset_url)}")
+    return _redirect_admin_users(message=f"Invite link ready: {reset_url}")
 
 @app.route("/admin/tasks")
 @login_required
