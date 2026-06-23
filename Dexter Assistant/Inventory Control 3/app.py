@@ -4290,7 +4290,7 @@ def _install_dexter_ui_patch() -> None:
         '</script>'
         + IC3_INVENTORY_OPPORTUNITY_SCRIPT +
         '<script src="/dexter-ui/theme.js" defer></script>'
-        '<div class="dx-version-badge" aria-hidden="true">Dexter · IC3 · v0.9-demo</div>'
+        '<div class="dx-version-badge" aria-hidden="true">Dexter · IC3 · v0.9</div>'
     )
 
     marker = "__dexter_ui_installed"
