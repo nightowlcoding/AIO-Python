@@ -42,14 +42,39 @@ RUNTIME_LOG_DIR = ROOT / "runtime_logs"
 FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
 BRANDING_LOGO_PATH = ROOT / "dexter_logo.png"
 LEGACY_BRANDING_LOGO_PATH = ROOT.parent / "Restaurant Management" / "Manager App" / "static" / "img" / "Dexter.png"
-AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
-RBAC_DB_PATH = ROOT / "dexter_assistant_rbac.db"
+
+_render_data_root = Path("/dexter-data")
+if _render_data_root.exists():
+    _default_auth_storage_root = _render_data_root / "auth"
+else:
+    _default_auth_storage_root = ROOT
+
+AUTH_STORAGE_ROOT = Path(os.environ.get("DEXTER_AUTH_DATA_DIR") or str(_default_auth_storage_root))
+AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+AUTH_USERS_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_users.json"
+RBAC_DB_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_rbac.db"
+
+LEGACY_AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
+LEGACY_RBAC_DB_PATH = ROOT / "dexter_assistant_rbac.db"
 COMPANY_STORAGE_ROOT = ROOT.parent / "company_data"
 SESSION_USER_KEY = "dexter_user"
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
 MAX_COMPANY_LOGO_BYTES = 2 * 1024 * 1024
 ALLOWED_COMPANY_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _bootstrap_auth_storage_from_legacy() -> None:
+    if AUTH_STORAGE_ROOT == ROOT:
+        return
+
+    if not RBAC_DB_PATH.exists() and LEGACY_RBAC_DB_PATH.exists():
+        RBAC_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(LEGACY_RBAC_DB_PATH, RBAC_DB_PATH)
+
+    if not AUTH_USERS_PATH.exists() and LEGACY_AUTH_USERS_PATH.exists():
+        AUTH_USERS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(LEGACY_AUTH_USERS_PATH, AUTH_USERS_PATH)
 
 
 def _load_persistent_front_door_secret_key() -> str:
@@ -2825,6 +2850,7 @@ limiter = Limiter(
     default_limits=[],
 )
 
+_bootstrap_auth_storage_from_legacy()
 initialize_rbac_db()
 migrate_legacy_json_users_to_sqlite()
 migrate_add_task_fields_v1()
