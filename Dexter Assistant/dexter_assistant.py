@@ -7,6 +7,7 @@ import inspect
 import os
 import re
 import sqlite3
+import shutil
 import smtplib
 import socket
 import secrets
@@ -4974,6 +4975,81 @@ def autosync_sync_now():
     except Exception as e:
         print(f"[dexter autosync] Manual sync failed: {e}", file=sys.stderr)
         return jsonify({"ok": False, "message": str(e)}), 500
+
+
+def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "source": str(src),
+        "destination": str(dst),
+        "copied": False,
+        "backed_up": False,
+    }
+    if not src.exists() or not src.is_file():
+        result["error"] = "Source file missing"
+        return result
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists() and dst.is_file():
+        rel = str(dst).lstrip("/\\").replace(":", "_")
+        backup_path = backup_root / rel
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(dst, backup_path)
+        result["backed_up"] = True
+        result["backup_path"] = str(backup_path)
+
+    shutil.copy2(src, dst)
+    result["copied"] = True
+    result["bytes"] = int(dst.stat().st_size)
+    return result
+
+
+@app.route("/api/admin/migrate-local-data", methods=["POST"])
+@csrf.exempt
+@login_required
+@role_required("Super Admin")
+def api_admin_migrate_local_data() -> Response:
+    try:
+        ic3_data_dir = Path(os.environ.get("IC3_DATA_DIR") or (ROOT / "Inventory Control 3" / "data"))
+        pm_db_dir = Path(os.environ.get("PM_DB_DIR") or (ROOT / "ProductMixRestaurantDB"))
+
+        src_ic3_data_dir = ROOT / "Inventory Control 3" / "data"
+        src_pm_db = ROOT / "ProductMixRestaurantDB" / "product_mix.db"
+
+        dst_pm_db = pm_db_dir / "product_mix.db"
+
+        backup_base = Path("/dexter-data/backups") if Path("/dexter-data").exists() else (ROOT / "migration_backups")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_root = backup_base / f"manual_migration_{stamp}"
+        backup_root.mkdir(parents=True, exist_ok=True)
+
+        source_files = [
+            (src_ic3_data_dir / "inventory_database.json", ic3_data_dir / "inventory_database.json"),
+            (src_ic3_data_dir / "orders_database.json", ic3_data_dir / "orders_database.json"),
+            (src_ic3_data_dir / "invoice_import_log.json", ic3_data_dir / "invoice_import_log.json"),
+            (src_ic3_data_dir / "order_price_log.json", ic3_data_dir / "order_price_log.json"),
+            (src_pm_db, dst_pm_db),
+        ]
+
+        operations: list[dict[str, Any]] = []
+        for src, dst in source_files:
+            operations.append(_copy_file_with_backup(src, dst, backup_root))
+
+        copied_count = sum(1 for op in operations if op.get("copied"))
+        failed = [op for op in operations if not op.get("copied")]
+        ok = len(failed) == 0
+
+        return jsonify(
+            {
+                "ok": ok,
+                "message": "Migration completed" if ok else "Migration completed with missing sources",
+                "copied_count": copied_count,
+                "failed_count": len(failed),
+                "backup_root": str(backup_root),
+                "operations": operations,
+            }
+        )
+    except Exception as exc:
+        return jsonify({"ok": False, "message": f"Migration failed: {exc}"}), 500
 
 @app.route("/app/<name>/")
 @login_required
