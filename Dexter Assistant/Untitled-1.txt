@@ -1,2 +1,0 @@
-DEXTER_SMTP_USERNAME=admin@dexterassist.com
-DEXTER_SMTP_PASSWORD=Passramirez4!

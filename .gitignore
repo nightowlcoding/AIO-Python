@@ -159,6 +159,8 @@ celerybeat.pid
 .env
 .envrc
 .venv
+Dexter Assistant/.dexter_secret
+Dexter Assistant/Untitled-1.txt
 env/
 venv/
 ENV/
