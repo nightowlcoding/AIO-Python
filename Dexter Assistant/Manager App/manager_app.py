@@ -238,6 +238,15 @@ def _dexter_company_name_from_header() -> str:
     return (request.headers.get('X-Dexter-Company-Name') or '').strip()
 
 
+def _local_manager_auth_enabled() -> bool:
+    """Manager App local auth is disabled; Dexter is the sole auth authority."""
+    return False
+
+
+def _dexter_admin_users_url() -> str:
+    return '/admin/users'
+
+
 def _load_shared_restaurants_from_productmix(company_name: str = "") -> list[dict]:
     """Return shared restaurant options from ProductMix Restaurant Setup."""
     pm_db_path = Path(__file__).resolve().parent.parent / 'ProductMixRestaurantDB' / 'product_mix.db'
@@ -409,21 +418,24 @@ def _get_or_provision_dexter_company(company_name: str, user) -> dict | None:
 
 def _provision_user_for_dexter_bridge(username, email, is_admin):
     """Create a Manager App user on first Dexter SSO access."""
-    base = (username or '').strip()
-    if not base:
-        base = (email.split('@')[0] if email and '@' in email else 'dexter_user').strip()
-    base = re.sub(r'[^a-zA-Z0-9_.-]+', '_', base).strip('._-') or 'dexter_user'
-
     candidate_email = (email or '').strip().lower()
     if not candidate_email or '@' not in candidate_email:
+        base = (username or '').strip()
+        if not base:
+            base = 'dexter_user'
+        base = re.sub(r'[^a-zA-Z0-9_.-]+', '_', base).strip('._-') or 'dexter_user'
         candidate_email = f"{base}@dexter.local"
+        username_base = base
+    else:
+        # Keep username aligned with email so account identity is easier to reason about.
+        username_base = candidate_email
 
     # Strong random password; this account signs in via Dexter bridge.
     generated_password = f"Aa!9{secrets.token_hex(16)}"
     now = datetime.now().isoformat()
 
     for idx in range(0, 20):
-        candidate_username = base if idx == 0 else f"{base}_{idx}"
+        candidate_username = username_base if idx == 0 else f"{username_base}_{idx}"
         user_id, _ = db.create_user(
             candidate_username,
             candidate_email,
@@ -1298,6 +1310,10 @@ def index():
 @limiter.limit("5 per minute")
 def login():
     """Login page"""
+    if not _local_manager_auth_enabled():
+        flash('Sign in through Dexter portal. Local Manager App login is disabled.', 'info')
+        return redirect('/portal')
+
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     
@@ -1360,6 +1376,10 @@ def login():
 @limiter.limit("3 per minute")
 def register():
     """Registration page"""
+    if not _local_manager_auth_enabled():
+        flash('Account creation is managed in Dexter Admin.', 'info')
+        return redirect(_dexter_admin_users_url())
+
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
     
@@ -2549,9 +2569,9 @@ def delete_location(location_id):
 @company_required
 @role_required('business_admin')
 def manage_users():
-    """User management"""
-    users = db.get_company_users(current_user.current_company_id)
-    return render_template('users.html', users=users)
+    """User access management is centralized in Dexter Admin."""
+    flash('User access is managed in Dexter Admin.', 'info')
+    return redirect(_dexter_admin_users_url())
 
 
 @app.route('/audit-log')
