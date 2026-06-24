@@ -63,12 +63,12 @@
       <option>Manager</option>
       <option>Super Admin</option>
     </select>
-        <select name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
+        <select class="location-multi" name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
             {% for loc in available_locations %}
             <option value="{{ loc.id }}">{{ loc.label }}</option>
             {% endfor %}
         </select>
-        <span class="muted">Optional. Leave blank for all company locations.</span>
+        <span class="muted">Optional. Leave blank for all company locations. Click locations to toggle multiple selections.</span>
     <button type="submit">Create User</button>
   </form>
 
@@ -80,7 +80,7 @@
       <option>Manager</option>
       <option>Super Admin</option>
     </select>
-        <select name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
+        <select class="location-multi" name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
             {% for loc in available_locations %}
             <option value="{{ loc.id }}">{{ loc.label }}</option>
             {% endfor %}
@@ -139,7 +139,7 @@
                     {% if u.role_name != 'Super Admin' %}
                     <form method="post" action="{{ url_for('admin_users_locations', user_id=u.id) }}" class="inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-                        <select name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
+                        <select class="location-multi" name="restaurant_ids" multiple {% if not available_locations %}disabled{% endif %}>
                             {% for loc in available_locations %}
                             <option value="{{ loc.id }}" {% if loc.id in u.assigned_restaurant_ids %}selected{% endif %}>{{ loc.label }}</option>
                             {% endfor %}
@@ -154,4 +154,14 @@
   </table>
   </div>
 </body>
+<script>
+  document.querySelectorAll('select.location-multi[multiple]').forEach((selectEl) => {
+    selectEl.addEventListener('mousedown', (event) => {
+      const option = event.target;
+      if (!(option instanceof HTMLOptionElement)) return;
+      event.preventDefault();
+      option.selected = !option.selected;
+    });
+  });
+</script>
 </html>
