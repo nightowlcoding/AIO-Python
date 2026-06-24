@@ -8,6 +8,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 import os
+import errno
 import csv
 import json
 import sqlite3
@@ -78,7 +79,14 @@ def _configure_company_data_storage() -> None:
         if backup_dir.exists():
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             backup_dir = module_dir / f'company_data_legacy_backup_{timestamp}'
-        local_company_data.rename(backup_dir)
+        try:
+            local_company_data.rename(backup_dir)
+        except OSError as exc:
+            # Cross-device moves can fail on Render; preserve a backup by copy.
+            if exc.errno != errno.EXDEV:
+                raise
+            shutil.copytree(local_company_data, backup_dir, dirs_exist_ok=True)
+            shutil.rmtree(local_company_data)
 
     local_company_data.symlink_to(target_company_data, target_is_directory=True)
 
