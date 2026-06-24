@@ -11,6 +11,7 @@ import os
 import csv
 import json
 import sqlite3
+import shutil
 from datetime import datetime, timedelta
 import secrets
 import re
@@ -24,6 +25,102 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import database
 from security import InputValidator
+
+
+def _is_subpath(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _configure_company_data_storage() -> None:
+    """Route company_data to persistent storage when configured."""
+    module_dir = Path(__file__).resolve().parent
+    local_company_data = module_dir / 'company_data'
+
+    configured_root = (
+        os.environ.get('MGR_COMPANY_DATA_DIR')
+        or os.environ.get('MGR_DATA_DIR')
+        or ''
+    ).strip()
+
+    if configured_root:
+        target_company_data = Path(configured_root)
+    elif Path('/dexter-data').exists():
+        target_company_data = Path('/dexter-data') / 'managerapp' / 'company_data'
+    else:
+        target_company_data = local_company_data
+
+    target_company_data.mkdir(parents=True, exist_ok=True)
+
+    if target_company_data.resolve() == local_company_data.resolve():
+        return
+
+    if local_company_data.is_symlink():
+        try:
+            if local_company_data.resolve() == target_company_data.resolve():
+                return
+        except OSError:
+            pass
+        local_company_data.unlink(missing_ok=True)
+    elif local_company_data.exists() and local_company_data.is_dir():
+        for item in local_company_data.iterdir():
+            destination = target_company_data / item.name
+            if destination.exists():
+                continue
+            if item.is_dir():
+                shutil.copytree(item, destination)
+            else:
+                shutil.copy2(item, destination)
+        backup_dir = module_dir / 'company_data_legacy_backup'
+        if backup_dir.exists():
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_dir = module_dir / f'company_data_legacy_backup_{timestamp}'
+        local_company_data.rename(backup_dir)
+
+    local_company_data.symlink_to(target_company_data, target_is_directory=True)
+
+
+_configure_company_data_storage()
+
+
+def _enforce_persistent_storage_guardrails() -> None:
+    """Prevent accidental startup with non-persistent write paths in production."""
+    persistent_root = Path(os.environ.get('MGR_PERSISTENT_ROOT', '/dexter-data'))
+    require_persistent = os.environ.get(
+        'MGR_REQUIRE_PERSISTENT_STORAGE',
+        '1' if persistent_root.exists() else '0',
+    ) == '1'
+    strict_mode = os.environ.get('MGR_STORAGE_STRICT', '1') == '1'
+
+    if not require_persistent:
+        return
+
+    issues = []
+    if not persistent_root.exists():
+        issues.append(f"Persistent root missing: {persistent_root}")
+
+    module_dir = Path(__file__).resolve().parent
+    company_data_path = (module_dir / 'company_data').resolve()
+    db_path = Path(database.DB_PATH).resolve()
+
+    if not _is_subpath(company_data_path, persistent_root):
+        issues.append(f"company_data is outside persistent storage: {company_data_path}")
+    if not _is_subpath(db_path, persistent_root):
+        issues.append(f"manager_app.db is outside persistent storage: {db_path}")
+
+    if not issues:
+        return
+
+    message = "[managerapp] Persistent storage guardrail violation: " + " | ".join(issues)
+    if strict_mode:
+        raise RuntimeError(message)
+    print(message, file=sys.stderr)
+
+
+_enforce_persistent_storage_guardrails()
 
 
 def _load_persistent_secret_key() -> str:

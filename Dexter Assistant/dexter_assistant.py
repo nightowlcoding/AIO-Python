@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import inspect
+import hashlib
 import os
 import re
 import sqlite3
@@ -62,6 +63,10 @@ MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
 MAX_COMPANY_LOGO_BYTES = 2 * 1024 * 1024
 ALLOWED_COMPANY_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+_MGR_BACKUP_STATE_LOCK = threading.Lock()
+_MGR_BACKUP_LAST_RUN: dict[str, Any] | None = None
+_MGR_BACKUP_THREAD_STARTED = False
 
 
 def _bootstrap_auth_storage_from_legacy() -> None:
@@ -2622,6 +2627,17 @@ class AppManager:
             elif resolved_name == "managerapp":
                 env.setdefault("MGR_HOST", host)
                 env.setdefault("MGR_PORT", str(port))
+                if _render_data_root.exists():
+                    mgr_root = _render_data_root / "managerapp"
+                    try:
+                        mgr_root.mkdir(parents=True, exist_ok=True)
+                    except OSError:
+                        pass
+                    env.setdefault("MGR_DB_PATH", str(mgr_root / "manager_app.db"))
+                    env.setdefault("MGR_COMPANY_DATA_DIR", str(mgr_root / "company_data"))
+                    env.setdefault("MGR_PERSISTENT_ROOT", str(_render_data_root))
+                    env.setdefault("MGR_REQUIRE_PERSISTENT_STORAGE", "1")
+                    env.setdefault("MGR_STORAGE_STRICT", "1")
             elif resolved_name == "ic3":
                 env.setdefault("IC3_HOST", host)
                 env.setdefault("IC3_PORT", str(port))
@@ -4256,9 +4272,72 @@ def portal_ic3_alias() -> Response:
 def portal_manager_alias() -> Response:
     return redirect("/portal/managerapp")
 
+
+def _is_subpath(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _storage_health_snapshot() -> dict[str, Any]:
+    root = _render_data_root
+    snapshot: dict[str, Any] = {
+        "persistent_root": str(root),
+        "persistent_root_exists": root.exists(),
+    }
+
+    if root.exists():
+        usage = shutil.disk_usage(root)
+        total = int(usage.total)
+        used = int(usage.used)
+        free = int(usage.free)
+        used_pct = round((used / total) * 100, 2) if total else 0.0
+        snapshot["disk"] = {
+            "total_bytes": total,
+            "used_bytes": used,
+            "free_bytes": free,
+            "used_pct": used_pct,
+            "status": "critical" if used_pct >= 95 else ("warning" if used_pct >= 85 else "ok"),
+        }
+
+    manager_root = root / "managerapp"
+    manager_db = manager_root / "manager_app.db"
+    manager_company_data = manager_root / "company_data"
+    snapshot["managerapp"] = {
+        "root": str(manager_root),
+        "db_path": str(manager_db),
+        "company_data_path": str(manager_company_data),
+        "root_exists": manager_root.exists(),
+        "db_exists": manager_db.exists(),
+        "company_data_exists": manager_company_data.exists(),
+        "db_in_persistent_root": _is_subpath(manager_db, root) if root.exists() else False,
+        "company_data_in_persistent_root": _is_subpath(manager_company_data, root) if root.exists() else False,
+    }
+
+    snapshot["backup"] = _manager_backup_status_payload()
+
+    snapshot["ok"] = bool(
+        root.exists()
+        and snapshot["managerapp"]["db_in_persistent_root"]
+        and snapshot["managerapp"]["company_data_in_persistent_root"]
+        and snapshot["backup"].get("ok", False)
+    )
+    return snapshot
+
 @app.route("/api/health")
 def api_health() -> Response:
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "storage": _storage_health_snapshot()})
+
+
+@app.route("/api/admin/storage-health", methods=["GET"])
+@login_required
+@role_required("Super Admin")
+def api_admin_storage_health() -> Response:
+    payload = _storage_health_snapshot()
+    status = 200 if payload.get("ok") else 503
+    return jsonify(payload), status
 
 @app.route("/api/status")
 @login_required
@@ -5003,6 +5082,25 @@ def autosync_sync_now():
         return jsonify({"ok": False, "message": str(e)}), 500
 
 
+@app.route("/api/admin/backups/managerapp/status", methods=["GET"])
+@login_required
+@role_required("Super Admin")
+def manager_backup_status() -> Response:
+    payload = _manager_backup_status_payload()
+    status = 200 if payload.get("ok") else 503
+    return jsonify(payload), status
+
+
+@app.route("/api/admin/backups/managerapp/run", methods=["POST"])
+@csrf.exempt
+@login_required
+@role_required("Super Admin")
+def manager_backup_run_now() -> Response:
+    payload = _run_manager_backup("manual")
+    status = 200 if payload.get("ok") else 500
+    return jsonify(payload), status
+
+
 def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str, Any]:
     result: dict[str, Any] = {
         "source": str(src),
@@ -5038,6 +5136,217 @@ def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str,
     result["copied"] = True
     result["bytes"] = int(dst.stat().st_size)
     return result
+
+
+def _manager_backup_config() -> dict[str, Any]:
+    interval_minutes = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_INTERVAL_MINUTES", "15")))
+    keep_snapshots = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_KEEP_SNAPSHOTS", "672")))
+    enabled = _env_flag("DEXTER_MGR_BACKUP_ENABLED", default=True)
+    return {
+        "enabled": enabled,
+        "interval_minutes": interval_minutes,
+        "keep_snapshots": keep_snapshots,
+    }
+
+
+def _manager_backup_paths() -> dict[str, Path]:
+    manager_root = _render_data_root / "managerapp"
+    return {
+        "manager_root": manager_root,
+        "db_path": manager_root / "manager_app.db",
+        "company_data_path": manager_root / "company_data",
+        "backup_root": _render_data_root / "backups" / "managerapp",
+    }
+
+
+def _hash_file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _update_manager_backup_state(payload: dict[str, Any]) -> None:
+    global _MGR_BACKUP_LAST_RUN
+    with _MGR_BACKUP_STATE_LOCK:
+        _MGR_BACKUP_LAST_RUN = payload
+
+
+def _manager_backup_status_payload() -> dict[str, Any]:
+    cfg = _manager_backup_config()
+    with _MGR_BACKUP_STATE_LOCK:
+        last_run = dict(_MGR_BACKUP_LAST_RUN) if _MGR_BACKUP_LAST_RUN else None
+
+    payload: dict[str, Any] = {
+        "ok": bool(cfg["enabled"]),
+        "config": cfg,
+        "paths": {k: str(v) for k, v in _manager_backup_paths().items()},
+        "last_run": last_run,
+    }
+
+    if not cfg["enabled"]:
+        payload["ok"] = False
+        payload["message"] = "Manager backup scheduler disabled"
+        return payload
+
+    if last_run is None:
+        payload["ok"] = False
+        payload["message"] = "No backup has run yet"
+        return payload
+
+    if not last_run.get("ok"):
+        payload["ok"] = False
+        payload["message"] = str(last_run.get("message") or "Last backup failed")
+        return payload
+
+    try:
+        finished_at = datetime.fromisoformat(str(last_run.get("finished_at", "")))
+        age_seconds = int((datetime.utcnow() - finished_at).total_seconds())
+    except Exception:
+        age_seconds = -1
+
+    payload["last_backup_age_seconds"] = age_seconds
+    stale_threshold = int(cfg["interval_minutes"]) * 60 * 2
+    if age_seconds < 0 or age_seconds > stale_threshold:
+        payload["ok"] = False
+        payload["message"] = "Last backup is stale"
+    else:
+        payload["message"] = "Backup status healthy"
+
+    return payload
+
+
+def _run_manager_backup(trigger: str) -> dict[str, Any]:
+    started_at = datetime.utcnow()
+    cfg = _manager_backup_config()
+    paths = _manager_backup_paths()
+    backup_root = paths["backup_root"]
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "trigger": trigger,
+        "started_at": started_at.isoformat(),
+        "finished_at": started_at.isoformat(),
+        "snapshot_dir": "",
+        "operations": [],
+        "message": "",
+        "pruned": [],
+    }
+
+    try:
+        if not cfg["enabled"] and trigger != "manual":
+            result["message"] = "Backups disabled"
+            result["ok"] = True
+            return result
+
+        if not _render_data_root.exists():
+            raise RuntimeError(f"Persistent data root missing: {_render_data_root}")
+
+        stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        snapshot_dir = backup_root / f"snapshot_{stamp}"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        result["snapshot_dir"] = str(snapshot_dir)
+
+        db_path = paths["db_path"]
+        db_op: dict[str, Any] = {"type": "db", "source": str(db_path), "copied": False}
+        if db_path.exists() and db_path.is_file():
+            db_dst = snapshot_dir / "manager_app.db"
+            shutil.copy2(db_path, db_dst)
+            db_op.update({
+                "copied": True,
+                "bytes": int(db_dst.stat().st_size),
+                "sha256": _hash_file_sha256(db_dst),
+            })
+        else:
+            db_op["warning"] = "DB file missing"
+        result["operations"].append(db_op)
+
+        company_data_path = paths["company_data_path"]
+        company_op: dict[str, Any] = {
+            "type": "company_data",
+            "source": str(company_data_path),
+            "copied": False,
+        }
+        if company_data_path.exists() and company_data_path.is_dir():
+            company_dst = snapshot_dir / "company_data"
+            shutil.copytree(company_data_path, company_dst, dirs_exist_ok=True)
+            file_count = sum(1 for p in company_dst.rglob("*") if p.is_file())
+            company_op.update({"copied": True, "file_count": int(file_count)})
+        else:
+            company_op["warning"] = "company_data folder missing"
+        result["operations"].append(company_op)
+
+        manifest = {
+            "created_at": datetime.utcnow().isoformat(),
+            "trigger": trigger,
+            "config": cfg,
+            "paths": {k: str(v) for k, v in paths.items()},
+            "operations": result["operations"],
+        }
+        manifest_path = snapshot_dir / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+        snapshots = sorted(
+            [p for p in backup_root.glob("snapshot_*") if p.is_dir()],
+            key=lambda p: p.name,
+        )
+        keep = int(cfg["keep_snapshots"])
+        if len(snapshots) > keep:
+            for old in snapshots[: len(snapshots) - keep]:
+                shutil.rmtree(old, ignore_errors=True)
+                result["pruned"].append(str(old))
+
+        result["ok"] = True
+        result["message"] = "Backup completed"
+        return result
+    except Exception as exc:
+        result["ok"] = False
+        result["message"] = str(exc)
+        return result
+    finally:
+        result["finished_at"] = datetime.utcnow().isoformat()
+        _update_manager_backup_state(result)
+
+
+def _start_manager_backup_scheduler() -> None:
+    global _MGR_BACKUP_THREAD_STARTED
+    cfg = _manager_backup_config()
+    if not cfg["enabled"]:
+        print("[dexter backup] Manager backup scheduler disabled", file=sys.stderr)
+        return
+
+    if _MGR_BACKUP_THREAD_STARTED:
+        return
+
+    def _loop() -> None:
+        # Run one backup shortly after startup to create an initial restore point.
+        try:
+            _run_manager_backup("startup")
+        except Exception as exc:
+            print(f"[dexter backup] Startup backup failed: {exc}", file=sys.stderr)
+
+        while True:
+            interval_seconds = int(_manager_backup_config()["interval_minutes"]) * 60
+            time.sleep(max(60, interval_seconds))
+            try:
+                _run_manager_backup("scheduled")
+            except Exception as exc:
+                print(f"[dexter backup] Scheduled backup failed: {exc}", file=sys.stderr)
+
+    t = threading.Thread(target=_loop, name="dexter-manager-backup", daemon=True)
+    t.start()
+    _MGR_BACKUP_THREAD_STARTED = True
+    print(
+        f"[dexter backup] Manager backup scheduler started (interval: {cfg['interval_minutes']} minutes, keep: {cfg['keep_snapshots']})",
+        file=sys.stderr,
+    )
+
+
+try:
+    _start_manager_backup_scheduler()
+except Exception as e:
+    print(f"[dexter backup] Warning: Failed to initialize manager backup scheduler: {e}", file=sys.stderr)
 
 
 @app.route("/api/admin/migrate-local-data", methods=["POST"])
