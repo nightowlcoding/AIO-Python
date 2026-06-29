@@ -2717,7 +2717,7 @@ class AppManager:
             elif resolved_name == "managerapp":
                 env.setdefault("MGR_HOST", host)
                 env.setdefault("MGR_PORT", str(port))
-                if _render_data_root.exists():
+                if _render_data_root.exists() and _render_data_writable:
                     mgr_root = _render_data_root / "managerapp"
                     try:
                         mgr_root.mkdir(parents=True, exist_ok=True)
@@ -2728,6 +2728,10 @@ class AppManager:
                     env.setdefault("MGR_PERSISTENT_ROOT", str(_render_data_root))
                     env.setdefault("MGR_REQUIRE_PERSISTENT_STORAGE", "1")
                     env.setdefault("MGR_STORAGE_STRICT", "1")
+                else:
+                    # If persistent Render storage is unavailable, avoid strict mode so startup can continue.
+                    env.setdefault("MGR_REQUIRE_PERSISTENT_STORAGE", "0")
+                    env.setdefault("MGR_STORAGE_STRICT", "0")
             elif resolved_name == "ic3":
                 env.setdefault("IC3_HOST", host)
                 env.setdefault("IC3_PORT", str(port))
@@ -2747,6 +2751,23 @@ class AppManager:
             )
             self._procs[resolved_name] = proc
             self._runtime_base_urls[resolved_name] = runtime_base_url
+
+            # Guard against fast-crash startup loops by briefly validating process liveness.
+            startup_deadline = time.time() + 6.0
+            while time.time() < startup_deadline:
+                if proc.poll() is not None:
+                    self._procs[resolved_name] = None
+                    self._runtime_base_urls[resolved_name] = None
+                    log_tail = self._tail_log(resolved_name, max_lines=50)
+                    return {
+                        "ok": False,
+                        "message": f"{resolved_name} exited during startup (rc={proc.returncode})",
+                        "log_tail": log_tail,
+                    }
+                if is_port_open(host, port):
+                    break
+                time.sleep(0.25)
+
             return {"ok": True, "message": f"Started {resolved_name}", "pid": proc.pid, "base_url": runtime_base_url}
 
     def stop(self, name: str) -> dict[str, Any]:
@@ -4898,7 +4919,11 @@ def _proxy(name: str, path: str) -> Response:
 
     status = MANAGER.status()[resolved_name]
     if not status["running"]:
-        MANAGER.start(resolved_name)
+        start_result = MANAGER.start(resolved_name)
+        if not start_result.get("ok"):
+            error_msg = str(start_result.get("message") or "Upstream app failed to start")
+            print(f"[_proxy] Failed to start {resolved_name}: {error_msg}", file=sys.stderr)
+            return jsonify({"ok": False, "message": f"{CONFIG['apps'][resolved_name]['display_name']} is temporarily unavailable. Please retry in a moment."}), 503
         _app_host, _app_port = MANAGER._parse_host_port(MANAGER.get_base_url(resolved_name))
         for _ in range(20):
             time.sleep(0.5)
