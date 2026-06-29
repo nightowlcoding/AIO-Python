@@ -5101,10 +5101,21 @@ def _proxy(name: str, path: str) -> Response:
                 response.headers["Retry-After"] = str(retry_after)
             return response
         _app_host, _app_port = MANAGER._parse_host_port(MANAGER.get_base_url(resolved_name))
-        for _ in range(20):
-            time.sleep(0.5)
+        app_ready = False
+        for attempt in range(8):
             if is_port_open(_app_host, _app_port):
+                app_ready = True
                 break
+            time.sleep(min(2.0, 0.2 * (2 ** attempt)))
+        if not app_ready:
+            response = jsonify({
+                "ok": False,
+                "message": f"{CONFIG['apps'][resolved_name]['display_name']} is starting up. Please retry in a moment.",
+                "retry_after_sec": 5,
+            })
+            response.status_code = 503
+            response.headers["Retry-After"] = "5"
+            return response
 
     upstream_base = MANAGER.get_base_url(resolved_name).rstrip("/") + "/"
     upstream_origin = urlparse(upstream_base)
