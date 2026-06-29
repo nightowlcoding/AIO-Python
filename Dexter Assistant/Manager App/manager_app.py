@@ -91,7 +91,10 @@ def _configure_company_data_storage() -> None:
     local_company_data.symlink_to(target_company_data, target_is_directory=True)
 
 
-_configure_company_data_storage()
+try:
+    _configure_company_data_storage()
+except Exception as exc:
+    print(f"[managerapp] Warning: company_data storage setup failed: {exc}", file=sys.stderr)
 
 
 def _enforce_persistent_storage_guardrails() -> None:
@@ -128,7 +131,10 @@ def _enforce_persistent_storage_guardrails() -> None:
     print(message, file=sys.stderr)
 
 
-_enforce_persistent_storage_guardrails()
+try:
+    _enforce_persistent_storage_guardrails()
+except Exception as exc:
+    print(f"[managerapp] Warning: persistent storage guardrail check failed: {exc}", file=sys.stderr)
 
 
 def _load_persistent_secret_key() -> str:

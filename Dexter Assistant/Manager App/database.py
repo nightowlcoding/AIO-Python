@@ -6,13 +6,48 @@ import sqlite3
 import os
 import hashlib
 import uuid
+import tempfile
+import sys
 from datetime import datetime
 import json
+from pathlib import Path
 
-DB_PATH = os.environ.get(
-    "MGR_DB_PATH",
-    os.path.join(os.path.dirname(__file__), "manager_app.db"),
-)
+def _resolve_writable_db_path() -> str:
+    configured = (os.environ.get("MGR_DB_PATH") or "").strip()
+    module_default = str(Path(__file__).resolve().parent / "manager_app.db")
+    temp_default = str(Path(tempfile.gettempdir()) / "manager_app.db")
+
+    candidates = []
+    if configured:
+        candidates.append(configured)
+    candidates.append(module_default)
+    if temp_default not in candidates:
+        candidates.append(temp_default)
+
+    for candidate in candidates:
+        try:
+            candidate_path = Path(candidate).resolve()
+            candidate_path.parent.mkdir(parents=True, exist_ok=True)
+            test_conn = sqlite3.connect(str(candidate_path), timeout=5.0)
+            test_conn.execute('PRAGMA journal_mode=WAL')
+            test_conn.close()
+            os.environ["MGR_DB_PATH"] = str(candidate_path)
+            if configured and str(candidate_path) != str(Path(configured).resolve()):
+                print(
+                    f"[managerapp] Warning: MGR_DB_PATH not writable ({configured}); using {candidate_path}",
+                    file=sys.stderr,
+                )
+            return str(candidate_path)
+        except Exception as exc:
+            print(f"[managerapp] DB path not writable ({candidate}): {exc}", file=sys.stderr)
+
+    # Last-resort fallback keeps startup from crashing due to path selection.
+    fallback_path = Path(module_default)
+    os.environ["MGR_DB_PATH"] = str(fallback_path)
+    return str(fallback_path)
+
+
+DB_PATH = _resolve_writable_db_path()
 
 
 class Database:
