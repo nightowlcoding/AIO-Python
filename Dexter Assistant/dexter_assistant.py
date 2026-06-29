@@ -4500,8 +4500,16 @@ def portal_app(name: str) -> Response:
         start_result = MANAGER.start(resolved_name)
         if not start_result.get("ok"):
             error_msg = start_result.get("message", "Failed to start app")
+            retry_after = int(start_result.get("retry_after_sec") or MANAGER.retry_after_seconds(resolved_name) or 0)
             print(f"[portal_app] Failed to start {resolved_name}: {error_msg}", file=sys.stderr)
-            return jsonify({"ok": False, "message": error_msg}), 500
+            payload = {"ok": False, "message": error_msg}
+            if retry_after > 0:
+                payload["retry_after_sec"] = retry_after
+            response = jsonify(payload)
+            response.status_code = 503
+            if retry_after > 0:
+                response.headers["Retry-After"] = str(retry_after)
+            return response
 
         app_cfg = CONFIG["apps"][resolved_name]
         switched = (request.args.get("company_switched") or "").strip().lower() in {"1", "true", "yes"}
