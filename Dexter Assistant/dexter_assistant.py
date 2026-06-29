@@ -4503,6 +4503,9 @@ def portal_app(name: str) -> Response:
             retry_after = int(start_result.get("retry_after_sec") or MANAGER.retry_after_seconds(resolved_name) or 0)
             print(f"[portal_app] Failed to start {resolved_name}: {error_msg}", file=sys.stderr)
             payload = {"ok": False, "message": error_msg}
+            log_tail = str(start_result.get("log_tail") or "").strip()
+            if log_tail:
+                payload["startup_log_tail"] = log_tail
             if retry_after > 0:
                 payload["retry_after_sec"] = retry_after
             response = jsonify(payload)
@@ -5093,6 +5096,9 @@ def _proxy(name: str, path: str) -> Response:
                 "ok": False,
                 "message": f"{CONFIG['apps'][resolved_name]['display_name']} is temporarily unavailable. Please retry in a moment.",
             }
+            log_tail = str(start_result.get("log_tail") or "").strip()
+            if log_tail:
+                payload["startup_log_tail"] = log_tail
             if retry_after > 0:
                 payload["retry_after_sec"] = retry_after
             response = jsonify(payload)
@@ -5267,6 +5273,9 @@ def _proxy(name: str, path: str) -> Response:
                     "ok": False,
                     "message": f"{CONFIG['apps'][resolved_name]['display_name']} is temporarily unavailable. Please retry in a moment.",
                 }
+                log_tail = str(restart_result.get("log_tail") or "").strip()
+                if log_tail:
+                    payload["startup_log_tail"] = log_tail
                 if retry_after > 0:
                     payload["retry_after_sec"] = retry_after
                 response = jsonify(payload)
