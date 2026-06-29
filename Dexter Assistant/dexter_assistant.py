@@ -102,6 +102,21 @@ try:
 except ValueError:
     UPSTREAM_READ_TIMEOUT_SEC = 15.0
 
+try:
+    APP_START_FAILURE_WINDOW_SEC = float(os.environ.get("DEXTER_APP_START_FAILURE_WINDOW_SEC", "60") or "60")
+except ValueError:
+    APP_START_FAILURE_WINDOW_SEC = 60.0
+
+try:
+    APP_START_FAILURE_THRESHOLD = int(os.environ.get("DEXTER_APP_START_FAILURE_THRESHOLD", "3") or "3")
+except ValueError:
+    APP_START_FAILURE_THRESHOLD = 3
+
+try:
+    APP_START_COOLDOWN_SEC = float(os.environ.get("DEXTER_APP_START_COOLDOWN_SEC", "45") or "45")
+except ValueError:
+    APP_START_COOLDOWN_SEC = 45.0
+
 _DEXTER_SHUTDOWN_LOCK = threading.Lock()
 _DEXTER_SHUTDOWN_STARTED = False
 MAX_COMPANY_LOGO_BYTES = 2 * 1024 * 1024
@@ -2593,7 +2608,53 @@ class AppManager:
         self._runtime_base_urls: dict[str, str | None] = {
             name: None for name in config["apps"].keys()
         }
+        self._start_failures: dict[str, list[float]] = {
+            name: [] for name in config["apps"].keys()
+        }
+        self._start_cooldown_until: dict[str, float] = {
+            name: 0.0 for name in config["apps"].keys()
+        }
         RUNTIME_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _prune_start_failures(self, name: str, now_ts: float) -> list[float]:
+        cutoff = now_ts - max(10.0, APP_START_FAILURE_WINDOW_SEC)
+        kept = [ts for ts in self._start_failures.get(name, []) if ts >= cutoff]
+        self._start_failures[name] = kept
+        return kept
+
+    def _record_start_failure(self, name: str, reason: str) -> None:
+        now_ts = time.time()
+        kept = self._prune_start_failures(name, now_ts)
+        kept.append(now_ts)
+        self._start_failures[name] = kept
+        threshold = max(1, APP_START_FAILURE_THRESHOLD)
+        if len(kept) >= threshold:
+            cooldown = max(5.0, APP_START_COOLDOWN_SEC)
+            self._start_cooldown_until[name] = now_ts + cooldown
+            print(
+                f"[dexter circuit] Opening start circuit for '{name}' after {len(kept)} failures: {reason}. Cooldown {int(cooldown)}s.",
+                file=sys.stderr,
+            )
+
+    def _record_start_success(self, name: str) -> None:
+        self._start_failures[name] = []
+        self._start_cooldown_until[name] = 0.0
+
+    def _start_allowed(self, name: str) -> tuple[bool, int]:
+        now_ts = time.time()
+        cooldown_until = float(self._start_cooldown_until.get(name, 0.0) or 0.0)
+        if cooldown_until > now_ts:
+            retry_after = int(max(1.0, cooldown_until - now_ts))
+            return False, retry_after
+        return True, 0
+
+    def retry_after_seconds(self, name: str) -> int:
+        resolved_name = self.resolve_name(name)
+        if not resolved_name:
+            return 0
+        with self._lock:
+            _, retry_after = self._start_allowed(resolved_name)
+            return retry_after
 
     def _app_cfg(self, name: str) -> dict[str, Any]:
         name = self.resolve_name(name)
@@ -2726,9 +2787,18 @@ class AppManager:
             if proc is not None and proc.poll() is None:
                 return {"ok": True, "message": f"{resolved_name} already running"}
 
+            start_allowed, retry_after = self._start_allowed(resolved_name)
+            if not start_allowed:
+                return {
+                    "ok": False,
+                    "message": f"{resolved_name} temporarily blocked after repeated startup failures",
+                    "retry_after_sec": retry_after,
+                }
+
             cwd = ROOT / app["cwd"]
             entry = cwd / app["entrypoint"]
             if not entry.exists():
+                self._record_start_failure(resolved_name, f"missing entrypoint: {entry}")
                 return {"ok": False, "message": f"Entrypoint not found: {entry}"}
 
             host, port = self._parse_host_port(app["base_url"])
@@ -2737,6 +2807,7 @@ class AppManager:
                 if auto_port:
                     port = find_free_port(host)
                 else:
+                    self._record_start_failure(resolved_name, f"port unavailable: {host}:{port}")
                     return {"ok": False, "message": f"Port in use by another process: {host}:{port}"}
 
             runtime_base_url = f"http://{host}:{port}"
@@ -2799,12 +2870,14 @@ class AppManager:
                     self._stdout_streams[resolved_name] = None
                     self._runtime_base_urls[resolved_name] = None
                     log_tail = self._tail_log(resolved_name, max_lines=50)
+                    self._record_start_failure(resolved_name, f"exited during startup rc={proc.returncode}")
                     return {
                         "ok": False,
                         "message": f"{resolved_name} exited during startup (rc={proc.returncode})",
                         "log_tail": log_tail,
                     }
                 if is_port_open(host, port):
+                    self._record_start_success(resolved_name)
                     break
                 time.sleep(0.25)
 
@@ -5001,8 +5074,19 @@ def _proxy(name: str, path: str) -> Response:
         start_result = MANAGER.start(resolved_name)
         if not start_result.get("ok"):
             error_msg = str(start_result.get("message") or "Upstream app failed to start")
+            retry_after = int(start_result.get("retry_after_sec") or MANAGER.retry_after_seconds(resolved_name) or 0)
             print(f"[_proxy] Failed to start {resolved_name}: {error_msg}", file=sys.stderr)
-            return jsonify({"ok": False, "message": f"{CONFIG['apps'][resolved_name]['display_name']} is temporarily unavailable. Please retry in a moment."}), 503
+            payload = {
+                "ok": False,
+                "message": f"{CONFIG['apps'][resolved_name]['display_name']} is temporarily unavailable. Please retry in a moment.",
+            }
+            if retry_after > 0:
+                payload["retry_after_sec"] = retry_after
+            response = jsonify(payload)
+            response.status_code = 503
+            if retry_after > 0:
+                response.headers["Retry-After"] = str(retry_after)
+            return response
         _app_host, _app_port = MANAGER._parse_host_port(MANAGER.get_base_url(resolved_name))
         for _ in range(20):
             time.sleep(0.5)
@@ -5152,10 +5236,23 @@ def _proxy(name: str, path: str) -> Response:
         upstream = _request_upstream()
     except requests.RequestException as exc:
         try:
-            MANAGER.restart(resolved_name)
+            restart_result = MANAGER.restart(resolved_name)
+            if not restart_result.get("ok"):
+                retry_after = int(restart_result.get("retry_after_sec") or MANAGER.retry_after_seconds(resolved_name) or 0)
+                payload = {
+                    "ok": False,
+                    "message": f"{CONFIG['apps'][resolved_name]['display_name']} is temporarily unavailable. Please retry in a moment.",
+                }
+                if retry_after > 0:
+                    payload["retry_after_sec"] = retry_after
+                response = jsonify(payload)
+                response.status_code = 503
+                if retry_after > 0:
+                    response.headers["Retry-After"] = str(retry_after)
+                return response
             _app_host2, _app_port2 = MANAGER._parse_host_port(MANAGER.get_base_url(resolved_name))
-            for _ in range(16):
-                time.sleep(0.5)
+            for attempt in range(8):
+                time.sleep(min(2.0, 0.2 * (2 ** attempt)))
                 if is_port_open(_app_host2, _app_port2):
                     break
             upstream = _request_upstream()
