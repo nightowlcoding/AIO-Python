@@ -3276,36 +3276,33 @@ def admin_email_test_send() -> Response:
     return redirect(f"/admin/email?{key}={requests.utils.quote(msg)}")
 
 def _effective_company_scope(require_active: bool = True) -> int | None:
-    role_name = current_role_name()
-    if role_name != "Super Admin":
-        return current_user_company_id()
+    try:
+        role_name = current_role_name()
+        if role_name != "Super Admin":
+            return current_user_company_id()
 
-    role_name = current_role_name()
-    user_company_id = current_user_company_id()
+        user_company_id = current_user_company_id()
 
-    if role_name != "Super Admin":
-        if user_company_id is not None:
-            company_row = _get_company_by_id(int(user_company_id), require_active=require_active)
+        selected_company_id = current_selected_company_id() or user_company_id
+        if selected_company_id is not None:
+            company_row = _get_company_by_id(int(selected_company_id), require_active=require_active)
             if company_row:
                 _set_session_company_context(int(company_row["id"]), str(company_row["name"]))
                 return int(company_row["id"])
+
+        fallback = _first_active_company() if require_active else None
+        if fallback:
+            _set_session_company_context(int(fallback["id"]), str(fallback["name"]))
+            return int(fallback["id"])
+
         _set_session_company_context(None, "")
         return None
-
-    selected_company_id = current_selected_company_id() or user_company_id
-    if selected_company_id is not None:
-        company_row = _get_company_by_id(int(selected_company_id), require_active=require_active)
-        if company_row:
-            _set_session_company_context(int(company_row["id"]), str(company_row["name"]))
-            return int(company_row["id"])
-
-    fallback = _first_active_company() if require_active else None
-    if fallback:
-        _set_session_company_context(int(fallback["id"]), str(fallback["name"]))
-        return int(fallback["id"])
-
-    _set_session_company_context(None, "")
-    return None
+    except Exception as exc:
+        error_msg = f"{type(exc).__name__}: {str(exc)}"
+        print(f"[_effective_company_scope] Exception: {error_msg}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return None
 
 @app.route("/admin/company-scope", methods=["POST"])
 @login_required
@@ -4217,45 +4214,57 @@ def portal_home() -> str:
 @app.route("/portal/<name>")
 @login_required
 def portal_app(name: str) -> Response:
-    resolved_name = MANAGER.resolve_name(name)
-    if not resolved_name:
-        return jsonify({"ok": False, "message": f"Unknown app: {name}"}), 404
+    try:
+        resolved_name = MANAGER.resolve_name(name)
+        if not resolved_name:
+            return jsonify({"ok": False, "message": f"Unknown app: {name}"}), 404
 
-    MANAGER.start(resolved_name)
-    app_cfg = CONFIG["apps"][resolved_name]
-    switched = (request.args.get("company_switched") or "").strip().lower() in {"1", "true", "yes"}
-    location_switched = (request.args.get("location_switched") or "").strip().lower() in {"1", "true", "yes"}
-    raw_url = "/app/managerapp/" if resolved_name == "managerapp" else f"/app/{resolved_name}/"
-    show_shell_nav = resolved_name != "managerapp"
-    selected_restaurant = _selected_restaurant_record_for_scope(_effective_company_scope(require_active=True))
-    current_location_name = str(
-        (selected_restaurant or {}).get("label")
-        or (selected_restaurant or {}).get("name")
-        or app_cfg["display_name"]
-    ).strip()
-    switch_notice = ""
-    if switched:
-        separator = "&" if "?" in raw_url else "?"
-        raw_url = f"{raw_url}{separator}company_switched=1&t={int(time.time())}"
-        current_company_name = str((session.get(SESSION_USER_KEY) or {}).get("company_name") or "").strip()
-        switch_notice = f"Switched to {current_company_name or 'the selected company'}. App reloaded to landing page."
-    elif location_switched:
-        separator = "&" if "?" in raw_url else "?"
-        raw_url = f"{raw_url}{separator}location_switched=1&t={int(time.time())}"
-        switch_notice = f"Switched to {current_location_name or 'the selected location'}. App reloaded to landing page."
-    display_title = current_location_name if resolved_name == "managerapp" else app_cfg["display_name"]
-    home_target = "/portal/managerapp" if resolved_name == "managerapp" else "/portal"
-    return render_template(
-        "portal_app.html",
-        app_key=resolved_name,
-        app_title=display_title,
-        home_target=home_target,
-        raw_url=raw_url,
-        switch_notice=switch_notice,
-        show_shell_nav=show_shell_nav,
-        selected_company_name=_selected_company_name_for_scope(),
-        current_location_name=current_location_name,
-    )
+        start_result = MANAGER.start(resolved_name)
+        if not start_result.get("ok"):
+            error_msg = start_result.get("message", "Failed to start app")
+            print(f"[portal_app] Failed to start {resolved_name}: {error_msg}", file=sys.stderr)
+            return jsonify({"ok": False, "message": error_msg}), 500
+
+        app_cfg = CONFIG["apps"][resolved_name]
+        switched = (request.args.get("company_switched") or "").strip().lower() in {"1", "true", "yes"}
+        location_switched = (request.args.get("location_switched") or "").strip().lower() in {"1", "true", "yes"}
+        raw_url = "/app/managerapp/" if resolved_name == "managerapp" else f"/app/{resolved_name}/"
+        show_shell_nav = resolved_name != "managerapp"
+        selected_restaurant = _selected_restaurant_record_for_scope(_effective_company_scope(require_active=True))
+        current_location_name = str(
+            (selected_restaurant or {}).get("label")
+            or (selected_restaurant or {}).get("name")
+            or app_cfg["display_name"]
+        ).strip()
+        switch_notice = ""
+        if switched:
+            separator = "&" if "?" in raw_url else "?"
+            raw_url = f"{raw_url}{separator}company_switched=1&t={int(time.time())}"
+            current_company_name = str((session.get(SESSION_USER_KEY) or {}).get("company_name") or "").strip()
+            switch_notice = f"Switched to {current_company_name or 'the selected company'}. App reloaded to landing page."
+        elif location_switched:
+            separator = "&" if "?" in raw_url else "?"
+            raw_url = f"{raw_url}{separator}location_switched=1&t={int(time.time())}"
+            switch_notice = f"Switched to {current_location_name or 'the selected location'}. App reloaded to landing page."
+        display_title = current_location_name if resolved_name == "managerapp" else app_cfg["display_name"]
+        home_target = "/portal/managerapp" if resolved_name == "managerapp" else "/portal"
+        return render_template(
+            "portal_app.html",
+            app_key=resolved_name,
+            app_title=display_title,
+            home_target=home_target,
+            raw_url=raw_url,
+            switch_notice=switch_notice,
+            show_shell_nav=show_shell_nav,
+            selected_company_name=_selected_company_name_for_scope(),
+            current_location_name=current_location_name,
+        )
+    except Exception as exc:
+        error_msg = f"{type(exc).__name__}: {str(exc)}"
+        print(f"[portal_app] Exception in portal_app route: {error_msg}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({"ok": False, "message": error_msg}), 500
 
 @app.route("/productmix")
 @login_required
