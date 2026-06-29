@@ -17,6 +17,7 @@ import subprocess
 import sys
 import ssl
 import threading
+import tempfile
 import time
 import webbrowser
 from datetime import datetime, timedelta
@@ -251,28 +252,50 @@ CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor_user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
 """
 
+def _find_writable_db_path() -> Path:
+    """Find a writable path for the RBAC database with fallbacks."""
+    candidate_paths = [
+        RBAC_DB_PATH,  # Primary: configured path (Render disk or local)
+        ROOT / "dexter_assistant_rbac.db",  # Fallback 1: app directory
+        Path("/tmp/dexter_assistant_rbac.db"),  # Fallback 2: temp directory (Linux/Render)
+        Path(tempfile.gettempdir()) / "dexter_assistant_rbac.db",  # Fallback 3: system temp
+    ]
+    
+    for db_path in candidate_paths:
+        try:
+            # Try to create parent directory
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Try to open the database to verify write access
+            test_conn = sqlite3.connect(str(db_path.resolve()))
+            test_conn.execute("PRAGMA journal_mode=WAL")  # Requires write access for lock files
+            test_conn.close()
+            
+            print(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}", file=sys.stderr)
+            return db_path
+        except (OSError, sqlite3.OperationalError) as e:
+            print(f"[get_rbac_db_connection] Path not writable ({db_path.resolve()}): {e}", file=sys.stderr)
+            continue
+    
+    # If all paths fail, log details and use original path (will fail with better diagnostics)
+    print(f"[get_rbac_db_connection] FATAL: No writable database path found. Using primary: {RBAC_DB_PATH.resolve()}", file=sys.stderr)
+    return RBAC_DB_PATH
+
 def get_rbac_db_connection() -> sqlite3.Connection:
     try:
-        RBAC_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        print(f"[dexter] Warning: Could not create RBAC_DB_PATH parent directory: {e}", file=sys.stderr)
-    try:
-        db_path_abs = RBAC_DB_PATH.resolve()
-        conn = sqlite3.connect(str(db_path_abs))
+        # Find a writable database path
+        db_path = _find_writable_db_path()
+        
+        # Connect to database
+        conn = sqlite3.connect(str(db_path.resolve()))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
     except sqlite3.OperationalError as e:
         error_msg = str(e)
-        if "unable to open database file" in error_msg:
-            print(f"[dexter] ERROR: Failed to connect to RBAC DB", file=sys.stderr)
-            print(f"[dexter]   Configured path: {RBAC_DB_PATH}", file=sys.stderr)
-            print(f"[dexter]   Absolute path: {RBAC_DB_PATH.resolve()}", file=sys.stderr)
-            print(f"[dexter]   Parent exists: {RBAC_DB_PATH.parent.exists()}", file=sys.stderr)
-            if RBAC_DB_PATH.parent.exists():
-                print(f"[dexter]   Parent writable: {os.access(RBAC_DB_PATH.parent, os.W_OK)}", file=sys.stderr)
-                print(f"[dexter]   Parent path: {RBAC_DB_PATH.parent}", file=sys.stderr)
-            print(f"[dexter]   Error: {error_msg}", file=sys.stderr)
+        print(f"[get_rbac_db_connection] ERROR: Failed to connect to RBAC DB: {error_msg}", file=sys.stderr)
+        print(f"[get_rbac_db_connection]   Primary path: {RBAC_DB_PATH.resolve()}", file=sys.stderr)
+        print(f"[get_rbac_db_connection]   Primary writable: {os.access(RBAC_DB_PATH.parent, os.W_OK) if RBAC_DB_PATH.parent.exists() else 'N/A'}", file=sys.stderr)
         raise
 
 def seed_default_roles(conn: sqlite3.Connection) -> None:
