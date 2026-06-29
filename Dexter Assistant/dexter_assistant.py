@@ -5035,6 +5035,7 @@ def api_dashboard() -> Response:
 @app.route("/api/start-all", methods=["POST"])
 @csrf.exempt
 @login_required
+@role_required("Super Admin", "Manager")
 def api_start_all() -> Response:
     result = MANAGER.start_all()
     code = 200 if result.get("ok") else 409
@@ -5043,12 +5044,14 @@ def api_start_all() -> Response:
 @app.route("/api/stop-all", methods=["POST"])
 @csrf.exempt
 @login_required
+@role_required("Super Admin", "Manager")
 def api_stop_all() -> Response:
     return jsonify(MANAGER.stop_all())
 
 @app.route("/api/apps/<name>/start", methods=["POST"])
 @csrf.exempt
 @login_required
+@role_required("Super Admin", "Manager")
 def api_start(name: str) -> Response:
     result = MANAGER.start(name)
     code = 200 if result.get("ok") else 409
@@ -5057,6 +5060,7 @@ def api_start(name: str) -> Response:
 @app.route("/api/apps/<name>/stop", methods=["POST"])
 @csrf.exempt
 @login_required
+@role_required("Super Admin", "Manager")
 def api_stop(name: str) -> Response:
     result = MANAGER.stop(name)
     code = 200 if result.get("ok") else 409
@@ -5065,6 +5069,7 @@ def api_stop(name: str) -> Response:
 @app.route("/api/apps/<name>/restart", methods=["POST"])
 @csrf.exempt
 @login_required
+@role_required("Super Admin", "Manager")
 def api_restart(name: str) -> Response:
     result = MANAGER.restart(name)
     code = 200 if result.get("ok") else 409
