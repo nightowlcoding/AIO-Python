@@ -51,7 +51,12 @@ else:
     _default_auth_storage_root = ROOT
 
 AUTH_STORAGE_ROOT = Path(os.environ.get("DEXTER_AUTH_DATA_DIR") or str(_default_auth_storage_root))
-AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+try:
+    AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+except OSError as e:
+    print(f"[dexter] Warning: Could not create AUTH_STORAGE_ROOT {AUTH_STORAGE_ROOT}: {e}", file=sys.stderr)
+    AUTH_STORAGE_ROOT = ROOT
+    AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 AUTH_USERS_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_users.json"
 RBAC_DB_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_rbac.db"
 
@@ -230,10 +235,23 @@ CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
 """
 
 def get_rbac_db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(RBAC_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    try:
+        RBAC_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    try:
+        conn = sqlite3.connect(str(RBAC_DB_PATH))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+    except sqlite3.OperationalError as e:
+        error_msg = str(e)
+        if "unable to open database file" in error_msg:
+            print(f"[dexter] Failed to connect to RBAC DB at {RBAC_DB_PATH}: {error_msg}", file=sys.stderr)
+            print(f"[dexter] Checking path: {RBAC_DB_PATH}", file=sys.stderr)
+            print(f"[dexter] Parent exists: {RBAC_DB_PATH.parent.exists()}", file=sys.stderr)
+            print(f"[dexter] Parent writable: {os.access(RBAC_DB_PATH.parent, os.W_OK) if RBAC_DB_PATH.parent.exists() else 'N/A'}", file=sys.stderr)
+        raise
 
 def seed_default_roles(conn: sqlite3.Connection) -> None:
     for role_name in ("Super Admin", "Manager", "Employee"):
@@ -266,13 +284,26 @@ def ensure_default_company(conn: sqlite3.Connection) -> int:
     return int(cur.lastrowid)
 
 def initialize_rbac_db() -> None:
-    conn = get_rbac_db_connection()
     try:
-        conn.executescript(RBAC_SCHEMA_SQL)
-        seed_default_roles(conn)
-        conn.commit()
-    finally:
-        conn.close()
+        RBAC_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"[dexter] Warning: Could not create RBAC_DB_PATH parent directory {RBAC_DB_PATH.parent}: {e}", file=sys.stderr)
+    
+    try:
+        conn = get_rbac_db_connection()
+        try:
+            conn.executescript(RBAC_SCHEMA_SQL)
+            seed_default_roles(conn)
+            conn.commit()
+        finally:
+            conn.close()
+    except sqlite3.OperationalError as e:
+        error_msg = str(e)
+        print(f"[dexter] ERROR: Failed to initialize RBAC database at {RBAC_DB_PATH}: {error_msg}", file=sys.stderr)
+        if "unable to open database file" in error_msg:
+            print(f"[dexter] Database path: {RBAC_DB_PATH}", file=sys.stderr)
+            print(f"[dexter] Parent directory writable: {os.access(RBAC_DB_PATH.parent, os.W_OK)}", file=sys.stderr)
+        raise
 
 def _get_role_id(conn: sqlite3.Connection, role_name: str) -> int:
     row = conn.execute("SELECT id FROM roles WHERE name = ? LIMIT 1", (role_name,)).fetchone()
@@ -2866,17 +2897,24 @@ limiter = Limiter(
     default_limits=[],
 )
 
-_bootstrap_auth_storage_from_legacy()
-initialize_rbac_db()
-migrate_legacy_json_users_to_sqlite()
-migrate_add_task_fields_v1()
-migrate_add_password_reset_fields_v1()
-migrate_add_company_scope_v1()
-migrate_add_company_profiles_v1()
-migrate_add_company_email_settings_v1()
-migrate_add_login_lockout_fields_v1()
-migrate_add_user_location_assignments_v1()
-ensure_default_super_admin_user()
+try:
+    _bootstrap_auth_storage_from_legacy()
+    initialize_rbac_db()
+    migrate_legacy_json_users_to_sqlite()
+    migrate_add_task_fields_v1()
+    migrate_add_password_reset_fields_v1()
+    migrate_add_company_scope_v1()
+    migrate_add_company_profiles_v1()
+    migrate_add_company_email_settings_v1()
+    migrate_add_login_lockout_fields_v1()
+    migrate_add_user_location_assignments_v1()
+    ensure_default_super_admin_user()
+except Exception as e:
+    error_msg = f"{type(e).__name__}: {str(e)}"
+    print(f"[dexter] FATAL: Database initialization failed: {error_msg}", file=sys.stderr)
+    import traceback
+    traceback.print_exc(file=sys.stderr)
+    print(f"[dexter] Attempting to continue with degraded functionality...", file=sys.stderr)
 
 @app.before_request
 def require_auth_for_protected_routes() -> Response | None:
