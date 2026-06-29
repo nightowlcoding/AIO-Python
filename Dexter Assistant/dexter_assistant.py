@@ -45,17 +45,33 @@ BRANDING_LOGO_PATH = ROOT / "dexter_logo.png"
 LEGACY_BRANDING_LOGO_PATH = ROOT.parent / "Restaurant Management" / "Manager App" / "static" / "img" / "Dexter.png"
 
 _render_data_root = Path("/dexter-data")
+_render_data_writable = False
 if _render_data_root.exists():
-    _default_auth_storage_root = _render_data_root / "auth"
+    try:
+        if os.access(_render_data_root, os.W_OK):
+            _render_data_writable = True
+            _default_auth_storage_root = _render_data_root / "auth"
+        else:
+            print(f"[dexter] /dexter-data exists but is not writable, using local storage", file=sys.stderr)
+            _default_auth_storage_root = ROOT
+    except OSError:
+        _default_auth_storage_root = ROOT
 else:
     _default_auth_storage_root = ROOT
 
 AUTH_STORAGE_ROOT = Path(os.environ.get("DEXTER_AUTH_DATA_DIR") or str(_default_auth_storage_root))
+print(f"[dexter] AUTH_STORAGE_ROOT set to: {AUTH_STORAGE_ROOT} (absolute: {AUTH_STORAGE_ROOT.resolve()})", file=sys.stderr)
 try:
     AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+    print(f"[dexter] AUTH_STORAGE_ROOT directory created/verified", file=sys.stderr)
 except OSError as e:
-    print(f"[dexter] Warning: Could not create AUTH_STORAGE_ROOT {AUTH_STORAGE_ROOT}: {e}", file=sys.stderr)
+    print(f"[dexter] ERROR: Could not create AUTH_STORAGE_ROOT {AUTH_STORAGE_ROOT}: {e}", file=sys.stderr)
+    print(f"[dexter] Falling back to ROOT: {ROOT}", file=sys.stderr)
     AUTH_STORAGE_ROOT = ROOT
+    try:
+        AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+    except OSError as e2:
+        print(f"[dexter] FATAL: Could not create fallback AUTH_STORAGE_ROOT: {e2}", file=sys.stderr)
     AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 AUTH_USERS_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_users.json"
 RBAC_DB_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_rbac.db"
@@ -237,20 +253,25 @@ CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
 def get_rbac_db_connection() -> sqlite3.Connection:
     try:
         RBAC_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
+    except OSError as e:
+        print(f"[dexter] Warning: Could not create RBAC_DB_PATH parent directory: {e}", file=sys.stderr)
     try:
-        conn = sqlite3.connect(str(RBAC_DB_PATH))
+        db_path_abs = RBAC_DB_PATH.resolve()
+        conn = sqlite3.connect(str(db_path_abs))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
     except sqlite3.OperationalError as e:
         error_msg = str(e)
         if "unable to open database file" in error_msg:
-            print(f"[dexter] Failed to connect to RBAC DB at {RBAC_DB_PATH}: {error_msg}", file=sys.stderr)
-            print(f"[dexter] Checking path: {RBAC_DB_PATH}", file=sys.stderr)
-            print(f"[dexter] Parent exists: {RBAC_DB_PATH.parent.exists()}", file=sys.stderr)
-            print(f"[dexter] Parent writable: {os.access(RBAC_DB_PATH.parent, os.W_OK) if RBAC_DB_PATH.parent.exists() else 'N/A'}", file=sys.stderr)
+            print(f"[dexter] ERROR: Failed to connect to RBAC DB", file=sys.stderr)
+            print(f"[dexter]   Configured path: {RBAC_DB_PATH}", file=sys.stderr)
+            print(f"[dexter]   Absolute path: {RBAC_DB_PATH.resolve()}", file=sys.stderr)
+            print(f"[dexter]   Parent exists: {RBAC_DB_PATH.parent.exists()}", file=sys.stderr)
+            if RBAC_DB_PATH.parent.exists():
+                print(f"[dexter]   Parent writable: {os.access(RBAC_DB_PATH.parent, os.W_OK)}", file=sys.stderr)
+                print(f"[dexter]   Parent path: {RBAC_DB_PATH.parent}", file=sys.stderr)
+            print(f"[dexter]   Error: {error_msg}", file=sys.stderr)
         raise
 
 def seed_default_roles(conn: sqlite3.Connection) -> None:
@@ -2939,58 +2960,65 @@ def require_auth_for_protected_routes() -> Response | None:
 @app.route("/auth/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
 def auth_login() -> Response:
-    if session.get(SESSION_USER_KEY):
-        return redirect(default_post_login_path())
-
-    error = ""
-    if request.method == "POST":
-        username = (request.form.get("username") or "").strip()
-        password = request.form.get("password") or ""
-        key, user = find_auth_user(username)
-        if user and int(user.get("is_active", 1)) == 1 and is_user_locked_out(user):
-            error = f"Account temporarily locked. Try again in {LOGIN_LOCKOUT_MINUTES} minutes."
-        elif user and int(user.get("is_active", 1)) == 1 and check_password_hash(str(user.get("password_hash", "")), password):
-            update_user_last_login(int(user["id"]))
-            role_name = str(user.get("role_name") or "Employee")
-            session[SESSION_USER_KEY] = {
-                "username": key or username,
-                "user_id": int(user["id"]),
-                "role_name": role_name,
-                "company_id": int(user["company_id"]) if user.get("company_id") is not None else None,
-                "selected_company_id": int(user["company_id"]) if user.get("company_id") is not None else None,
-                "selected_restaurant_id": None,
-                "company_name": str(user.get("company_name") or ""),
-                "is_admin": role_name == "Super Admin",
-                "email": key or username,
-            }
-            session.permanent = True
-            if role_name in ("Super Admin", "Manager"):
-                MANAGER.start_all()
+    try:
+        if session.get(SESSION_USER_KEY):
             return redirect(default_post_login_path())
-        elif user and int(user.get("is_active", 1)) == 1:
-            attempts, lockout_until = register_failed_login_attempt(int(user["id"]))
-            if lockout_until is not None:
-                error = f"Account temporarily locked. Try again in {LOGIN_LOCKOUT_MINUTES} minutes."
-            else:
-                remaining = max(0, MAX_FAILED_LOGIN_ATTEMPTS - attempts)
-                if remaining > 0:
-                    error = f"Invalid username or password. {remaining} attempts remaining before temporary lockout."
-                else:
-                    error = "Invalid username or password."
-        elif user and int(user.get("is_active", 1)) != 1:
-            error = "Invalid username or password."
-        else:
-            error = "Invalid username or password."
 
-    return Response(
-        render_template(
-            "login.html",
-            error=error,
-            next_path=request.args.get("next", ""),
-            action_url=url_for("auth_login"),
-            register_url=url_for("auth_register"),
+        error = ""
+        if request.method == "POST":
+            username = (request.form.get("username") or "").strip()
+            password = request.form.get("password") or ""
+            key, user = find_auth_user(username)
+            if user and int(user.get("is_active", 1)) == 1 and is_user_locked_out(user):
+                error = f"Account temporarily locked. Try again in {LOGIN_LOCKOUT_MINUTES} minutes."
+            elif user and int(user.get("is_active", 1)) == 1 and check_password_hash(str(user.get("password_hash", "")), password):
+                update_user_last_login(int(user["id"]))
+                role_name = str(user.get("role_name") or "Employee")
+                session[SESSION_USER_KEY] = {
+                    "username": key or username,
+                    "user_id": int(user["id"]),
+                    "role_name": role_name,
+                    "company_id": int(user["company_id"]) if user.get("company_id") is not None else None,
+                    "selected_company_id": int(user["company_id"]) if user.get("company_id") is not None else None,
+                    "selected_restaurant_id": None,
+                    "company_name": str(user.get("company_name") or ""),
+                    "is_admin": role_name == "Super Admin",
+                    "email": key or username,
+                }
+                session.permanent = True
+                if role_name in ("Super Admin", "Manager"):
+                    MANAGER.start_all()
+                return redirect(default_post_login_path())
+            elif user and int(user.get("is_active", 1)) == 1:
+                attempts, lockout_until = register_failed_login_attempt(int(user["id"]))
+                if lockout_until is not None:
+                    error = f"Account temporarily locked. Try again in {LOGIN_LOCKOUT_MINUTES} minutes."
+                else:
+                    remaining = max(0, MAX_FAILED_LOGIN_ATTEMPTS - attempts)
+                    if remaining > 0:
+                        error = f"Invalid username or password. {remaining} attempts remaining before temporary lockout."
+                    else:
+                        error = "Invalid username or password."
+            elif user and int(user.get("is_active", 1)) != 1:
+                error = "Invalid username or password."
+            else:
+                error = "Invalid username or password."
+
+        return Response(
+            render_template(
+                "login.html",
+                error=error,
+                next_path=request.args.get("next", ""),
+                action_url=url_for("auth_login"),
+                register_url=url_for("auth_register"),
+            )
         )
-    )
+    except Exception as exc:
+        error_msg = f"{type(exc).__name__}: {str(exc)}"
+        print(f"[auth_login] Exception: {error_msg}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({"ok": False, "message": error_msg}), 500
 
 @app.route("/auth/register", methods=["GET", "POST"])
 @limiter.limit("5 per minute")
