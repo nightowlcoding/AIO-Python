@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import atexit
 import json
 import inspect
 import hashlib
@@ -16,6 +17,7 @@ import secrets
 import subprocess
 import sys
 import ssl
+import signal
 import threading
 import tempfile
 import time
@@ -84,6 +86,24 @@ COMPANY_STORAGE_ROOT = ROOT.parent / "company_data"
 SESSION_USER_KEY = "dexter_user"
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
+
+try:
+    RBAC_BUSY_TIMEOUT_MS = int(os.environ.get("DEXTER_RBAC_BUSY_TIMEOUT_MS", "3000") or "3000")
+except ValueError:
+    RBAC_BUSY_TIMEOUT_MS = 3000
+
+try:
+    UPSTREAM_CONNECT_TIMEOUT_SEC = float(os.environ.get("DEXTER_UPSTREAM_CONNECT_TIMEOUT_SEC", "3") or "3")
+except ValueError:
+    UPSTREAM_CONNECT_TIMEOUT_SEC = 3.0
+
+try:
+    UPSTREAM_READ_TIMEOUT_SEC = float(os.environ.get("DEXTER_UPSTREAM_READ_TIMEOUT_SEC", "15") or "15")
+except ValueError:
+    UPSTREAM_READ_TIMEOUT_SEC = 15.0
+
+_DEXTER_SHUTDOWN_LOCK = threading.Lock()
+_DEXTER_SHUTDOWN_STARTED = False
 MAX_COMPANY_LOGO_BYTES = 2 * 1024 * 1024
 ALLOWED_COMPANY_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -290,6 +310,7 @@ def get_rbac_db_connection() -> sqlite3.Connection:
         conn = sqlite3.connect(str(db_path.resolve()))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute(f"PRAGMA busy_timeout = {max(250, RBAC_BUSY_TIMEOUT_MS)}")
         return conn
     except sqlite3.OperationalError as e:
         error_msg = str(e)
@@ -2566,6 +2587,9 @@ class AppManager:
         self._procs: dict[str, subprocess.Popen[Any] | None] = {
             name: None for name in config["apps"].keys()
         }
+        self._stdout_streams: dict[str, Any | None] = {
+            name: None for name in config["apps"].keys()
+        }
         self._runtime_base_urls: dict[str, str | None] = {
             name: None for name in config["apps"].keys()
         }
@@ -2665,6 +2689,14 @@ class AppManager:
             }
         return out
 
+    def is_running(self, name: str) -> bool:
+        resolved_name = self.resolve_name(name)
+        if not resolved_name:
+            return False
+        with self._lock:
+            proc = self._procs.get(resolved_name)
+            return bool(proc is not None and proc.poll() is None)
+
     def preflight(self) -> dict[str, Any]:
         issues: dict[str, list[str]] = {}
         for name, app in self.config["apps"].items():
@@ -2750,6 +2782,7 @@ class AppManager:
                 stderr=subprocess.STDOUT,
             )
             self._procs[resolved_name] = proc
+            self._stdout_streams[resolved_name] = stdout_stream
             self._runtime_base_urls[resolved_name] = runtime_base_url
 
             # Guard against fast-crash startup loops by briefly validating process liveness.
@@ -2757,6 +2790,13 @@ class AppManager:
             while time.time() < startup_deadline:
                 if proc.poll() is not None:
                     self._procs[resolved_name] = None
+                    stream = self._stdout_streams.get(resolved_name)
+                    if stream is not None:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
+                    self._stdout_streams[resolved_name] = None
                     self._runtime_base_urls[resolved_name] = None
                     log_tail = self._tail_log(resolved_name, max_lines=50)
                     return {
@@ -2779,6 +2819,13 @@ class AppManager:
             proc = self._procs.get(resolved_name)
             if proc is None or proc.poll() is not None:
                 self._procs[resolved_name] = None
+                stream = self._stdout_streams.get(resolved_name)
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+                self._stdout_streams[resolved_name] = None
                 self._runtime_base_urls[resolved_name] = None
                 return {"ok": True, "message": f"{resolved_name} already stopped"}
 
@@ -2789,6 +2836,13 @@ class AppManager:
                 proc.kill()
                 proc.wait(timeout=5)
             self._procs[resolved_name] = None
+            stream = self._stdout_streams.get(resolved_name)
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            self._stdout_streams[resolved_name] = None
             self._runtime_base_urls[resolved_name] = None
             return {"ok": True, "message": f"Stopped {resolved_name}"}
 
@@ -2845,6 +2899,32 @@ app.config["SESSION_COOKIE_SECURE"] = _env_flag("DEXTER_SESSION_COOKIE_SECURE", 
 app.config["SESSION_COOKIE_NAME"] = str(os.environ.get("DEXTER_SESSION_COOKIE_NAME", "dexter_session") or "dexter_session")
 app.config["PREFERRED_URL_SCHEME"] = "https" if app.config["SESSION_COOKIE_SECURE"] else "http"
 csrf = CSRFProtect(app)
+
+
+def _stop_child_apps_for_shutdown() -> None:
+    global _DEXTER_SHUTDOWN_STARTED
+    with _DEXTER_SHUTDOWN_LOCK:
+        if _DEXTER_SHUTDOWN_STARTED:
+            return
+        _DEXTER_SHUTDOWN_STARTED = True
+    try:
+        print("[dexter] Shutdown initiated. Stopping managed child apps...", file=sys.stderr)
+        MANAGER.stop_all()
+    except Exception as exc:
+        print(f"[dexter] Shutdown warning: could not stop managed apps cleanly: {exc}", file=sys.stderr)
+
+
+def _dexter_signal_handler(signum: int, _frame: Any) -> None:
+    _stop_child_apps_for_shutdown()
+    raise SystemExit(0)
+
+
+atexit.register(_stop_child_apps_for_shutdown)
+for _sig in (signal.SIGTERM, signal.SIGINT):
+    try:
+        signal.signal(_sig, _dexter_signal_handler)
+    except Exception:
+        pass
 
 # ----- Auto-sync git scheduler for database persistence -----
 try:
@@ -4917,8 +4997,7 @@ def _proxy(name: str, path: str) -> Response:
     if _is_proxy_location_scope_violation(resolved_name, path):
         return jsonify({"ok": False, "message": "Location is outside selected company scope"}), 403
 
-    status = MANAGER.status()[resolved_name]
-    if not status["running"]:
+    if not MANAGER.is_running(resolved_name):
         start_result = MANAGER.start(resolved_name)
         if not start_result.get("ok"):
             error_msg = str(start_result.get("message") or "Upstream app failed to start")
@@ -5045,7 +5124,7 @@ def _proxy(name: str, path: str) -> Response:
                 files=_multipart_file_parts(),
                 cookies=request.cookies,
                 allow_redirects=False,
-                timeout=30,
+                timeout=(UPSTREAM_CONNECT_TIMEOUT_SEC, UPSTREAM_READ_TIMEOUT_SEC),
             )
 
         if is_form_encoded:
@@ -5056,7 +5135,7 @@ def _proxy(name: str, path: str) -> Response:
                 data=_form_pairs(),
                 cookies=request.cookies,
                 allow_redirects=False,
-                timeout=30,
+                timeout=(UPSTREAM_CONNECT_TIMEOUT_SEC, UPSTREAM_READ_TIMEOUT_SEC),
             )
 
         return requests.request(
@@ -5066,7 +5145,7 @@ def _proxy(name: str, path: str) -> Response:
             data=request.get_data(),
             cookies=request.cookies,
             allow_redirects=False,
-            timeout=30,
+            timeout=(UPSTREAM_CONNECT_TIMEOUT_SEC, UPSTREAM_READ_TIMEOUT_SEC),
         )
 
     try:
