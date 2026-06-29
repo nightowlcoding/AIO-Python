@@ -666,45 +666,55 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
     if not normalized:
         return None, None
 
-    conn = get_rbac_db_connection()
     try:
-        row = conn.execute(
-            """
-             SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login,
-                 u.failed_login_attempts, u.last_failed_login, u.lockout_until,
-                   u.company_id, c.name AS company_name, r.name AS role_name
-            FROM users u
-            JOIN roles r ON r.id = u.role_id
-            LEFT JOIN companies c ON c.id = u.company_id
-            WHERE LOWER(u.username) = LOWER(?)
-            LIMIT 1
-            """,
-            (normalized,),
-        ).fetchone()
-        if not row:
-            return None, None
-        return str(row["username"]), dict(row)
-    finally:
-        conn.close()
+        conn = get_rbac_db_connection()
+        try:
+            row = conn.execute(
+                """
+                 SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login,
+                     u.failed_login_attempts, u.last_failed_login, u.lockout_until,
+                       u.company_id, c.name AS company_name, r.name AS role_name
+                FROM users u
+                JOIN roles r ON r.id = u.role_id
+                LEFT JOIN companies c ON c.id = u.company_id
+                WHERE LOWER(u.username) = LOWER(?)
+                LIMIT 1
+                """,
+                (normalized,),
+            ).fetchone()
+            if not row:
+                return None, None
+            return str(row["username"]), dict(row)
+        finally:
+            conn.close()
+    except Exception as e:
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"[find_auth_user] Failed to query auth database: {error_msg}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return None, None
 
 def update_user_last_login(user_id: int) -> None:
-    conn = get_rbac_db_connection()
     try:
-        conn.execute(
-            """
-            UPDATE users
-            SET last_login = datetime('now'),
-                failed_login_attempts = 0,
-                last_failed_login = NULL,
-                lockout_until = NULL,
-                updated_at = datetime('now')
-            WHERE id = ?
-            """,
-            (int(user_id),),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+        conn = get_rbac_db_connection()
+        try:
+            conn.execute(
+                """
+                UPDATE users
+                SET last_login = datetime('now'),
+                    failed_login_attempts = 0,
+                    last_failed_login = NULL,
+                    lockout_until = NULL,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (int(user_id),),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[update_user_last_login] Error updating last login: {type(e).__name__}: {str(e)}", file=sys.stderr)
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
     text = str(value or "").strip()
@@ -720,37 +730,41 @@ def is_user_locked_out(user: dict[str, Any]) -> bool:
     return bool(lockout_dt and datetime.now() < lockout_dt)
 
 def register_failed_login_attempt(user_id: int) -> tuple[int, datetime | None]:
-    now = datetime.now()
-    conn = get_rbac_db_connection()
     try:
-        row = conn.execute(
-            "SELECT failed_login_attempts FROM users WHERE id = ? LIMIT 1",
-            (int(user_id),),
-        ).fetchone()
-        current_attempts = int(row["failed_login_attempts"] if row and row["failed_login_attempts"] is not None else 0)
-        next_attempts = current_attempts + 1
+        now = datetime.now()
+        conn = get_rbac_db_connection()
+        try:
+            row = conn.execute(
+                "SELECT failed_login_attempts FROM users WHERE id = ? LIMIT 1",
+                (int(user_id),),
+            ).fetchone()
+            current_attempts = int(row["failed_login_attempts"] if row and row["failed_login_attempts"] is not None else 0)
+            next_attempts = current_attempts + 1
 
-        lockout_until: datetime | None = None
-        lockout_text: str | None = None
-        if next_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
-            lockout_until = now + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
-            lockout_text = lockout_until.isoformat(timespec="seconds")
+            lockout_until: datetime | None = None
+            lockout_text: str | None = None
+            if next_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
+                lockout_until = now + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+                lockout_text = lockout_until.isoformat(timespec="seconds")
 
-        conn.execute(
-            """
-            UPDATE users
-            SET failed_login_attempts = ?,
-                last_failed_login = ?,
-                lockout_until = ?,
-                updated_at = datetime('now')
-            WHERE id = ?
-            """,
-            (next_attempts, now.isoformat(timespec="seconds"), lockout_text, int(user_id)),
-        )
-        conn.commit()
-        return next_attempts, lockout_until
-    finally:
-        conn.close()
+            conn.execute(
+                """
+                UPDATE users
+                SET failed_login_attempts = ?,
+                    last_failed_login = ?,
+                    lockout_until = ?,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (next_attempts, now.isoformat(timespec="seconds"), lockout_text, int(user_id)),
+            )
+            conn.commit()
+            return next_attempts, lockout_until
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[register_failed_login_attempt] Error registering failed login: {type(e).__name__}: {str(e)}", file=sys.stderr)
+        return 0, None
 
 def current_user_id() -> int | None:
     raw_id = (session.get(SESSION_USER_KEY) or {}).get("user_id")
