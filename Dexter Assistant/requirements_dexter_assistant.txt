@@ -9,3 +9,6 @@ flask-wtf>=1.2
 wtforms>=3.1
 pandas>=2.0
 openpyxl>=3.1
+google-api-python-client>=2.0
+google-auth>=2.0
+google-auth-httplib2>=0.2

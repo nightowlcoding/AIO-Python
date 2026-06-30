@@ -126,6 +126,8 @@ _MGR_BACKUP_STATE_LOCK = threading.Lock()
 _MGR_BACKUP_LAST_RUN: dict[str, Any] | None = None
 _MGR_BACKUP_THREAD_STARTED = False
 
+DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
+
 
 def _bootstrap_auth_storage_from_legacy() -> None:
     if AUTH_STORAGE_ROOT == ROOT:
@@ -289,12 +291,16 @@ CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
 
 def _find_writable_db_path() -> Path:
     """Find a writable path for the RBAC database with fallbacks."""
+    allow_ephemeral = _env_flag("DEXTER_ALLOW_EPHEMERAL_RBAC", default=False)
     candidate_paths = [
         RBAC_DB_PATH,  # Primary: configured path (Render disk or local)
-        ROOT / "dexter_assistant_rbac.db",  # Fallback 1: app directory
-        Path("/tmp/dexter_assistant_rbac.db"),  # Fallback 2: temp directory (Linux/Render)
-        Path(tempfile.gettempdir()) / "dexter_assistant_rbac.db",  # Fallback 3: system temp
+        ROOT / "dexter_assistant_rbac.db",  # Fallback: app directory
     ]
+    if allow_ephemeral:
+        candidate_paths.extend([
+            Path("/tmp/dexter_assistant_rbac.db"),
+            Path(tempfile.gettempdir()) / "dexter_assistant_rbac.db",
+        ])
     
     for db_path in candidate_paths:
         try:
@@ -2831,6 +2837,7 @@ class AppManager:
                     env.setdefault("MGR_PERSISTENT_ROOT", str(_render_data_root))
                     env.setdefault("MGR_REQUIRE_PERSISTENT_STORAGE", "1")
                     env.setdefault("MGR_STORAGE_STRICT", "1")
+                    env.setdefault("MGR_ALLOW_EPHEMERAL_DB", "0")
                 else:
                     # Critical: manager data MUST persist. Fall back to app directory, not temp.
                     # Do NOT use /tmp for manager data (ephemeral on Render).
@@ -2843,6 +2850,7 @@ class AppManager:
                     env.setdefault("MGR_COMPANY_DATA_DIR", str(app_dir_fallback / "company_data"))
                     env.setdefault("MGR_REQUIRE_PERSISTENT_STORAGE", "0")
                     env.setdefault("MGR_STORAGE_STRICT", "0")
+                    env.setdefault("MGR_ALLOW_EPHEMERAL_DB", "0")
             elif resolved_name == "ic3":
                 env.setdefault("IC3_HOST", host)
                 env.setdefault("IC3_PORT", str(port))
@@ -5494,23 +5502,49 @@ def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str,
 
 
 def _manager_backup_config() -> dict[str, Any]:
-    interval_minutes = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_INTERVAL_MINUTES", "15")))
     keep_snapshots = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_KEEP_SNAPSHOTS", "672")))
     enabled = _env_flag("DEXTER_MGR_BACKUP_ENABLED", default=True)
+    nas_enabled = _env_flag("DEXTER_NAS_BACKUP_ENABLED", default=(os.name == "nt"))
+    nas_required = _env_flag("DEXTER_NAS_BACKUP_REQUIRED", default=False)
+    nas_root = str((os.environ.get("DEXTER_NAS_BACKUP_ROOT") or DEFAULT_NAS_BACKUP_ROOT).strip())
+    critical_schedule_raw = os.environ.get("DEXTER_MGR_CRITICAL_BACKUP_TIMES", "00:00,00:30,01:00,01:30,02:00,02:30,03:00,03:30,04:00,04:30,05:00,05:30,06:00,06:30,07:00,07:30,08:00,08:30,09:00,09:30,10:00,10:30,11:00,11:30,12:00,12:30,13:00,13:30,14:00,14:30,15:00,15:30,16:00,16:30,17:00,17:30,18:00,18:30,19:00,19:30,20:00,20:30,21:00,21:30,22:00,22:30,23:00,23:30")
+    daily_full_backup_time = os.environ.get("DEXTER_MGR_FULL_BACKUP_TIME", "23:45").strip() or "23:45"
+    critical_schedule_times: list[str] = []
+    for part in critical_schedule_raw.split(","):
+        value = part.strip()
+        if value and re.fullmatch(r"\d{2}:\d{2}", value):
+            critical_schedule_times.append(value)
     return {
         "enabled": enabled,
-        "interval_minutes": interval_minutes,
         "keep_snapshots": keep_snapshots,
+        "nas_enabled": nas_enabled,
+        "nas_required": nas_required,
+        "nas_root": nas_root,
+        "critical_schedule_times": critical_schedule_times or ["00:00", "00:30"],
+        "full_backup_time": daily_full_backup_time if re.fullmatch(r"\d{2}:\d{2}", daily_full_backup_time) else "23:45",
     }
 
 
 def _manager_backup_paths() -> dict[str, Path]:
-    manager_root = _render_data_root / "managerapp"
+    persistent_root = _render_data_root if _render_data_root.exists() else ROOT
+    manager_root = persistent_root / "managerapp"
+    nas_root_raw = (os.environ.get("DEXTER_NAS_BACKUP_ROOT") or DEFAULT_NAS_BACKUP_ROOT).strip()
     return {
+        "persistent_root": persistent_root,
         "manager_root": manager_root,
         "db_path": manager_root / "manager_app.db",
         "company_data_path": manager_root / "company_data",
-        "backup_root": _render_data_root / "backups" / "managerapp",
+        "backup_root": persistent_root / "backups" / "managerapp",
+        "auth_users_path": AUTH_USERS_PATH,
+        "rbac_db_path": RBAC_DB_PATH,
+        "ic3_data_path": Path(os.environ.get("IC3_DATA_DIR") or (ROOT / "Inventory Control 3" / "data")),
+        "productmix_root": Path(os.environ.get("PM_DB_DIR") or (ROOT / "ProductMixRestaurantDB")),
+        "inventory_data_root": ROOT / "inventory_data",
+        "daily_logs_root": ROOT / "daily_logs",
+        "uploads_root": ROOT / "uploads",
+        "order_invoices_root": ROOT / "OrderInvoices",
+        "reports_root": ROOT / "reports",
+        "nas_backup_root": Path(nas_root_raw),
     }
 
 
@@ -5572,7 +5606,47 @@ def _manager_backup_status_payload() -> dict[str, Any]:
     return payload
 
 
-def _run_manager_backup(trigger: str) -> dict[str, Any]:
+def _collect_snapshot_operations(snapshot_dir: Path, paths: dict[str, Path], mode: str) -> list[dict[str, Any]]:
+    operations: list[dict[str, Any]] = []
+
+    def copy_file(src: Path, dst_name: str, label: str) -> None:
+        op: dict[str, Any] = {"type": label, "source": str(src), "copied": False}
+        if src.exists() and src.is_file():
+            dst = snapshot_dir / dst_name
+            shutil.copy2(src, dst)
+            op.update({"copied": True, "bytes": int(dst.stat().st_size), "sha256": _hash_file_sha256(dst)})
+        else:
+            op["warning"] = f"{label} missing"
+        operations.append(op)
+
+    def copy_dir(src: Path, dst_name: str, label: str) -> None:
+        op: dict[str, Any] = {"type": label, "source": str(src), "copied": False}
+        if src.exists() and src.is_dir():
+            dst = snapshot_dir / dst_name
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+            op.update({"copied": True, "file_count": int(sum(1 for p in dst.rglob("*") if p.is_file()))})
+        else:
+            op["warning"] = f"{label} missing"
+        operations.append(op)
+
+    copy_file(paths["db_path"], "manager_app.db", "manager_db")
+    copy_dir(paths["company_data_path"], "company_data", "company_data")
+    copy_file(paths["auth_users_path"], "dexter_assistant_users.json", "auth_users")
+    copy_file(paths["rbac_db_path"], "dexter_assistant_rbac.db", "rbac_db")
+    copy_dir(paths["ic3_data_path"], "ic3_data", "ic3_data")
+
+    if mode == "full":
+        copy_dir(paths["productmix_root"], "ProductMixRestaurantDB", "productmix_root")
+        copy_dir(paths["inventory_data_root"], "inventory_data", "inventory_data")
+        copy_dir(paths["daily_logs_root"], "daily_logs", "daily_logs")
+        copy_dir(paths["uploads_root"], "uploads", "uploads")
+        copy_dir(paths["order_invoices_root"], "OrderInvoices", "order_invoices")
+        copy_dir(paths["reports_root"], "reports", "reports")
+
+    return operations
+
+
+def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
     started_at = datetime.utcnow()
     cfg = _manager_backup_config()
     paths = _manager_backup_paths()
@@ -5584,9 +5658,12 @@ def _run_manager_backup(trigger: str) -> dict[str, Any]:
         "started_at": started_at.isoformat(),
         "finished_at": started_at.isoformat(),
         "snapshot_dir": "",
+        "mode": mode,
         "operations": [],
         "message": "",
         "pruned": [],
+        "nas_sync": {"enabled": False, "copied": False, "path": "", "error": ""},
+        "nas_pruned": [],
     }
 
     try:
@@ -5595,42 +5672,15 @@ def _run_manager_backup(trigger: str) -> dict[str, Any]:
             result["ok"] = True
             return result
 
-        if not _render_data_root.exists():
-            raise RuntimeError(f"Persistent data root missing: {_render_data_root}")
+        persistent_root = paths["persistent_root"]
+        if not persistent_root.exists():
+            raise RuntimeError(f"Persistent data root missing: {persistent_root}")
 
         stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        snapshot_dir = backup_root / f"snapshot_{stamp}"
+        snapshot_dir = backup_root / f"{mode}_snapshot_{stamp}"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         result["snapshot_dir"] = str(snapshot_dir)
-
-        db_path = paths["db_path"]
-        db_op: dict[str, Any] = {"type": "db", "source": str(db_path), "copied": False}
-        if db_path.exists() and db_path.is_file():
-            db_dst = snapshot_dir / "manager_app.db"
-            shutil.copy2(db_path, db_dst)
-            db_op.update({
-                "copied": True,
-                "bytes": int(db_dst.stat().st_size),
-                "sha256": _hash_file_sha256(db_dst),
-            })
-        else:
-            db_op["warning"] = "DB file missing"
-        result["operations"].append(db_op)
-
-        company_data_path = paths["company_data_path"]
-        company_op: dict[str, Any] = {
-            "type": "company_data",
-            "source": str(company_data_path),
-            "copied": False,
-        }
-        if company_data_path.exists() and company_data_path.is_dir():
-            company_dst = snapshot_dir / "company_data"
-            shutil.copytree(company_data_path, company_dst, dirs_exist_ok=True)
-            file_count = sum(1 for p in company_dst.rglob("*") if p.is_file())
-            company_op.update({"copied": True, "file_count": int(file_count)})
-        else:
-            company_op["warning"] = "company_data folder missing"
-        result["operations"].append(company_op)
+        result["operations"].extend(_collect_snapshot_operations(snapshot_dir, paths, mode))
 
         manifest = {
             "created_at": datetime.utcnow().isoformat(),
@@ -5641,6 +5691,31 @@ def _run_manager_backup(trigger: str) -> dict[str, Any]:
         }
         manifest_path = snapshot_dir / "manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+        # Optional NAS replication for off-host resilience.
+        cfg_nas_enabled = bool(cfg.get("nas_enabled"))
+        cfg_nas_required = bool(cfg.get("nas_required"))
+        if cfg_nas_enabled:
+            result["nas_sync"]["enabled"] = True
+            nas_root = paths["nas_backup_root"] / "managerapp"
+            nas_target = nas_root / snapshot_dir.name
+            result["nas_sync"]["path"] = str(nas_target)
+            try:
+                nas_target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(snapshot_dir, nas_target, dirs_exist_ok=True)
+                result["nas_sync"]["copied"] = True
+                cutoff = datetime.utcnow().timestamp() - (15 * 24 * 60 * 60)
+                for old_snapshot in sorted([p for p in nas_root.glob("snapshot_*") if p.is_dir()], key=lambda p: p.name):
+                    try:
+                        if old_snapshot.stat().st_mtime < cutoff:
+                            shutil.rmtree(old_snapshot, ignore_errors=True)
+                            result["nas_pruned"].append(str(old_snapshot))
+                    except OSError:
+                        continue
+            except Exception as nas_exc:
+                result["nas_sync"]["error"] = str(nas_exc)
+                if cfg_nas_required:
+                    raise RuntimeError(f"NAS backup required but failed: {nas_exc}")
 
         snapshots = sorted(
             [p for p in backup_root.glob("snapshot_*") if p.is_dir()],
@@ -5677,23 +5752,61 @@ def _start_manager_backup_scheduler() -> None:
     def _loop() -> None:
         # Run one backup shortly after startup to create an initial restore point.
         try:
-            _run_manager_backup("startup")
+            _run_manager_backup("startup-critical", mode="critical")
         except Exception as exc:
             print(f"[dexter backup] Startup backup failed: {exc}", file=sys.stderr)
 
+        last_critical_run_slot: str | None = None
+        last_full_run_date: str | None = None
         while True:
-            interval_seconds = int(_manager_backup_config()["interval_minutes"]) * 60
-            time.sleep(max(60, interval_seconds))
-            try:
-                _run_manager_backup("scheduled")
-            except Exception as exc:
-                print(f"[dexter backup] Scheduled backup failed: {exc}", file=sys.stderr)
+            cfg_loop = _manager_backup_config()
+            schedule_times = list(cfg_loop.get("critical_schedule_times") or ["00:00", "00:30"])
+            now = datetime.now()
+            todays_slots = [
+                now.replace(hour=int(slot.split(":")[0]), minute=int(slot.split(":")[1]), second=0, microsecond=0)
+                for slot in schedule_times
+            ]
+            next_run = min((slot for slot in todays_slots if slot > now), default=None)
+            if next_run is None:
+                next_run = (now + timedelta(days=1)).replace(
+                    hour=int(schedule_times[0].split(":")[0]),
+                    minute=int(schedule_times[0].split(":")[1]),
+                    second=0,
+                    microsecond=0,
+                )
+
+            wait_seconds = max(60, int((next_run - now).total_seconds()))
+            time.sleep(wait_seconds)
+
+            run_now = datetime.now().replace(second=0, microsecond=0)
+            today_key = run_now.strftime("%Y-%m-%d")
+            full_backup_time = cfg_loop.get("full_backup_time") or "23:45"
+            full_target = run_now.replace(hour=int(str(full_backup_time).split(":")[0]), minute=int(str(full_backup_time).split(":")[1]))
+            if abs((run_now - full_target).total_seconds()) <= 120 and last_full_run_date != today_key:
+                try:
+                    _run_manager_backup(f"scheduled-full-{today_key}", mode="full")
+                    last_full_run_date = today_key
+                except Exception as exc:
+                    print(f"[dexter backup] Scheduled full backup failed: {exc}", file=sys.stderr)
+
+            for slot in schedule_times:
+                target = run_now.replace(hour=int(slot.split(":")[0]), minute=int(slot.split(":")[1]))
+                if abs((run_now - target).total_seconds()) <= 120:
+                    last_result = _MGR_BACKUP_LAST_RUN
+                    if last_critical_run_slot == slot and last_result and last_result.get("trigger") == f"scheduled-critical-{slot}":
+                        continue
+                    try:
+                        _run_manager_backup(f"scheduled-critical-{slot}", mode="critical")
+                        last_critical_run_slot = slot
+                    except Exception as exc:
+                        print(f"[dexter backup] Scheduled backup failed ({slot}): {exc}", file=sys.stderr)
+                    break
 
     t = threading.Thread(target=_loop, name="dexter-manager-backup", daemon=True)
     t.start()
     _MGR_BACKUP_THREAD_STARTED = True
     print(
-        f"[dexter backup] Manager backup scheduler started (interval: {cfg['interval_minutes']} minutes, keep: {cfg['keep_snapshots']})",
+        f"[dexter backup] Manager backup scheduler started (critical: {', '.join(cfg['critical_schedule_times'])}, full: {cfg['full_backup_time']}, keep: {cfg['keep_snapshots']})",
         file=sys.stderr,
     )
 

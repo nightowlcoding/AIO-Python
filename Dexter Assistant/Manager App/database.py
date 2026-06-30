@@ -16,12 +16,13 @@ def _resolve_writable_db_path() -> str:
     configured = (os.environ.get("MGR_DB_PATH") or "").strip()
     module_default = str(Path(__file__).resolve().parent / "manager_app.db")
     temp_default = str(Path(tempfile.gettempdir()) / "manager_app.db")
+    allow_ephemeral = (os.environ.get("MGR_ALLOW_EPHEMERAL_DB") or "0").strip().lower() in {"1", "true", "yes", "on"}
 
     candidates = []
     if configured:
         candidates.append(configured)
     candidates.append(module_default)
-    if temp_default not in candidates:
+    if allow_ephemeral and temp_default not in candidates:
         candidates.append(temp_default)
 
     for candidate in candidates:
@@ -207,6 +208,34 @@ class Database:
         
         conn.commit()
         conn.close()
+
+    def _is_system_admin_user(self, cursor, user_id: str) -> bool:
+        row = cursor.execute(
+            "SELECT is_system_admin FROM users WHERE id = ? LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        return bool(row and int(row[0] or 0) == 1)
+
+    def _can_user_join_company(self, cursor, user_id: str, company_id: str) -> bool:
+        # System admins are intentionally allowed to span companies.
+        if self._is_system_admin_user(cursor, user_id):
+            return True
+
+        existing = cursor.execute(
+            """
+            SELECT company_id
+            FROM user_companies
+            WHERE user_id = ? AND is_active = 1
+            """,
+            (user_id,),
+        ).fetchall()
+        existing_company_ids = {str(r[0]) for r in existing}
+
+        # No active membership yet is fine, and re-adding same company is fine.
+        if not existing_company_ids or str(company_id) in existing_company_ids:
+            return True
+
+        return False
     
     def hash_password(self, password, salt=None):
         """Hash password using PBKDF2 with salt"""
@@ -353,6 +382,9 @@ class Database:
         settings = kwargs.get('settings', {})
         
         try:
+            if not self._can_user_join_company(cursor, admin_user_id, company_id):
+                raise PermissionError("Non-system-admin users can only belong to one active company")
+
             # Insert company
             cursor.execute('''
                 INSERT INTO companies (id, name, logo_path, address, phone, email, 
@@ -371,6 +403,9 @@ class Database:
             
             conn.commit()
             return company_id
+        except PermissionError:
+            conn.rollback()
+            return None
         except sqlite3.IntegrityError:
             conn.rollback()
             return None
@@ -386,6 +421,9 @@ class Database:
         now = datetime.now().isoformat()
         
         try:
+            if not self._can_user_join_company(cursor, user_id, company_id):
+                return False
+
             cursor.execute('''
                 INSERT INTO user_companies (id, user_id, company_id, role, 
                                           permissions, created_at)
