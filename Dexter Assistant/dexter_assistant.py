@@ -134,6 +134,7 @@ ALLOWED_COMPANY_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 _MGR_BACKUP_STATE_LOCK = threading.Lock()
 _MGR_BACKUP_LAST_RUN: dict[str, Any] | None = None
 _MGR_BACKUP_THREAD_STARTED = False
+_RBAC_WAL_DISABLED = False
 
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
 
@@ -321,9 +322,11 @@ def _find_writable_db_path() -> Path:
             # Try to create parent directory
             db_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Try to open the database to verify write access
+            # Try to open the database to verify write access.
+            # Do not require WAL support here because some mounted disks only support DELETE journal mode.
             test_conn = sqlite3.connect(str(db_path.resolve()))
-            test_conn.execute("PRAGMA journal_mode=WAL")  # Requires write access for lock files
+            test_conn.execute("CREATE TABLE IF NOT EXISTS __dexter_write_probe (id INTEGER PRIMARY KEY)")
+            test_conn.commit()
             test_conn.close()
             
             print(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}", file=sys.stderr)
@@ -341,6 +344,7 @@ def _find_writable_db_path() -> Path:
     return RBAC_DB_PATH
 
 def get_rbac_db_connection() -> sqlite3.Connection:
+    global _RBAC_WAL_DISABLED
     try:
         # Find a writable database path
         db_path = _find_writable_db_path()
@@ -349,6 +353,18 @@ def get_rbac_db_connection() -> sqlite3.Connection:
         conn = sqlite3.connect(str(db_path.resolve()))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        if not _RBAC_WAL_DISABLED:
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+            except sqlite3.OperationalError as wal_error:
+                _RBAC_WAL_DISABLED = True
+                print(
+                    f"[get_rbac_db_connection] WAL unavailable ({wal_error}); falling back to DELETE journal mode",
+                    file=sys.stderr,
+                )
+                conn.execute("PRAGMA journal_mode=DELETE")
+        else:
+            conn.execute("PRAGMA journal_mode=DELETE")
         conn.execute(f"PRAGMA busy_timeout = {max(250, RBAC_BUSY_TIMEOUT_MS)}")
         return conn
     except sqlite3.OperationalError as e:

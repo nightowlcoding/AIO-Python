@@ -12,6 +12,8 @@ from datetime import datetime
 import json
 from pathlib import Path
 
+_MGR_WAL_DISABLED = False
+
 def _resolve_writable_db_path() -> str:
     configured = (os.environ.get("MGR_DB_PATH") or "").strip()
     module_default = str(Path(__file__).resolve().parent / "manager_app.db")
@@ -46,7 +48,8 @@ def _resolve_writable_db_path() -> str:
             candidate_path = Path(candidate).resolve()
             candidate_path.parent.mkdir(parents=True, exist_ok=True)
             test_conn = sqlite3.connect(str(candidate_path), timeout=5.0)
-            test_conn.execute('PRAGMA journal_mode=WAL')
+            test_conn.execute('CREATE TABLE IF NOT EXISTS __mgr_write_probe (id INTEGER PRIMARY KEY)')
+            test_conn.commit()
             test_conn.close()
             os.environ["MGR_DB_PATH"] = str(candidate_path)
             if configured and str(candidate_path) != str(Path(configured).resolve()):
@@ -84,10 +87,22 @@ class Database:
     
     def get_connection(self):
         """Get database connection with timeout and WAL mode"""
+        global _MGR_WAL_DISABLED
         conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        # Enable Write-Ahead Logging for better concurrency
-        conn.execute('PRAGMA journal_mode=WAL')
+        if not _MGR_WAL_DISABLED:
+            try:
+                # Prefer WAL for concurrency where supported.
+                conn.execute('PRAGMA journal_mode=WAL')
+            except sqlite3.OperationalError as wal_error:
+                _MGR_WAL_DISABLED = True
+                print(
+                    f"[managerapp] WAL unavailable ({wal_error}); falling back to DELETE journal mode",
+                    file=sys.stderr,
+                )
+                conn.execute('PRAGMA journal_mode=DELETE')
+        else:
+            conn.execute('PRAGMA journal_mode=DELETE')
         conn.execute('PRAGMA busy_timeout=30000')  # 30 second timeout
         return conn
     
