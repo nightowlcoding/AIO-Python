@@ -301,9 +301,17 @@ CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
 
 def _find_writable_db_path() -> Path:
     """Find a writable path for the RBAC database with fallbacks."""
+    global RBAC_DB_PATH
     allow_ephemeral = _env_flag("DEXTER_ALLOW_EPHEMERAL_RBAC", default=False)
     candidate_paths = [RBAC_DB_PATH]
     if _render_data_root.exists():
+        manager_candidates = [
+            _render_data_root / "managerapp" / "auth" / "dexter_assistant_rbac.db",
+            _render_data_root / "managerapp" / "dexter_assistant_rbac.db",
+        ]
+        for manager_candidate in manager_candidates:
+            if manager_candidate not in candidate_paths:
+                candidate_paths.append(manager_candidate)
         render_fallback = _render_data_root / "dexter_assistant_rbac.db"
         if render_fallback not in candidate_paths:
             candidate_paths.append(render_fallback)
@@ -328,7 +336,8 @@ def _find_writable_db_path() -> Path:
             test_conn.execute("CREATE TABLE IF NOT EXISTS __dexter_write_probe (id INTEGER PRIMARY KEY)")
             test_conn.commit()
             test_conn.close()
-            
+
+            RBAC_DB_PATH = db_path
             print(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}", file=sys.stderr)
             return db_path
         except (OSError, sqlite3.OperationalError) as e:
