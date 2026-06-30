@@ -17,11 +17,27 @@ def _resolve_writable_db_path() -> str:
     module_default = str(Path(__file__).resolve().parent / "manager_app.db")
     temp_default = str(Path(tempfile.gettempdir()) / "manager_app.db")
     allow_ephemeral = (os.environ.get("MGR_ALLOW_EPHEMERAL_DB") or "0").strip().lower() in {"1", "true", "yes", "on"}
+    running_on_render = bool(
+        os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID") or os.environ.get("RENDER_EXTERNAL_URL")
+    )
+    if not running_on_render and Path("/dexter-data").exists():
+        running_on_render = True
 
     candidates = []
     if configured:
         candidates.append(configured)
-    candidates.append(module_default)
+    if running_on_render:
+        persistent_root = Path(os.environ.get("MGR_PERSISTENT_ROOT") or "/dexter-data")
+        render_candidates = [
+            persistent_root / "managerapp" / "manager_app.db",
+            persistent_root / "manager_app.db",
+        ]
+        for candidate in render_candidates:
+            candidate_str = str(candidate)
+            if candidate_str not in candidates:
+                candidates.append(candidate_str)
+    if module_default not in candidates:
+        candidates.append(module_default)
     if allow_ephemeral and temp_default not in candidates:
         candidates.append(temp_default)
 
@@ -42,7 +58,12 @@ def _resolve_writable_db_path() -> str:
         except Exception as exc:
             print(f"[managerapp] DB path not writable ({candidate}): {exc}", file=sys.stderr)
 
-    # Last-resort fallback keeps startup from crashing due to path selection.
+    if running_on_render and not allow_ephemeral:
+        raise RuntimeError(
+            "[managerapp] FATAL: no writable persistent database path found on Render; refusing module-path fallback"
+        )
+
+    # Last-resort fallback outside Render keeps startup from crashing due to path selection.
     fallback_path = Path(module_default)
     os.environ["MGR_DB_PATH"] = str(fallback_path)
     return str(fallback_path)

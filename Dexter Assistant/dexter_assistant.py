@@ -50,6 +50,9 @@ LEGACY_BRANDING_LOGO_PATH = ROOT.parent / "Restaurant Management" / "Manager App
 
 _render_data_root = Path("/dexter-data")
 _render_data_writable = False
+_running_on_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID") or os.environ.get("RENDER_EXTERNAL_URL"))
+if not _running_on_render and _render_data_root.exists():
+    _running_on_render = True
 if _render_data_root.exists():
     try:
         if os.access(_render_data_root, os.W_OK):
@@ -70,6 +73,11 @@ try:
     print(f"[dexter] AUTH_STORAGE_ROOT directory created/verified", file=sys.stderr)
 except OSError as e:
     print(f"[dexter] ERROR: Could not create AUTH_STORAGE_ROOT {AUTH_STORAGE_ROOT}: {e}", file=sys.stderr)
+    if _running_on_render:
+        raise RuntimeError(
+            f"[dexter] Persistent auth storage is unavailable at {AUTH_STORAGE_ROOT}; "
+            "refusing to fall back to non-persistent app paths on Render"
+        ) from e
     print(f"[dexter] Falling back to ROOT: {ROOT}", file=sys.stderr)
     AUTH_STORAGE_ROOT = ROOT
     try:
@@ -293,10 +301,15 @@ CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
 def _find_writable_db_path() -> Path:
     """Find a writable path for the RBAC database with fallbacks."""
     allow_ephemeral = _env_flag("DEXTER_ALLOW_EPHEMERAL_RBAC", default=False)
-    candidate_paths = [
-        RBAC_DB_PATH,  # Primary: configured path (Render disk or local)
-        ROOT / "dexter_assistant_rbac.db",  # Fallback: app directory
-    ]
+    candidate_paths = [RBAC_DB_PATH]
+    if _render_data_root.exists():
+        render_fallback = _render_data_root / "dexter_assistant_rbac.db"
+        if render_fallback not in candidate_paths:
+            candidate_paths.append(render_fallback)
+    if not _running_on_render:
+        app_dir_fallback = ROOT / "dexter_assistant_rbac.db"
+        if app_dir_fallback not in candidate_paths:
+            candidate_paths.append(app_dir_fallback)
     if allow_ephemeral:
         candidate_paths.extend([
             Path("/tmp/dexter_assistant_rbac.db"),
@@ -319,7 +332,11 @@ def _find_writable_db_path() -> Path:
             print(f"[get_rbac_db_connection] Path not writable ({db_path.resolve()}): {e}", file=sys.stderr)
             continue
     
-    # If all paths fail, log details and use original path (will fail with better diagnostics)
+    # If all paths fail, fail closed on Render to prevent silent data loss to ephemeral paths.
+    if _running_on_render and not allow_ephemeral:
+        raise RuntimeError(
+            "[get_rbac_db_connection] FATAL: No writable persistent RBAC database path found on Render"
+        )
     print(f"[get_rbac_db_connection] FATAL: No writable database path found. Using primary: {RBAC_DB_PATH.resolve()}", file=sys.stderr)
     return RBAC_DB_PATH
 
@@ -2840,6 +2857,15 @@ class AppManager:
                     env.setdefault("MGR_STORAGE_STRICT", "1")
                     env.setdefault("MGR_ALLOW_EPHEMERAL_DB", "0")
                 else:
+                    if _running_on_render:
+                        self._record_start_failure(
+                            resolved_name,
+                            "render persistent storage unavailable for managerapp",
+                        )
+                        return {
+                            "ok": False,
+                            "message": "Render persistent storage unavailable; refusing to start managerapp to prevent data loss",
+                        }
                     # Critical: manager data MUST persist. Fall back to app directory, not temp.
                     # Do NOT use /tmp for manager data (ephemeral on Render).
                     app_dir_fallback = ROOT / "Dexter Assistant" / "Manager App"

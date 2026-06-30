@@ -25,6 +25,8 @@ services:
         value: /dexter-data/ic3
       - key: PM_DB_DIR
         value: /dexter-data/pm
+      - key: DEXTER_AUTH_DATA_DIR
+        value: /dexter-data
       - key: DEXTER_MGR_BACKUP_ENABLED
         value: "1"
       - key: DEXTER_MGR_BACKUP_INTERVAL_MINUTES
