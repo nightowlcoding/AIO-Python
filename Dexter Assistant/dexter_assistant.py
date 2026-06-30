@@ -94,7 +94,7 @@ COMPANY_STORAGE_ROOT = ROOT.parent / "company_data"
 SESSION_USER_KEY = "dexter_user"
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
-DEPLOY_SMOKE_RETENTION_MARKER = "2026-06-29-manager-retention"
+DEPLOY_SMOKE_RETENTION_MARKER = "2026-06-29-manager-retention-postfix"
 
 try:
     RBAC_BUSY_TIMEOUT_MS = int(os.environ.get("DEXTER_RBAC_BUSY_TIMEOUT_MS", "3000") or "3000")
