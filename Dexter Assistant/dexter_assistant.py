@@ -135,8 +135,41 @@ _MGR_BACKUP_STATE_LOCK = threading.Lock()
 _MGR_BACKUP_LAST_RUN: dict[str, Any] | None = None
 _MGR_BACKUP_THREAD_STARTED = False
 _RBAC_WAL_DISABLED = False
+_EMERGENCY_BACKUP_PRUNE_ATTEMPTED = False
 
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
+
+
+def _emergency_prune_local_backups_for_space(max_keep: int = 24) -> None:
+    global _EMERGENCY_BACKUP_PRUNE_ATTEMPTED
+    if _EMERGENCY_BACKUP_PRUNE_ATTEMPTED:
+        return
+    _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = True
+
+    backup_root = _render_data_root / "backups" / "managerapp"
+    if not backup_root.exists() or not backup_root.is_dir():
+        return
+
+    try:
+        snapshot_dirs = [
+            p for p in backup_root.iterdir()
+            if p.is_dir() and (p.name.startswith("critical_snapshot_") or p.name.startswith("full_snapshot_"))
+        ]
+        snapshot_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale_dir in snapshot_dirs[max_keep:]:
+            shutil.rmtree(stale_dir, ignore_errors=True)
+
+        snapshot_manifests = [p for p in backup_root.glob("snapshot_*.json") if p.is_file()]
+        snapshot_manifests.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale_manifest in snapshot_manifests[max_keep:]:
+            try:
+                stale_manifest.unlink(missing_ok=True)
+            except OSError:
+                continue
+
+        print("[dexter] Emergency backup prune executed to recover disk space/inodes", file=sys.stderr)
+    except OSError as prune_error:
+        print(f"[dexter] Emergency backup prune skipped: {prune_error}", file=sys.stderr)
 
 
 def _bootstrap_auth_storage_from_legacy() -> None:
@@ -303,6 +336,8 @@ def _find_writable_db_path() -> Path:
     """Find a writable path for the RBAC database with fallbacks."""
     global RBAC_DB_PATH
     allow_ephemeral = _env_flag("DEXTER_ALLOW_EPHEMERAL_RBAC", default=False)
+    if _running_on_render:
+        _emergency_prune_local_backups_for_space()
     candidate_paths = [RBAC_DB_PATH]
     if _render_data_root.exists():
         manager_candidates = [
