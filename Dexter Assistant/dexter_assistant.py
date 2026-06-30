@@ -146,28 +146,40 @@ def _emergency_prune_local_backups_for_space(max_keep: int = 0) -> None:
         return
     _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = True
 
-    backup_root = _render_data_root / "backups" / "managerapp"
-    if not backup_root.exists() or not backup_root.is_dir():
-        return
+    backup_roots = [
+        _render_data_root / "backups" / "managerapp",
+        _render_data_root / "backups",
+    ]
 
     try:
-        snapshot_dirs = [
-            p for p in backup_root.iterdir()
-            if p.is_dir() and (p.name.startswith("critical_snapshot_") or p.name.startswith("full_snapshot_"))
-        ]
-        snapshot_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        for stale_dir in snapshot_dirs[max_keep:]:
-            shutil.rmtree(stale_dir, ignore_errors=True)
-
-        snapshot_manifests = [p for p in backup_root.glob("snapshot_*.json") if p.is_file()]
-        snapshot_manifests.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        for stale_manifest in snapshot_manifests[max_keep:]:
-            try:
-                stale_manifest.unlink(missing_ok=True)
-            except OSError:
+        removed_dirs = 0
+        removed_files = 0
+        for backup_root in backup_roots:
+            if not backup_root.exists() or not backup_root.is_dir():
                 continue
 
-        print("[dexter] Emergency backup prune executed to recover disk space/inodes", file=sys.stderr)
+            snapshot_dirs = [
+                p for p in backup_root.rglob("*")
+                if p.is_dir() and (p.name.startswith("critical_snapshot_") or p.name.startswith("full_snapshot_"))
+            ]
+            snapshot_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            for stale_dir in snapshot_dirs[max_keep:]:
+                shutil.rmtree(stale_dir, ignore_errors=True)
+                removed_dirs += 1
+
+            snapshot_manifests = [p for p in backup_root.rglob("snapshot_*.json") if p.is_file()]
+            snapshot_manifests.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            for stale_manifest in snapshot_manifests[max_keep:]:
+                try:
+                    stale_manifest.unlink(missing_ok=True)
+                    removed_files += 1
+                except OSError:
+                    continue
+
+        print(
+            f"[dexter] Emergency backup prune executed (removed_dirs={removed_dirs}, removed_files={removed_files})",
+            file=sys.stderr,
+        )
     except OSError as prune_error:
         print(f"[dexter] Emergency backup prune skipped: {prune_error}", file=sys.stderr)
 
