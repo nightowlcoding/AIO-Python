@@ -3460,20 +3460,43 @@ def _default_branding_logo_response() -> Response:
 @app.route("/branding/company-logo")
 @login_required
 def branding_company_logo() -> Response:
+    def _send_no_store_logo(path: Path, *, download_name: str | None = None) -> Response:
+        response = send_file(
+            path,
+            as_attachment=False,
+            download_name=download_name,
+            max_age=0,
+            conditional=False,
+        )
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["Vary"] = "Cookie"
+        return response
+
+    def _company_logo_fallback_response() -> Response:
+        if BRANDING_LOGO_PATH.exists():
+            return _send_no_store_logo(BRANDING_LOGO_PATH)
+        if LEGACY_BRANDING_LOGO_PATH.exists():
+            return _send_no_store_logo(LEGACY_BRANDING_LOGO_PATH)
+        if FRONT_DOOR_FAVICON.exists():
+            return _send_no_store_logo(FRONT_DOOR_FAVICON)
+        return jsonify({"ok": False, "message": "Not found"}), 404
+
     selected_company_id = _effective_company_scope(require_active=True)
     if selected_company_id is None:
-        return _default_branding_logo_response()
+        return _company_logo_fallback_response()
 
     profile = get_company_profile(int(selected_company_id))
     logo_rel_path = str((profile or {}).get("logo_rel_path") or "").strip()
     if not logo_rel_path:
-        return _default_branding_logo_response()
+        return _company_logo_fallback_response()
 
     logo_path = _resolve_company_storage_path(int(selected_company_id), logo_rel_path)
     if logo_path is None or not logo_path.exists() or not logo_path.is_file():
-        return _default_branding_logo_response()
+        return _company_logo_fallback_response()
 
-    return send_file(logo_path, as_attachment=False, download_name=logo_path.name, max_age=300)
+    return _send_no_store_logo(logo_path, download_name=logo_path.name)
 
 @app.route("/")
 @login_required

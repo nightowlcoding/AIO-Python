@@ -685,6 +685,62 @@ class CompanyScopeSecurityTests(unittest.TestCase):
         sibling_path = f"../company_{self.ids['beta_company_id']}/reports/beta.txt"
         self.assertIsNone(_dexter._resolve_company_storage_path(self.ids["alpha_company_id"], sibling_path))
 
+    def test_branding_company_logo_tracks_selected_company_scope(self) -> None:
+        alpha_logo = _dexter._resolve_company_storage_path(self.ids["alpha_company_id"], "profile/logo.png", create_parent=True)
+        beta_logo = _dexter._resolve_company_storage_path(self.ids["beta_company_id"], "profile/logo.png", create_parent=True)
+        assert alpha_logo is not None
+        assert beta_logo is not None
+        alpha_logo.write_bytes(b"alpha-logo-bytes")
+        beta_logo.write_bytes(b"beta-logo-bytes")
+
+        _dexter.upsert_company_profile(self.ids["alpha_company_id"], {"logo_rel_path": "profile/logo.png"})
+        _dexter.upsert_company_profile(self.ids["beta_company_id"], {"logo_rel_path": "profile/logo.png"})
+
+        self._set_session_user(
+            user_id=self.ids["super_admin_id"],
+            role_name="Super Admin",
+            company_id=self.ids["alpha_company_id"],
+            selected_company_id=self.ids["alpha_company_id"],
+        )
+
+        alpha_res = self.client.get("/branding/company-logo")
+        self.assertEqual(alpha_res.status_code, 200)
+        self.assertEqual(alpha_res.data, b"alpha-logo-bytes")
+
+        self._set_session_user(
+            user_id=self.ids["super_admin_id"],
+            role_name="Super Admin",
+            company_id=self.ids["alpha_company_id"],
+            selected_company_id=self.ids["beta_company_id"],
+        )
+
+        beta_res = self.client.get("/branding/company-logo")
+        self.assertEqual(beta_res.status_code, 200)
+        self.assertEqual(beta_res.data, b"beta-logo-bytes")
+
+    def test_branding_company_logo_is_not_cacheable(self) -> None:
+        alpha_logo = _dexter._resolve_company_storage_path(self.ids["alpha_company_id"], "profile/logo.png", create_parent=True)
+        assert alpha_logo is not None
+        alpha_logo.write_bytes(b"alpha-logo-bytes")
+        _dexter.upsert_company_profile(self.ids["alpha_company_id"], {"logo_rel_path": "profile/logo.png"})
+
+        self._set_session_user(
+            user_id=self.ids["super_admin_id"],
+            role_name="Super Admin",
+            company_id=self.ids["alpha_company_id"],
+            selected_company_id=self.ids["alpha_company_id"],
+        )
+
+        res = self.client.get("/branding/company-logo")
+        self.assertEqual(res.status_code, 200)
+        cache_control = str(res.headers.get("Cache-Control") or "")
+        self.assertIn("no-store", cache_control)
+        self.assertIn("private", cache_control)
+        self.assertIn("no-cache", str(res.headers.get("Pragma") or ""))
+        self.assertEqual(str(res.headers.get("Expires") or ""), "0")
+        vary_value = str(res.headers.get("Vary") or "")
+        self.assertIn("Cookie", vary_value)
+
     def test_manager_company_profile_update_stays_in_manager_company(self) -> None:
         self._set_session_user(
             user_id=self.ids["manager_id"],
