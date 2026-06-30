@@ -140,7 +140,7 @@ _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = False
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
 
 
-def _emergency_prune_local_backups_for_space(max_keep: int = 24) -> None:
+def _emergency_prune_local_backups_for_space(max_keep: int = 0) -> None:
     global _EMERGENCY_BACKUP_PRUNE_ATTEMPTED
     if _EMERGENCY_BACKUP_PRUNE_ATTEMPTED:
         return
