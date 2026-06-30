@@ -2832,14 +2832,15 @@ class AppManager:
                     env.setdefault("MGR_REQUIRE_PERSISTENT_STORAGE", "1")
                     env.setdefault("MGR_STORAGE_STRICT", "1")
                 else:
-                    # If persistent Render storage is unavailable, avoid strict mode so startup can continue.
-                    temp_root = Path(tempfile.gettempdir()) / "dexter_managerapp"
+                    # Critical: manager data MUST persist. Fall back to app directory, not temp.
+                    # Do NOT use /tmp for manager data (ephemeral on Render).
+                    app_dir_fallback = ROOT / "Dexter Assistant" / "Manager App"
                     try:
-                        temp_root.mkdir(parents=True, exist_ok=True)
+                        app_dir_fallback.mkdir(parents=True, exist_ok=True)
                     except OSError:
                         pass
-                    env.setdefault("MGR_DB_PATH", str(temp_root / "manager_app.db"))
-                    env.setdefault("MGR_COMPANY_DATA_DIR", str(temp_root / "company_data"))
+                    env.setdefault("MGR_DB_PATH", str(app_dir_fallback / "manager_app.db"))
+                    env.setdefault("MGR_COMPANY_DATA_DIR", str(app_dir_fallback / "company_data"))
                     env.setdefault("MGR_REQUIRE_PERSISTENT_STORAGE", "0")
                     env.setdefault("MGR_STORAGE_STRICT", "0")
             elif resolved_name == "ic3":
