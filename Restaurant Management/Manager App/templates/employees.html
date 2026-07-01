@@ -586,8 +586,9 @@ function processImportedEmployees(importedEmployees) {
     saveAllData();
     
     // Show results
-    const resultsDiv = document.getElementById('importResults');
-    const messageSpan = document.getElementById('importMessage');
+    const importUi = getOrCreateImportResultsUI();
+    const resultsDiv = importUi.resultsDiv;
+    const messageSpan = importUi.messageSpan;
     
     let message = `<strong>Import Complete!</strong><br>`;
     message += `${added} employee(s) added successfully.`;
@@ -595,19 +596,64 @@ function processImportedEmployees(importedEmployees) {
         message += `<br>${duplicates} duplicate(s) skipped.`;
     }
     
-    messageSpan.innerHTML = message;
-    resultsDiv.style.display = 'block';
-    resultsDiv.className = added > 0 ? 'alert alert-success' : 'alert alert-warning';
+    if (resultsDiv && messageSpan) {
+        messageSpan.innerHTML = message;
+        resultsDiv.style.display = 'block';
+        resultsDiv.className = added > 0 ? 'alert alert-success' : 'alert alert-warning';
+    } else {
+        console.warn('Import results container not found in DOM. Falling back to toast only.');
+    }
     
     // Reset form
-    document.getElementById('importForm').reset();
+    const importForm = document.getElementById('importForm');
+    if (importForm) {
+        importForm.reset();
+    }
     
     // Hide results after 5 seconds
-    setTimeout(() => {
-        resultsDiv.style.display = 'none';
-    }, 5000);
+    if (resultsDiv) {
+        setTimeout(() => {
+            resultsDiv.style.display = 'none';
+        }, 5000);
+    }
     
     showToast('Import Complete', `${added} employees added, ${duplicates} duplicates skipped`, 'success');
+}
+
+function getOrCreateImportResultsUI() {
+    let resultsDiv = document.getElementById('importResults');
+    let messageSpan = document.getElementById('importMessage');
+
+    if (resultsDiv && messageSpan) {
+        return { resultsDiv, messageSpan };
+    }
+
+    const importSection = document.getElementById('importSection');
+    const importForm = document.getElementById('importForm');
+    if (!importSection || !importForm) {
+        return { resultsDiv: null, messageSpan: null };
+    }
+
+    resultsDiv = document.createElement('div');
+    resultsDiv.id = 'importResults';
+    resultsDiv.style.display = 'none';
+    resultsDiv.className = 'alert alert-success mt-3';
+
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-check-circle';
+    const spacer = document.createTextNode(' ');
+
+    messageSpan = document.createElement('span');
+    messageSpan.id = 'importMessage';
+
+    resultsDiv.appendChild(icon);
+    resultsDiv.appendChild(spacer);
+    resultsDiv.appendChild(messageSpan);
+
+    // Keep results message near the import form even if template markup changes.
+    importForm.insertAdjacentElement('afterend', resultsDiv);
+
+    return { resultsDiv, messageSpan };
 }
 
 // Save all data (employees and removed employees)

@@ -935,8 +935,9 @@ function processImportedEmployees(importedEmployees) {
     saveAllData();
     
     // Show results
-    const resultsDiv = document.getElementById('importResults');
-    const messageSpan = document.getElementById('importMessage');
+    const importUi = getOrCreateImportResultsUI();
+    const resultsDiv = importUi.resultsDiv;
+    const messageSpan = importUi.messageSpan;
     
     let message = `<strong>Import Complete!</strong><br>`;
     message += `${added} employee(s) added successfully.`;
@@ -961,11 +962,50 @@ function processImportedEmployees(importedEmployees) {
     }
     
     // Reset form
-    document.getElementById('importForm').reset();
+    const importForm = document.getElementById('importForm');
+    if (importForm) {
+        importForm.reset();
+    }
     
     const summaryParts = [`${added} added`, `${duplicates} duplicates`];
     if (invalidRows > 0) summaryParts.push(`${invalidRows} invalid`);
     showToast('Import Complete', summaryParts.join(', '), added > 0 ? 'success' : 'warning');
+}
+
+function getOrCreateImportResultsUI() {
+    let resultsDiv = document.getElementById('importResults');
+    let messageSpan = document.getElementById('importMessage');
+
+    if (resultsDiv && messageSpan) {
+        return { resultsDiv, messageSpan };
+    }
+
+    const importSection = document.getElementById('importSection');
+    const importForm = document.getElementById('importForm');
+    if (!importSection || !importForm) {
+        return { resultsDiv: null, messageSpan: null };
+    }
+
+    resultsDiv = document.createElement('div');
+    resultsDiv.id = 'importResults';
+    resultsDiv.style.display = 'none';
+    resultsDiv.className = 'alert alert-success mt-3';
+
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-check-circle';
+    const spacer = document.createTextNode(' ');
+
+    messageSpan = document.createElement('span');
+    messageSpan.id = 'importMessage';
+
+    resultsDiv.appendChild(icon);
+    resultsDiv.appendChild(spacer);
+    resultsDiv.appendChild(messageSpan);
+
+    // Keep results message close to the import form even if template markup changes.
+    importForm.insertAdjacentElement('afterend', resultsDiv);
+
+    return { resultsDiv, messageSpan };
 }
 
 // Save all data (employees and removed employees)
