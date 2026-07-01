@@ -2770,13 +2770,34 @@ def import_employees():
         employees = []
         
         if filename.endswith('.xlsx') or filename.endswith('.xls'):
-            employees = parse_employee_excel(file)
+            try:
+                employees = parse_employee_excel(file)
+            except Exception as parse_error:
+                error_text = str(parse_error)
+                if filename.endswith('.xls'):
+                    return jsonify({
+                        'success': True,
+                        'employees': [],
+                        'message': '0 employees imported. This .xls file could not be parsed. Please re-save as .xlsx or .csv and import again.'
+                    })
+                return jsonify({'success': False, 'error': error_text}), 400
         elif filename.endswith('.csv'):
             employees = parse_employee_csv(file)
         else:
             return jsonify({'success': False, 'error': 'Unsupported file type. Please upload Excel or CSV'}), 400
-        
-        return jsonify({'success': True, 'employees': employees})
+
+        if len(employees) == 0:
+            return jsonify({
+                'success': True,
+                'employees': employees,
+                'message': '0 employees imported. Make sure your file has First Name and Last Name columns.'
+            })
+
+        return jsonify({
+            'success': True,
+            'employees': employees,
+            'message': f'{len(employees)} employee(s) parsed from file.'
+        })
     
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

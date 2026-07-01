@@ -886,21 +886,29 @@ function importExcelFile(file) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            processImportedEmployees(data.employees);
+            processImportedEmployees(data.employees, {
+                sourceMessage: String(data.message || '').trim()
+            });
         } else {
-            alert('Error importing Excel file: ' + (data.error || 'Unknown error'));
+            processImportedEmployees([], {
+                sourceMessage: String(data.error || 'Excel import failed').trim()
+            });
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error importing file. Please try again.');
+        processImportedEmployees([], {
+            sourceMessage: 'Error importing file. Please try again.'
+        });
     });
 }
 
-function processImportedEmployees(importedEmployees) {
+function processImportedEmployees(importedEmployees, options = {}) {
     if (!Array.isArray(importedEmployees)) {
         importedEmployees = [];
     }
+
+    const sourceMessage = String(options.sourceMessage || '').trim();
 
     let added = 0;
     let duplicates = 0;
@@ -947,6 +955,9 @@ function processImportedEmployees(importedEmployees) {
     if (invalidRows > 0) {
         message += `<br>${invalidRows} invalid row(s) skipped.`;
     }
+    if (sourceMessage) {
+        message += `<br>${escapeHtml(sourceMessage)}`;
+    }
     
     if (resultsDiv && messageSpan) {
         messageSpan.innerHTML = message;
@@ -969,6 +980,7 @@ function processImportedEmployees(importedEmployees) {
     
     const summaryParts = [`${added} added`, `${duplicates} duplicates`];
     if (invalidRows > 0) summaryParts.push(`${invalidRows} invalid`);
+    if (sourceMessage) summaryParts.push(sourceMessage);
     showToast('Import Complete', summaryParts.join(', '), added > 0 ? 'success' : 'warning');
 }
 
