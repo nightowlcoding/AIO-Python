@@ -3190,22 +3190,32 @@ function calculateRevenueCenters() {
     employees.forEach(emp => {
         // Calculate total sales for this employee
         const employeeSales = (emp.beer || 0) + (emp.liquor || 0) + (emp.wine || 0) + (emp.food || 0);
+
+        const normalizedShiftRaw = String(emp && emp.shift || '').trim().toLowerCase();
+        const normalizedAreaRaw = String(emp && emp.area || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+        const normalizedShift = normalizedShiftRaw === 'night' ? 'Night' : 'Day';
+        let normalizedArea = 'Dining';
+        if (normalizedAreaRaw === 'bar') {
+            normalizedArea = 'Bar';
+        } else if (normalizedAreaRaw === 'togo' || normalizedAreaRaw === 'to-go' || normalizedAreaRaw === 'takeout') {
+            normalizedArea = 'To Go';
+        }
         
         // Add to appropriate shift and area total
-        if (emp.shift === 'Day') {
-            if (emp.area === 'Bar') {
+        if (normalizedShift === 'Day') {
+            if (normalizedArea === 'Bar') {
                 dayBar += employeeSales;
-            } else if (emp.area === 'Dining') {
+            } else if (normalizedArea === 'Dining') {
                 dayDining += employeeSales;
-            } else if (emp.area === 'To Go') {
+            } else if (normalizedArea === 'To Go') {
                 dayToGo += employeeSales;
             }
-        } else if (emp.shift === 'Night') {
-            if (emp.area === 'Bar') {
+        } else if (normalizedShift === 'Night') {
+            if (normalizedArea === 'Bar') {
                 nightBar += employeeSales;
-            } else if (emp.area === 'Dining') {
+            } else if (normalizedArea === 'Dining') {
                 nightDining += employeeSales;
-            } else if (emp.area === 'To Go') {
+            } else if (normalizedArea === 'To Go') {
                 nightToGo += employeeSales;
             }
         }
@@ -3909,32 +3919,80 @@ function preparePrintSummary() {
         return Math.abs(parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0);
     };
 
-    const buildPrintBarChartSvg = (labels, values, colors) => {
+    const buildPrintPieChartSvg = (labels, values, colors) => {
         const width = 600;
-        const rowHeight = 24;
-        const topPad = 8;
-        const leftPad = 110;
-        const rightPad = 86;
-        const barMaxWidth = width - leftPad - rightPad;
-        const height = topPad + labels.length * rowHeight + 8;
-        const maxValue = Math.max(...values, 1);
+        const height = 220;
+        const cx = 120;
+        const cy = 110;
+        const radius = 74;
+        const legendX = 230;
+        const total = values.reduce((sum, value) => sum + (value || 0), 0);
 
-        const rows = labels.map((label, idx) => {
-            const y = topPad + idx * rowHeight;
+        if (total <= 0) {
+            return `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}">
+                    <text x="${cx}" y="${cy}" font-size="12" fill="#6b7280" text-anchor="middle">No data</text>
+                </svg>
+            `;
+        }
+
+        const polarToCartesian = (centerX, centerY, r, angleDeg) => {
+            const angleRad = (angleDeg - 90) * (Math.PI / 180);
+            return {
+                x: centerX + (r * Math.cos(angleRad)),
+                y: centerY + (r * Math.sin(angleRad))
+            };
+        };
+
+        const describeArc = (centerX, centerY, r, startAngle, endAngle) => {
+            const start = polarToCartesian(centerX, centerY, r, endAngle);
+            const end = polarToCartesian(centerX, centerY, r, startAngle);
+            const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+            return [
+                `M ${centerX} ${centerY}`,
+                `L ${start.x} ${start.y}`,
+                `A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`,
+                'Z'
+            ].join(' ');
+        };
+
+        let currentAngle = 0;
+        const slices = labels.map((label, idx) => {
             const value = values[idx] || 0;
-            const barWidth = (value / maxValue) * barMaxWidth;
+            const sweep = total > 0 ? (value / total) * 360 : 0;
+            const startAngle = currentAngle;
+            const endAngle = currentAngle + sweep;
+            currentAngle = endAngle;
+
+            if (value <= 0) {
+                return '';
+            }
+
+            const color = colors[idx % colors.length];
+            const path = describeArc(cx, cy, radius, startAngle, endAngle);
+            return `<path d="${path}" fill="${color}" stroke="#ffffff" stroke-width="1"></path>`;
+        }).join('');
+
+        const legendRows = labels.map((label, idx) => {
+            const value = values[idx] || 0;
+            const percent = total > 0 ? ((value / total) * 100) : 0;
+            const y = 34 + (idx * 28);
             const color = colors[idx % colors.length];
             return `
-                <text x="4" y="${y + 15}" font-size="11" fill="#1f2937">${label}</text>
-                <rect x="${leftPad}" y="${y + 4}" width="${barMaxWidth}" height="12" fill="#f1f5f9" rx="2"></rect>
-                <rect x="${leftPad}" y="${y + 4}" width="${barWidth.toFixed(2)}" height="12" fill="${color}" rx="2"></rect>
-                <text x="${width - rightPad + 4}" y="${y + 14}" font-size="11" fill="#111827" text-anchor="start">$${value.toFixed(2)}</text>
+                <rect x="${legendX}" y="${y - 10}" width="10" height="10" rx="2" fill="${color}"></rect>
+                <text x="${legendX + 16}" y="${y - 1}" font-size="11" fill="#111827">${label}</text>
+                <text x="${legendX + 146}" y="${y - 1}" font-size="11" fill="#374151" text-anchor="end">$${value.toFixed(2)}</text>
+                <text x="${legendX + 198}" y="${y - 1}" font-size="11" fill="#6b7280" text-anchor="end">${percent.toFixed(1)}%</text>
             `;
         }).join('');
 
         return `
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}">
-                ${rows}
+                ${slices}
+                <circle cx="${cx}" cy="${cy}" r="40" fill="white"></circle>
+                <text x="${cx}" y="${cy - 2}" font-size="10" fill="#6b7280" text-anchor="middle">Total</text>
+                <text x="${cx}" y="${cy + 14}" font-size="12" fill="#111827" text-anchor="middle">$${total.toFixed(2)}</text>
+                ${legendRows}
             </svg>
         `;
     };
@@ -3947,19 +4005,19 @@ function preparePrintSummary() {
             return;
         }
 
-        categoriesWrap.innerHTML = buildPrintBarChartSvg(
+        categoriesWrap.innerHTML = buildPrintPieChartSvg(
             ['Beer', 'Liquor', 'Wine', 'Food'],
             [data.totalBeer, data.totalLiquor, data.totalWine, data.totalFood],
             ['#0284c7', '#0f766e', '#9333ea', '#ca8a04']
         );
 
-        periodWrap.innerHTML = buildPrintBarChartSvg(
+        periodWrap.innerHTML = buildPrintPieChartSvg(
             ['Day', 'Night'],
             [data.daySales, data.nightSales],
             ['#2563eb', '#7c3aed']
         );
 
-        areaWrap.innerHTML = buildPrintBarChartSvg(
+        areaWrap.innerHTML = buildPrintPieChartSvg(
             ['Bar', 'Dining', 'To Go'],
             [data.totalBar, data.totalDining, data.totalToGo],
             ['#dc2626', '#16a34a', '#ea580c']
