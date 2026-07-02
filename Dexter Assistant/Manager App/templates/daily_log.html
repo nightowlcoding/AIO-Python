@@ -3168,122 +3168,76 @@ function addTaxExemptRow() {
     applyNumericKeyboardHints(row);
 }
 
-function calculateRevenueCenters() {
-    console.log('========================================');
-    console.log('calculateRevenueCenters called');
-    console.log('Call stack:', new Error().stack);
-    console.log('Number of employees:', employees.length);
-    console.log('Employee data:', JSON.stringify(employees, null, 2));
-    console.log('========================================');
-    
-    // Initialize Day shift totals
-    let dayBar = 0;
-    let dayDining = 0;
-    let dayToGo = 0;
-    
-    // Initialize Night shift totals
-    let nightBar = 0;
-    let nightDining = 0;
-    let nightToGo = 0;
-    
-    // Aggregate employee sales by shift and area
-    employees.forEach(emp => {
-        // Calculate total sales for this employee
-        const employeeSales = (emp.beer || 0) + (emp.liquor || 0) + (emp.wine || 0) + (emp.food || 0);
+function normalizeShiftLabel(shiftValue) {
+    return String(shiftValue || '').trim().toLowerCase() === 'night' ? 'Night' : 'Day';
+}
 
-        const normalizedShiftRaw = String(emp && emp.shift || '').trim().toLowerCase();
-        const normalizedAreaRaw = String(emp && emp.area || '').trim().toLowerCase().replace(/[^a-z]/g, '');
-        const normalizedShift = normalizedShiftRaw === 'night' ? 'Night' : 'Day';
-        let normalizedArea = 'Dining';
-        if (normalizedAreaRaw === 'bar') {
-            normalizedArea = 'Bar';
-        } else if (normalizedAreaRaw === 'togo' || normalizedAreaRaw === 'to-go' || normalizedAreaRaw === 'takeout') {
-            normalizedArea = 'To Go';
-        }
-        
-        // Add to appropriate shift and area total
-        if (normalizedShift === 'Day') {
-            if (normalizedArea === 'Bar') {
-                dayBar += employeeSales;
-            } else if (normalizedArea === 'Dining') {
-                dayDining += employeeSales;
-            } else if (normalizedArea === 'To Go') {
-                dayToGo += employeeSales;
-            }
-        } else if (normalizedShift === 'Night') {
-            if (normalizedArea === 'Bar') {
-                nightBar += employeeSales;
-            } else if (normalizedArea === 'Dining') {
-                nightDining += employeeSales;
-            } else if (normalizedArea === 'To Go') {
-                nightToGo += employeeSales;
-            }
+function normalizeAreaLabel(areaValue) {
+    const compact = String(areaValue || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+    if (compact === 'bar') {
+        return 'Bar';
+    }
+    if (compact === 'togo' || compact === 'takeout' || compact === 'carryout') {
+        return 'To Go';
+    }
+    return 'Dining';
+}
+
+function computeRevenueCenterTotals() {
+    const totals = {
+        dayBar: 0,
+        dayDining: 0,
+        dayToGo: 0,
+        nightBar: 0,
+        nightDining: 0,
+        nightToGo: 0,
+    };
+
+    employees.forEach(emp => {
+        const employeeSales = (emp.beer || 0) + (emp.liquor || 0) + (emp.wine || 0) + (emp.food || 0);
+        const shift = normalizeShiftLabel(emp && emp.shift);
+        const area = normalizeAreaLabel(emp && emp.area);
+
+        if (shift === 'Day') {
+            if (area === 'Bar') totals.dayBar += employeeSales;
+            else if (area === 'To Go') totals.dayToGo += employeeSales;
+            else totals.dayDining += employeeSales;
+        } else {
+            if (area === 'Bar') totals.nightBar += employeeSales;
+            else if (area === 'To Go') totals.nightToGo += employeeSales;
+            else totals.nightDining += employeeSales;
         }
     });
-    
-    // Update Day shift displays
+
+    totals.totalBar = totals.dayBar + totals.nightBar;
+    totals.totalDining = totals.dayDining + totals.nightDining;
+    totals.totalToGo = totals.dayToGo + totals.nightToGo;
+    return totals;
+}
+
+function calculateRevenueCenters() {
+    const totals = computeRevenueCenterTotals();
+
     const dayBarEl = document.getElementById('dayBar');
     const dayDiningEl = document.getElementById('dayDining');
     const dayToGoEl = document.getElementById('dayToGo');
-    if (dayBarEl) {
-        dayBarEl.innerHTML = dayBar.toFixed(2);
-        dayBarEl.parentElement.style.opacity = '0.99'; // Force re-render
-        setTimeout(() => { dayBarEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    if (dayDiningEl) {
-        dayDiningEl.innerHTML = dayDining.toFixed(2);
-        dayDiningEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { dayDiningEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    if (dayToGoEl) {
-        dayToGoEl.innerHTML = dayToGo.toFixed(2);
-        dayToGoEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { dayToGoEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    
-    // Update Night shift displays
+    if (dayBarEl) dayBarEl.textContent = totals.dayBar.toFixed(2);
+    if (dayDiningEl) dayDiningEl.textContent = totals.dayDining.toFixed(2);
+    if (dayToGoEl) dayToGoEl.textContent = totals.dayToGo.toFixed(2);
+
     const nightBarEl = document.getElementById('nightBar');
     const nightDiningEl = document.getElementById('nightDining');
     const nightToGoEl = document.getElementById('nightToGo');
-    if (nightBarEl) {
-        nightBarEl.innerHTML = nightBar.toFixed(2);
-        nightBarEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { nightBarEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    if (nightDiningEl) {
-        nightDiningEl.innerHTML = nightDining.toFixed(2);
-        nightDiningEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { nightDiningEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    if (nightToGoEl) {
-        nightToGoEl.innerHTML = nightToGo.toFixed(2);
-        nightToGoEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { nightToGoEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    
-    // Calculate and update combined totals
-    const totalBar = dayBar + nightBar;
-    const totalDining = dayDining + nightDining;
-    const totalToGo = dayToGo + nightToGo;
-    
+    if (nightBarEl) nightBarEl.textContent = totals.nightBar.toFixed(2);
+    if (nightDiningEl) nightDiningEl.textContent = totals.nightDining.toFixed(2);
+    if (nightToGoEl) nightToGoEl.textContent = totals.nightToGo.toFixed(2);
+
     const totalBarEl = document.getElementById('totalBar');
     const totalDiningEl = document.getElementById('totalDining');
     const totalToGoEl = document.getElementById('totalToGo');
-    if (totalBarEl) {
-        totalBarEl.innerHTML = totalBar.toFixed(2);
-        totalBarEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { totalBarEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    if (totalDiningEl) {
-        totalDiningEl.innerHTML = totalDining.toFixed(2);
-        totalDiningEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { totalDiningEl.parentElement.style.opacity = '1'; }, 10);
-    }
-    if (totalToGoEl) {
-        totalToGoEl.innerHTML = totalToGo.toFixed(2);
-        totalToGoEl.parentElement.style.opacity = '0.99';
-        setTimeout(() => { totalToGoEl.parentElement.style.opacity = '1'; }, 10);
-    }
+    if (totalBarEl) totalBarEl.textContent = totals.totalBar.toFixed(2);
+    if (totalDiningEl) totalDiningEl.textContent = totals.totalDining.toFixed(2);
+    if (totalToGoEl) totalToGoEl.textContent = totals.totalToGo.toFixed(2);
 }
 
 // Checkpoint management
@@ -3920,12 +3874,11 @@ function preparePrintSummary() {
     };
 
     const buildPrintPieChartSvg = (labels, values, colors) => {
-        const width = 600;
-        const height = 220;
-        const cx = 120;
-        const cy = 110;
-        const radius = 74;
-        const legendX = 230;
+        const width = 320;
+        const height = 280;
+        const cx = width / 2;
+        const cy = 108;
+        const radius = 78;
         const total = values.reduce((sum, value) => sum + (value || 0), 0);
 
         if (total <= 0) {
@@ -3973,16 +3926,19 @@ function preparePrintSummary() {
             return `<path d="${path}" fill="${color}" stroke="#ffffff" stroke-width="1"></path>`;
         }).join('');
 
+        const legendCols = labels.length >= 4 ? 2 : labels.length;
+        const legendCellWidth = Math.floor((width - 20) / Math.max(legendCols, 1));
         const legendRows = labels.map((label, idx) => {
             const value = values[idx] || 0;
             const percent = total > 0 ? ((value / total) * 100) : 0;
-            const y = 34 + (idx * 28);
+            const row = Math.floor(idx / legendCols);
+            const col = idx % legendCols;
+            const x = 12 + (col * legendCellWidth);
+            const y = 210 + (row * 24);
             const color = colors[idx % colors.length];
             return `
-                <rect x="${legendX}" y="${y - 10}" width="10" height="10" rx="2" fill="${color}"></rect>
-                <text x="${legendX + 16}" y="${y - 1}" font-size="11" fill="#111827">${label}</text>
-                <text x="${legendX + 146}" y="${y - 1}" font-size="11" fill="#374151" text-anchor="end">$${value.toFixed(2)}</text>
-                <text x="${legendX + 198}" y="${y - 1}" font-size="11" fill="#6b7280" text-anchor="end">${percent.toFixed(1)}%</text>
+                <rect x="${x}" y="${y - 9}" width="9" height="9" rx="2" fill="${color}"></rect>
+                <text x="${x + 13}" y="${y - 1}" font-size="10" fill="#111827">${label}: $${value.toFixed(2)} (${percent.toFixed(1)}%)</text>
             `;
         }).join('');
 
@@ -4071,33 +4027,34 @@ function preparePrintSummary() {
     document.getElementById('print_total_food').textContent = getText('total_food');
     document.getElementById('print_total_sales').textContent = getText('total_sales_calc');
     
-    // Populate revenue centers - with additional wait to ensure calculation is complete
+    // Populate revenue centers derived directly from employee area assignments.
     setTimeout(() => {
-        console.log('Populating revenue centers...');
-        const dayBar = getText('dayBar');
-        const dayDining = getText('dayDining');
-        const dayToGo = getText('dayToGo');
-        const nightBar = getText('nightBar');
-        const nightDining = getText('nightDining');
-        const nightToGo = getText('nightToGo');
-        const totalBar = getText('totalBar');
-        const totalDining = getText('totalDining');
-        const totalToGo = getText('totalToGo');
+        const revenueTotals = computeRevenueCenterTotals();
 
-        document.getElementById('print_day_bar').textContent = dayBar;
-        document.getElementById('print_day_dining').textContent = dayDining;
-        document.getElementById('print_day_togo').textContent = dayToGo;
+        const dayBar = revenueTotals.dayBar;
+        const dayDining = revenueTotals.dayDining;
+        const dayToGo = revenueTotals.dayToGo;
+        const nightBar = revenueTotals.nightBar;
+        const nightDining = revenueTotals.nightDining;
+        const nightToGo = revenueTotals.nightToGo;
+        const totalBar = revenueTotals.totalBar;
+        const totalDining = revenueTotals.totalDining;
+        const totalToGo = revenueTotals.totalToGo;
 
-        document.getElementById('print_night_bar').textContent = nightBar;
-        document.getElementById('print_night_dining').textContent = nightDining;
-        document.getElementById('print_night_togo').textContent = nightToGo;
+        document.getElementById('print_day_bar').textContent = dayBar.toFixed(2);
+        document.getElementById('print_day_dining').textContent = dayDining.toFixed(2);
+        document.getElementById('print_day_togo').textContent = dayToGo.toFixed(2);
 
-        document.getElementById('print_total_bar').textContent = totalBar;
-        document.getElementById('print_total_dining').textContent = totalDining;
-        document.getElementById('print_total_togo').textContent = totalToGo;
+        document.getElementById('print_night_bar').textContent = nightBar.toFixed(2);
+        document.getElementById('print_night_dining').textContent = nightDining.toFixed(2);
+        document.getElementById('print_night_togo').textContent = nightToGo.toFixed(2);
+
+        document.getElementById('print_total_bar').textContent = totalBar.toFixed(2);
+        document.getElementById('print_total_dining').textContent = totalDining.toFixed(2);
+        document.getElementById('print_total_togo').textContent = totalToGo.toFixed(2);
 
         const revenueValues = [dayBar, dayDining, dayToGo, nightBar, nightDining, nightToGo, totalBar, totalDining, totalToGo]
-            .map(value => Math.abs(parseFloat(String(value).replace(/[^0-9.-]/g, '')) || 0));
+            .map(value => Math.abs(parseFloat(value) || 0));
         setPrintSectionHidden('printRevenueSection', revenueValues.every(value => value === 0));
 
         renderPrintCharts({
@@ -4107,12 +4064,10 @@ function preparePrintSummary() {
             totalFood: parseMoney(getText('total_food')),
             daySales: parseMoney(getText('day_total_sales_calc')),
             nightSales: parseMoney(getText('night_total_sales_calc')),
-            totalBar: parseMoney(totalBar),
-            totalDining: parseMoney(totalDining),
-            totalToGo: parseMoney(totalToGo),
+            totalBar: totalBar,
+            totalDining: totalDining,
+            totalToGo: totalToGo,
         });
-
-        console.log('Revenue centers populated');
     }, 100);
     
     // Populate cash deductions
