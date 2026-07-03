@@ -1606,7 +1606,7 @@ HTML_TEMPLATE = '''
             }
             
             body {
-                font-size: 5pt;
+                font-size: 7pt;
                 margin: 0;
                 padding: 0;
             }
@@ -1624,7 +1624,7 @@ HTML_TEMPLATE = '''
                 overflow: visible !important;
                 padding: 0 !important;
                 background: white !important;
-                columns: 5;
+                columns: 4;
                 column-gap: 4px;
                 column-fill: auto;
             }
@@ -1638,7 +1638,7 @@ HTML_TEMPLATE = '''
             }
             
             .category-header {
-                font-size: 6pt;
+                font-size: 7.5pt;
                 padding: 0.5px 2px;
                 background: #e9ecef !important;
                 color: black !important;
@@ -1649,7 +1649,7 @@ HTML_TEMPLATE = '''
             }
             
             .category-table {
-                font-size: 4.5pt;
+                font-size: 6.5pt;
                 width: 100%;
                 border-collapse: collapse;
             }
@@ -1660,7 +1660,7 @@ HTML_TEMPLATE = '''
             
             .category-table tbody td {
                 padding: 0px 1px;
-                font-size: 4pt;
+                font-size: 6pt;
                 border: 0.5pt solid #ddd;
                 line-height: 1;
                 overflow: hidden;
@@ -1675,15 +1675,15 @@ HTML_TEMPLATE = '''
             }
             
             .category-table tbody tr {
-                height: 8pt;
+                height: 10pt;
             }
             
             .quantity-input {
                 width: 20px;
                 padding: 0;
-                font-size: 5pt;
+                font-size: 6.5pt;
                 border: 0.5pt solid #000;
-                height: 7pt;
+                height: 9pt;
             }
             
             .print-header {
@@ -1696,13 +1696,13 @@ HTML_TEMPLATE = '''
             
             .print-header h2 {
                 margin: 0 0 1px 0;
-                font-size: 8pt;
+                font-size: 10pt;
             }
             
             .print-info {
                 display: flex !important;
                 justify-content: space-between;
-                font-size: 5pt;
+                font-size: 7pt;
                 margin: 0;
                 font-weight: bold;
             }
