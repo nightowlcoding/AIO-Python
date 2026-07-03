@@ -1606,9 +1606,10 @@ HTML_TEMPLATE = '''
             }
             
             body {
-                font-size: 7pt;
+                font-size: 8pt;
                 margin: 0;
                 padding: 0;
+                text-align: center;
             }
             
             .tab-content {
@@ -1638,18 +1639,19 @@ HTML_TEMPLATE = '''
             }
             
             .category-header {
-                font-size: 7.5pt;
+                font-size: 8.5pt;
                 padding: 0.5px 2px;
                 background: #e9ecef !important;
                 color: black !important;
                 font-weight: bold;
                 margin-bottom: 0.5px;
+                text-align: center;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
             
             .category-table {
-                font-size: 6.5pt;
+                font-size: 7.5pt;
                 width: 100%;
                 border-collapse: collapse;
             }
@@ -1660,13 +1662,14 @@ HTML_TEMPLATE = '''
             
             .category-table tbody td {
                 padding: 0px 1px;
-                font-size: 6pt;
+                font-size: 7pt;
                 border: 0.5pt solid #ddd;
                 line-height: 1;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 max-width: 50px;
+                text-align: center;
             }
             
             /* Limit item description to ~20 characters */
@@ -1675,15 +1678,16 @@ HTML_TEMPLATE = '''
             }
             
             .category-table tbody tr {
-                height: 10pt;
+                height: 11pt;
             }
             
             .quantity-input {
                 width: 20px;
                 padding: 0;
-                font-size: 6.5pt;
+                font-size: 7.5pt;
                 border: 0.5pt solid #000;
-                height: 9pt;
+                height: 10pt;
+                text-align: center;
             }
             
             .print-header {
@@ -1696,13 +1700,13 @@ HTML_TEMPLATE = '''
             
             .print-header h2 {
                 margin: 0 0 1px 0;
-                font-size: 10pt;
+                font-size: 11pt;
             }
             
             .print-info {
                 display: flex !important;
                 justify-content: space-between;
-                font-size: 7pt;
+                font-size: 8pt;
                 margin: 0;
                 font-weight: bold;
             }
