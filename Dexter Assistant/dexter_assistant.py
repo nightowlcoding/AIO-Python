@@ -106,9 +106,9 @@ except ValueError:
     UPSTREAM_CONNECT_TIMEOUT_SEC = 3.0
 
 try:
-    UPSTREAM_READ_TIMEOUT_SEC = float(os.environ.get("DEXTER_UPSTREAM_READ_TIMEOUT_SEC", "15") or "15")
+    UPSTREAM_READ_TIMEOUT_SEC = float(os.environ.get("DEXTER_UPSTREAM_READ_TIMEOUT_SEC", "60") or "60")
 except ValueError:
-    UPSTREAM_READ_TIMEOUT_SEC = 15.0
+    UPSTREAM_READ_TIMEOUT_SEC = 60.0
 
 try:
     APP_START_FAILURE_WINDOW_SEC = float(os.environ.get("DEXTER_APP_START_FAILURE_WINDOW_SEC", "60") or "60")
@@ -760,7 +760,8 @@ def migrate_add_user_location_assignments_v1() -> None:
 def ensure_default_super_admin_user() -> None:
     admin_username = os.environ.get("DEXTER_ADMIN_USER", "").strip()
     admin_password = os.environ.get("DEXTER_ADMIN_PASS", "").strip()
-    if not admin_username or not admin_password:
+    force_password_reset = _env_flag("DEXTER_ADMIN_FORCE_PASSWORD_RESET", default=False)
+    if not admin_username:
         return
 
     conn = get_rbac_db_connection()
@@ -769,16 +770,33 @@ def ensure_default_super_admin_user() -> None:
         role_id = _get_role_id(conn, "Super Admin")
         existing = _get_user_by_username(conn, admin_username)
         if existing:
-            conn.execute(
-                """
-                UPDATE users
-                SET password_hash = ?, role_id = ?, is_active = 1,
-                    company_id = COALESCE(company_id, ?), updated_at = datetime('now')
-                WHERE id = ?
-                """,
-                (generate_password_hash(admin_password), role_id, default_company_id, int(existing["id"])),
-            )
+            if force_password_reset and admin_password:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET password_hash = ?, role_id = ?, is_active = 1,
+                        company_id = COALESCE(company_id, ?), updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (generate_password_hash(admin_password), role_id, default_company_id, int(existing["id"])),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET role_id = ?, is_active = 1,
+                        company_id = COALESCE(company_id, ?), updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (role_id, default_company_id, int(existing["id"])),
+                )
         else:
+            if not admin_password:
+                print(
+                    "[dexter] DEXTER_ADMIN_USER is set but DEXTER_ADMIN_PASS is empty; cannot create default super admin",
+                    file=sys.stderr,
+                )
+                return
             conn.execute(
                 """
                 INSERT INTO users (username, password_hash, role_id, company_id, is_active, created_at, updated_at)
@@ -3149,7 +3167,7 @@ _DEXTER_UI_HEAD = (
 )
 _DEXTER_UI_BODY = (
     '<script src="/dexter-ui/theme.js" defer></script>'
-    '<div class="dx-version-badge" aria-hidden="true">Dexter · Launcher · v0.9</div>'
+    '<div class="dx-version-badge" aria-hidden="true">2026 Dexter Assist v0.9</div>'
 )
 _DEXTER_UI_MARKER = "__dexter_ui_installed"
 
@@ -3409,25 +3427,30 @@ def auth_forgot_password() -> Response:
         if not username:
             error = "Please enter your username."
         else:
-            conn = get_rbac_db_connection()
             try:
-                row = conn.execute(
-                    "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND is_active = 1 LIMIT 1",
-                    (username,),
-                ).fetchone()
-                if row:
-                    token = secrets.token_urlsafe(32)
-                    expires = (datetime.now() + timedelta(hours=1)).isoformat(timespec="seconds")
-                    conn.execute(
-                        "UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?",
-                        (token, expires, int(row["id"])),
-                    )
-                    conn.commit()
-                    reset_url = _build_public_endpoint_url("auth_reset_password", token=token)
-                else:
-                    error = "If that username exists, a reset link has been generated. Ask an admin."
-            finally:
-                conn.close()
+                migrate_add_password_reset_fields_v1()
+                conn = get_rbac_db_connection()
+                try:
+                    row = conn.execute(
+                        "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND is_active = 1 LIMIT 1",
+                        (username,),
+                    ).fetchone()
+                    if row:
+                        token = secrets.token_urlsafe(32)
+                        expires = (datetime.now() + timedelta(hours=1)).isoformat(timespec="seconds")
+                        conn.execute(
+                            "UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?",
+                            (token, expires, int(row["id"])),
+                        )
+                        conn.commit()
+                        reset_url = _build_public_endpoint_url("auth_reset_password", token=token)
+                    else:
+                        error = "If that username exists, a reset link has been generated. Ask an admin."
+                finally:
+                    conn.close()
+            except Exception as exc:
+                print(f"[auth_forgot_password] Exception: {type(exc).__name__}: {exc}", file=sys.stderr)
+                error = "Password reset is temporarily unavailable. Please contact your administrator."
 
     return Response(
         render_template(
@@ -3447,61 +3470,66 @@ def auth_reset_password(token: str) -> Response:
     error = ""
     done = False
 
-    conn = get_rbac_db_connection()
     try:
-        row = conn.execute(
-            """
-            SELECT id, password_reset_expires FROM users
-            WHERE password_reset_token = ? AND is_active = 1
-            LIMIT 1
-            """,
-            (token,),
-        ).fetchone()
-
-        if not row:
-            return Response(
-                render_template("reset_password.html", error="Invalid or expired reset link.", done=False)
-            )
-
-        expires_str = str(row["password_reset_expires"] or "")
+        migrate_add_password_reset_fields_v1()
+        conn = get_rbac_db_connection()
         try:
-            expires_dt = datetime.fromisoformat(expires_str)
-        except ValueError:
-            expires_dt = datetime.min
+            row = conn.execute(
+                """
+                SELECT id, password_reset_expires FROM users
+                WHERE password_reset_token = ? AND is_active = 1
+                LIMIT 1
+                """,
+                (token,),
+            ).fetchone()
 
-        if datetime.now() > expires_dt:
-            conn.execute(
-                "UPDATE users SET password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?",
-                (int(row["id"]),),
-            )
-            conn.commit()
-            return Response(
-                render_template("reset_password.html", error="Reset link has expired. Please request a new one.", done=False)
-            )
+            if not row:
+                return Response(
+                    render_template("reset_password.html", error="Invalid or expired reset link.", done=False)
+                )
 
-        if request.method == "POST":
-            password = request.form.get("password") or ""
-            confirm = request.form.get("confirm") or ""
-            if len(password) < 8:
-                error = "Password must be at least 8 characters."
-            elif password != confirm:
-                error = "Passwords do not match."
-            else:
+            expires_str = str(row["password_reset_expires"] or "")
+            try:
+                expires_dt = datetime.fromisoformat(expires_str)
+            except ValueError:
+                expires_dt = datetime.min
+
+            if datetime.now() > expires_dt:
                 conn.execute(
-                    """
-                    UPDATE users
-                    SET password_hash = ?,
-                        password_reset_token = NULL,
-                        password_reset_expires = NULL,
-                        updated_at = datetime('now')
-                    WHERE id = ?
-                    """,
-                    (generate_password_hash(password), int(row["id"])),
+                    "UPDATE users SET password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?",
+                    (int(row["id"]),),
                 )
                 conn.commit()
-                done = True
-    finally:
-        conn.close()
+                return Response(
+                    render_template("reset_password.html", error="Reset link has expired. Please request a new one.", done=False)
+                )
+
+            if request.method == "POST":
+                password = request.form.get("password") or ""
+                confirm = request.form.get("confirm") or ""
+                if len(password) < 8:
+                    error = "Password must be at least 8 characters."
+                elif password != confirm:
+                    error = "Passwords do not match."
+                else:
+                    conn.execute(
+                        """
+                        UPDATE users
+                        SET password_hash = ?,
+                            password_reset_token = NULL,
+                            password_reset_expires = NULL,
+                            updated_at = datetime('now')
+                        WHERE id = ?
+                        """,
+                        (generate_password_hash(password), int(row["id"])),
+                    )
+                    conn.commit()
+                    done = True
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f"[auth_reset_password] Exception: {type(exc).__name__}: {exc}", file=sys.stderr)
+        error = "Password reset is temporarily unavailable. Please contact your administrator."
 
     return Response(render_template("reset_password.html", error=error, done=done))
 
@@ -5011,6 +5039,338 @@ def _run_tenant_scope_audit(flask_app: Flask | None = None) -> dict[str, Any]:
         "warnings": warnings,
     }
 
+
+def _manager_db_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    env_path = str(os.environ.get("MGR_DB_PATH") or "").strip()
+    if env_path:
+        candidates.append(Path(env_path))
+
+    try:
+        paths = _manager_backup_paths()
+        db_path = paths.get("db_path")
+        if isinstance(db_path, Path):
+            candidates.append(db_path)
+    except Exception:
+        pass
+
+    candidates.append(ROOT / "Manager App" / "manager_app.db")
+
+    seen: set[str] = set()
+    normalized: list[Path] = []
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(path)
+    return normalized
+
+
+def _parse_inventory_default_groups_payload(raw_value: Any) -> dict[str, Any]:
+    if isinstance(raw_value, dict):
+        payload = raw_value
+    elif isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text:
+            payload = {}
+        else:
+            try:
+                payload = json.loads(text)
+            except Exception:
+                payload = {}
+    else:
+        payload = {}
+
+    company_rows = payload.get("company") if isinstance(payload, dict) else []
+    location_rows = payload.get("location_overrides") if isinstance(payload, dict) else {}
+    defaults_map = payload.get("default_group_by_location") if isinstance(payload, dict) else {}
+
+    if not isinstance(company_rows, list):
+        company_rows = []
+    if not isinstance(location_rows, dict):
+        location_rows = {}
+    if not isinstance(defaults_map, dict):
+        defaults_map = {}
+
+    def _normalize_group_rows(rows: Any) -> list[dict[str, Any]]:
+        if not isinstance(rows, list):
+            return []
+        normalized: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            group_id = str(row.get("id") or "").strip()
+            group_name = str(row.get("name") or "").strip()
+            if not group_id:
+                group_id = f"grp_{uuid.uuid4().hex[:10]}"
+            if not group_name:
+                continue
+            raw_item_keys = row.get("item_keys")
+            if isinstance(raw_item_keys, str):
+                raw_item_keys = [part.strip() for part in raw_item_keys.split(",") if part.strip()]
+            if not isinstance(raw_item_keys, list):
+                raw_item_keys = []
+
+            canonical_keys: list[str] = []
+            seen_keys: set[str] = set()
+            for value in raw_item_keys:
+                key = str(value or "").strip()
+                if not key or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                canonical_keys.append(key)
+
+            normalized.append({"id": group_id, "name": group_name, "item_keys": canonical_keys})
+        return normalized
+
+    normalized_company = _normalize_group_rows(company_rows)
+    normalized_location: dict[str, list[dict[str, Any]]] = {}
+    for location_id, rows in location_rows.items():
+        loc_key = str(location_id or "").strip()
+        if not loc_key:
+            continue
+        normalized_rows = _normalize_group_rows(rows)
+        if normalized_rows:
+            normalized_location[loc_key] = normalized_rows
+
+    normalized_defaults: dict[str, str] = {}
+    for key, value in defaults_map.items():
+        map_key = str(key or "").strip()
+        map_value = str(value or "").strip()
+        if map_key and map_value:
+            normalized_defaults[map_key] = map_value
+
+    return {
+        "company": normalized_company,
+        "location_overrides": normalized_location,
+        "default_group_by_location": normalized_defaults,
+    }
+
+
+def _parse_inventory_group_saved_lists_payload(raw_value: Any) -> list[dict[str, Any]]:
+    if isinstance(raw_value, list):
+        payload = raw_value
+    elif isinstance(raw_value, dict):
+        candidate = raw_value.get("lists")
+        payload = candidate if isinstance(candidate, list) else []
+    elif isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text:
+            payload = []
+        else:
+            try:
+                decoded = json.loads(text)
+            except Exception:
+                decoded = []
+            if isinstance(decoded, list):
+                payload = decoded
+            elif isinstance(decoded, dict) and isinstance(decoded.get("lists"), list):
+                payload = decoded.get("lists")
+            else:
+                payload = []
+    else:
+        payload = []
+
+    normalized: list[dict[str, Any]] = []
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        list_id = str(entry.get("id") or "").strip() or f"list_{uuid.uuid4().hex[:10]}"
+        list_name = str(entry.get("name") or "").strip()
+        if not list_name:
+            continue
+        config = _parse_inventory_default_groups_payload(entry.get("config"))
+        normalized.append({"id": list_id, "name": list_name, "config": config})
+    return normalized
+
+
+def _load_inventory_default_groups_for_company(company_name: str) -> dict[str, Any]:
+    context = _load_inventory_settings_context_for_company(company_name)
+    config = context.get("config")
+    if isinstance(config, dict):
+        return config
+    return _parse_inventory_default_groups_payload({})
+
+
+def _inventory_location_key_candidates(selected_restaurant: dict[str, Any] | None) -> list[str]:
+    candidates: list[str] = []
+    if selected_restaurant:
+        location_id = int(selected_restaurant.get("id") or 0)
+        if location_id > 0:
+            candidates.append(f"pm_{location_id}")
+            candidates.append(str(location_id))
+        location_name = str(selected_restaurant.get("location") or "").strip()
+        if location_name:
+            candidates.append(location_name)
+    return candidates
+
+
+def _normalize_product_id_list(values: Any) -> list[str]:
+    if isinstance(values, str):
+        raw_values = [part.strip() for part in values.split(",")]
+    elif isinstance(values, list):
+        raw_values = values
+    else:
+        raw_values = []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in raw_values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+    return normalized
+
+
+def _merge_catch_all_order(previous_order: list[str], current_order: list[str]) -> list[str]:
+    previous = _normalize_product_id_list(previous_order)
+    current = _normalize_product_id_list(current_order)
+    if not previous:
+        return current
+
+    current_set = set(current)
+    merged: list[str] = []
+    merged_set: set[str] = set()
+
+    for product_id in previous:
+        if product_id not in current_set or product_id in merged_set:
+            continue
+        merged_set.add(product_id)
+        merged.append(product_id)
+
+    for product_id in current:
+        if product_id in merged_set:
+            continue
+        merged_set.add(product_id)
+        merged.append(product_id)
+
+    return merged
+
+
+def _persist_inventory_settings_record(db_path: Path, company_id: str, settings_obj: dict[str, Any]) -> tuple[bool, str]:
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            UPDATE companies
+            SET settings = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (json.dumps(settings_obj), datetime.now().isoformat(), company_id),
+        )
+        conn.commit()
+        return True, ""
+    except sqlite3.Error as exc:
+        return False, str(exc)
+    finally:
+        conn.close()
+
+
+def _load_inventory_settings_context_for_company(company_name: str) -> dict[str, Any]:
+    normalized_company_name = str(company_name or "").strip()
+    if not normalized_company_name:
+        return {
+            "db_path": None,
+            "company_id": "",
+            "settings": {},
+            "config": _parse_inventory_default_groups_payload({}),
+            "saved_lists": [],
+            "active_list_by_location": {},
+            "catch_all_by_location": {},
+        }
+
+    for db_path in _manager_db_candidates():
+        if not db_path.exists():
+            continue
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                """
+                SELECT id, settings
+                FROM companies
+                WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (normalized_company_name,),
+            ).fetchone()
+        except sqlite3.Error:
+            row = None
+        finally:
+            conn.close()
+
+        if not row:
+            continue
+
+        raw_settings = row["settings"]
+        settings_obj: dict[str, Any]
+        if isinstance(raw_settings, dict):
+            settings_obj = raw_settings
+        elif isinstance(raw_settings, str):
+            text = raw_settings.strip()
+            if not text:
+                settings_obj = {}
+            else:
+                try:
+                    decoded = json.loads(text)
+                    settings_obj = decoded if isinstance(decoded, dict) else {}
+                except Exception:
+                    settings_obj = {}
+        else:
+            settings_obj = {}
+
+        config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
+        saved_lists = _parse_inventory_group_saved_lists_payload(settings_obj.get("inventory_group_saved_lists"))
+        if not config.get("company"):
+            if saved_lists:
+                first_config = _parse_inventory_default_groups_payload((saved_lists[0] or {}).get("config"))
+                if first_config.get("company") or first_config.get("location_overrides"):
+                    config = first_config
+
+        active_map_raw = settings_obj.get("inventory_active_list_by_location")
+        active_map: dict[str, str] = {}
+        if isinstance(active_map_raw, dict):
+            for key, value in active_map_raw.items():
+                map_key = str(key or "").strip()
+                map_value = str(value or "").strip()
+                if map_key and map_value:
+                    active_map[map_key] = map_value
+
+        catch_all_raw = settings_obj.get("inventory_catch_all_by_location")
+        catch_all_map: dict[str, list[str]] = {}
+        if isinstance(catch_all_raw, dict):
+            for key, value in catch_all_raw.items():
+                map_key = str(key or "").strip()
+                if not map_key:
+                    continue
+                map_value = _normalize_product_id_list(value)
+                if map_value:
+                    catch_all_map[map_key] = map_value
+
+        return {
+            "db_path": db_path,
+            "company_id": str(row["id"] or "").strip(),
+            "settings": settings_obj,
+            "config": config,
+            "saved_lists": saved_lists,
+            "active_list_by_location": active_map,
+            "catch_all_by_location": catch_all_map,
+        }
+
+    return {
+        "db_path": None,
+        "company_id": "",
+        "settings": {},
+        "config": _parse_inventory_default_groups_payload({}),
+        "saved_lists": [],
+        "active_list_by_location": {},
+        "catch_all_by_location": {},
+    }
+
 @app.route("/api/shared/restaurants")
 @login_required
 def api_shared_restaurants() -> Response:
@@ -5081,6 +5441,413 @@ def api_shared_restaurants() -> Response:
             },
         }
     )
+
+
+@app.route("/api/shared/inventory-default-groups")
+@login_required
+def api_shared_inventory_default_groups() -> Response:
+    selected_company_id = _effective_company_scope(require_active=True)
+    selected_company_name = _selected_company_name_for_scope()
+    selected_restaurant = _selected_restaurant_record_for_scope(selected_company_id)
+
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    config = settings_context.get("config") if isinstance(settings_context, dict) else {}
+    if not isinstance(config, dict):
+        config = _parse_inventory_default_groups_payload({})
+    saved_lists = settings_context.get("saved_lists") if isinstance(settings_context, dict) else []
+    if not isinstance(saved_lists, list):
+        saved_lists = []
+
+    location_override_rows: list[dict[str, Any]] = []
+    location_key_candidates = _inventory_location_key_candidates(selected_restaurant)
+
+    overrides = config.get("location_overrides") if isinstance(config, dict) else {}
+    if isinstance(overrides, dict):
+        for key in location_key_candidates:
+            rows = overrides.get(key)
+            if isinstance(rows, list):
+                location_override_rows = rows
+                break
+
+    company_rows = config.get("company") if isinstance(config, dict) else []
+    if not isinstance(company_rows, list):
+        company_rows = []
+
+    groups = location_override_rows if location_override_rows else company_rows
+    defaults_map = config.get("default_group_by_location") if isinstance(config, dict) else {}
+    if not isinstance(defaults_map, dict):
+        defaults_map = {}
+
+    default_group_id = ""
+    for key in location_key_candidates + ["*"]:
+        candidate = str(defaults_map.get(key) or "").strip()
+        if candidate:
+            default_group_id = candidate
+            break
+
+    if default_group_id and not any(str((row or {}).get("id") or "").strip() == default_group_id for row in groups if isinstance(row, dict)):
+        default_group_id = ""
+
+    if not default_group_id and len(groups) == 1:
+        default_group_id = str((groups[0] or {}).get("id") or "").strip()
+
+    lists_payload: list[dict[str, Any]] = []
+    seen_list_ids: set[str] = set()
+    for item in saved_lists:
+        if not isinstance(item, dict):
+            continue
+        list_id = str(item.get("id") or "").strip()
+        list_name = str(item.get("name") or "").strip()
+        if not list_id or not list_name or list_id in seen_list_ids:
+            continue
+        seen_list_ids.add(list_id)
+        list_config = item.get("config") if isinstance(item.get("config"), dict) else _parse_inventory_default_groups_payload(item.get("config"))
+        list_groups = list_config.get("company") if isinstance(list_config, dict) else []
+        if not isinstance(list_groups, list):
+            list_groups = []
+        lists_payload.append(
+            {
+                "id": list_id,
+                "name": list_name,
+                "group_count": len(list_groups),
+                "config": list_config,
+            }
+        )
+
+    active_map = settings_context.get("active_list_by_location") if isinstance(settings_context, dict) else {}
+    if not isinstance(active_map, dict):
+        active_map = {}
+    active_list_id = ""
+    for key in location_key_candidates + ["*"]:
+        candidate = str(active_map.get(key) or "").strip()
+        if candidate:
+            active_list_id = candidate
+            break
+
+    catch_all_by_location = settings_context.get("catch_all_by_location") if isinstance(settings_context, dict) else {}
+    if not isinstance(catch_all_by_location, dict):
+        catch_all_by_location = {}
+    catch_all_item_keys: list[str] = []
+    for key in location_key_candidates + ["*"]:
+        candidate = catch_all_by_location.get(key)
+        if isinstance(candidate, list) and candidate:
+            catch_all_item_keys = _normalize_product_id_list(candidate)
+            break
+
+    response_payload = {
+        "ok": bool(groups),
+        "groups": groups,
+        "default_group_id": default_group_id,
+        "inventory_lists": lists_payload,
+        "active_list_id": active_list_id,
+        "catch_all_item_keys": catch_all_item_keys,
+        "company_scope": {
+            "id": int(selected_company_id) if selected_company_id is not None else None,
+            "name": selected_company_name,
+        },
+        "location_scope": {
+            "id": int(selected_restaurant["id"]) if selected_restaurant and selected_restaurant.get("id") else None,
+            "location": str((selected_restaurant or {}).get("location") or ""),
+            "key_candidates": location_key_candidates,
+        },
+        "message": "Inventory default groups loaded" if groups else "No shared inventory default groups configured",
+    }
+
+    return jsonify(response_payload)
+
+
+@app.route("/api/shared/inventory-default-groups/active-list", methods=["GET", "POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_default_groups_active_list() -> Response:
+    if request.method == "GET":
+        requested_list_id = str(request.args.get("list_id") or "").strip()
+    else:
+        payload = request.get_json(silent=True) or {}
+        requested_list_id = str((payload or {}).get("list_id") or "").strip()
+
+    selected_company_id = _effective_company_scope(require_active=True)
+    selected_company_name = _selected_company_name_for_scope()
+    selected_restaurant = _selected_restaurant_record_for_scope(selected_company_id)
+
+    location_key_candidates = _inventory_location_key_candidates(selected_restaurant)
+
+    target_key = location_key_candidates[0] if location_key_candidates else "*"
+
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    active_map_raw = settings_obj.get("inventory_active_list_by_location")
+    active_map: dict[str, str] = {}
+    if isinstance(active_map_raw, dict):
+        for key, value in active_map_raw.items():
+            map_key = str(key or "").strip()
+            map_value = str(value or "").strip()
+            if map_key and map_value:
+                active_map[map_key] = map_value
+
+    if requested_list_id:
+        active_map[target_key] = requested_list_id
+    else:
+        active_map.pop(target_key, None)
+
+    settings_obj["inventory_active_list_by_location"] = active_map
+
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to persist active inventory list: {error_message}"}), 500
+
+    return jsonify(
+        {
+            "ok": True,
+            "active_list_id": str(active_map.get(target_key) or ""),
+            "location_key": target_key,
+            "company_scope": {
+                "id": int(selected_company_id) if selected_company_id is not None else None,
+                "name": selected_company_name,
+            },
+            "message": "Active inventory list updated",
+        }
+    )
+
+
+@app.route("/api/shared/inventory-default-groups/catch-all-sync", methods=["POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_default_groups_catch_all_sync() -> Response:
+    payload = request.get_json(silent=True) or {}
+    current_product_ids = _normalize_product_id_list((payload or {}).get("product_ids"))
+
+    selected_company_id = _effective_company_scope(require_active=True)
+    selected_company_name = _selected_company_name_for_scope()
+    selected_restaurant = _selected_restaurant_record_for_scope(selected_company_id)
+    location_key_candidates = _inventory_location_key_candidates(selected_restaurant)
+    target_key = location_key_candidates[0] if location_key_candidates else "*"
+
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+    catch_all_by_location = settings_context.get("catch_all_by_location") if isinstance(settings_context, dict) else {}
+
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not isinstance(catch_all_by_location, dict):
+        catch_all_by_location = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    previous_order: list[str] = []
+    for key in location_key_candidates + ["*"]:
+        candidate = catch_all_by_location.get(key)
+        if isinstance(candidate, list) and candidate:
+            previous_order = _normalize_product_id_list(candidate)
+            break
+
+    merged_order = _merge_catch_all_order(previous_order, current_product_ids)
+    catch_all_by_location[target_key] = merged_order
+    settings_obj["inventory_catch_all_by_location"] = catch_all_by_location
+
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to persist Catch All list: {error_message}"}), 500
+
+    return jsonify(
+        {
+            "ok": True,
+            "location_key": target_key,
+            "count": len(merged_order),
+            "message": "Catch All order synced",
+        }
+    )
+
+
+@app.route("/api/shared/inventory-default-groups/list-create", methods=["POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_list_create() -> Response:
+    payload = request.get_json(silent=True) or {}
+    list_name = str((payload or {}).get("name") or "").strip()
+    if not list_name:
+        return jsonify({"ok": False, "message": "List name is required"}), 400
+    if list_name.lower() == "catch all":
+        return jsonify({"ok": False, "message": "Catch All is reserved"}), 400
+
+    selected_company_name = _selected_company_name_for_scope()
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
+    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+
+    normalized_name = list_name.casefold()
+    for group in company_groups:
+        existing_name = str((group or {}).get("name") or "").strip()
+        if existing_name and existing_name.casefold() == normalized_name:
+            return jsonify({"ok": False, "message": "A list with that name already exists"}), 409
+
+    new_group_id = f"grp_{uuid.uuid4().hex[:10]}"
+    company_groups.append({"id": new_group_id, "name": list_name, "item_keys": []})
+    config["company"] = company_groups
+    settings_obj["inventory_default_groups"] = config
+
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to create list: {error_message}"}), 500
+
+    return jsonify({"ok": True, "id": new_group_id, "name": list_name, "message": "List created"})
+
+
+@app.route("/api/shared/inventory-default-groups/list-rename", methods=["POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_list_rename() -> Response:
+    payload = request.get_json(silent=True) or {}
+    list_id = str((payload or {}).get("list_id") or "").strip()
+    list_name = str((payload or {}).get("name") or "").strip()
+    if not list_id or not list_name:
+        return jsonify({"ok": False, "message": "list_id and name are required"}), 400
+    if list_id == "catch_all":
+        return jsonify({"ok": False, "message": "Catch All cannot be renamed"}), 400
+
+    selected_company_name = _selected_company_name_for_scope()
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
+    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+
+    found = False
+    for group in company_groups:
+        if str((group or {}).get("id") or "").strip() == list_id:
+            group["name"] = list_name
+            found = True
+            break
+    if not found:
+        return jsonify({"ok": False, "message": "List not found"}), 404
+
+    config["company"] = company_groups
+    settings_obj["inventory_default_groups"] = config
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to rename list: {error_message}"}), 500
+
+    return jsonify({"ok": True, "message": "List renamed"})
+
+
+@app.route("/api/shared/inventory-default-groups/list-delete", methods=["POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_list_delete() -> Response:
+    payload = request.get_json(silent=True) or {}
+    list_id = str((payload or {}).get("list_id") or "").strip()
+    if not list_id:
+        return jsonify({"ok": False, "message": "list_id is required"}), 400
+    if list_id == "catch_all":
+        return jsonify({"ok": False, "message": "Catch All cannot be deleted"}), 400
+
+    selected_company_name = _selected_company_name_for_scope()
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
+    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    next_groups = [group for group in company_groups if str((group or {}).get("id") or "").strip() != list_id]
+    if len(next_groups) == len(company_groups):
+        return jsonify({"ok": False, "message": "List not found"}), 404
+    config["company"] = next_groups
+
+    defaults_map = config.get("default_group_by_location") if isinstance(config.get("default_group_by_location"), dict) else {}
+    cleaned_defaults: dict[str, str] = {}
+    for key, value in defaults_map.items():
+        map_key = str(key or "").strip()
+        map_value = str(value or "").strip()
+        if map_key and map_value and map_value != list_id:
+            cleaned_defaults[map_key] = map_value
+    config["default_group_by_location"] = cleaned_defaults
+    settings_obj["inventory_default_groups"] = config
+
+    active_map_raw = settings_obj.get("inventory_active_list_by_location")
+    if isinstance(active_map_raw, dict):
+        settings_obj["inventory_active_list_by_location"] = {
+            str(key or "").strip(): str(value or "").strip()
+            for key, value in active_map_raw.items()
+            if str(key or "").strip() and str(value or "").strip() and str(value or "").strip() != list_id
+        }
+
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to delete list: {error_message}"}), 500
+
+    return jsonify({"ok": True, "message": "List deleted"})
+
+
+@app.route("/api/shared/inventory-default-groups/list-items", methods=["POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_list_items() -> Response:
+    payload = request.get_json(silent=True) or {}
+    list_id = str((payload or {}).get("list_id") or "").strip()
+    item_keys = _normalize_product_id_list((payload or {}).get("item_keys"))
+    if not list_id:
+        return jsonify({"ok": False, "message": "list_id is required"}), 400
+    if list_id == "catch_all":
+        return jsonify({"ok": False, "message": "Catch All is system-managed"}), 400
+
+    selected_company_name = _selected_company_name_for_scope()
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
+    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+
+    found = False
+    for group in company_groups:
+        if str((group or {}).get("id") or "").strip() == list_id:
+            group["item_keys"] = item_keys
+            found = True
+            break
+    if not found:
+        return jsonify({"ok": False, "message": "List not found"}), 404
+
+    config["company"] = company_groups
+    settings_obj["inventory_default_groups"] = config
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to save list items: {error_message}"}), 500
+
+    return jsonify({"ok": True, "count": len(item_keys), "message": "List items saved"})
 
 @app.route("/api/dashboard")
 @login_required
