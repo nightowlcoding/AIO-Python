@@ -134,27 +134,35 @@ _MGR_BACKUP_STATE_LOCK = threading.Lock()
 _MGR_BACKUP_LAST_RUN: dict[str, Any] | None = None
 _MGR_BACKUP_THREAD_STARTED = False
 _RBAC_WAL_DISABLED = False
-_EMERGENCY_BACKUP_PRUNE_ATTEMPTED = False
 
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
 
 
-def _emergency_prune_local_backups_for_space(max_keep: int = 0) -> None:
-    global _EMERGENCY_BACKUP_PRUNE_ATTEMPTED
-    if _EMERGENCY_BACKUP_PRUNE_ATTEMPTED:
-        return
-    _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = True
-
+def _emergency_prune_local_backups_for_space(max_keep: int = 5) -> None:
+    """Prune old backup snapshots to free disk space. Runs every time it is called
+    (not limited to once per process) so that repeated disk-full events are handled."""
     backup_tree = _render_data_root / "backups"
 
     try:
-        if backup_tree.exists() and backup_tree.is_dir():
-            shutil.rmtree(backup_tree, ignore_errors=True)
-            print("[dexter] Emergency backup prune executed (cleared /dexter-data/backups)", file=sys.stderr)
-        else:
+        if not (backup_tree.exists() and backup_tree.is_dir()):
             print("[dexter] Emergency backup prune skipped (backup tree not found)", file=sys.stderr)
+            return
+
+        all_snapshots = sorted(
+            [p for p in backup_tree.rglob("*snapshot_*") if p.is_dir() and p.parent != p],
+            key=lambda p: p.name,
+        )
+        # Keep only the most recent max_keep snapshots across all subdirs
+        to_delete = all_snapshots[: max(0, len(all_snapshots) - max_keep)]
+        for snap in to_delete:
+            shutil.rmtree(snap, ignore_errors=True)
+
+        if to_delete:
+            print(f"[dexter] Emergency backup prune: deleted {len(to_delete)} old snapshots, kept {max_keep}", file=sys.stderr)
+        else:
+            print("[dexter] Emergency backup prune: nothing to prune", file=sys.stderr)
     except OSError as prune_error:
-        print(f"[dexter] Emergency backup prune skipped: {prune_error}", file=sys.stderr)
+        print(f"[dexter] Emergency backup prune failed: {prune_error}", file=sys.stderr)
 
 
 def _bootstrap_auth_storage_from_legacy() -> None:
@@ -6580,7 +6588,7 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
                     raise RuntimeError(f"NAS backup required but failed: {nas_exc}")
 
         snapshots = sorted(
-            [p for p in backup_root.glob("snapshot_*") if p.is_dir()],
+            [p for p in backup_root.glob("*snapshot_*") if p.is_dir()],
             key=lambda p: p.name,
         )
         keep = int(cfg["keep_snapshots"])
