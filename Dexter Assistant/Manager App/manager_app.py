@@ -3,7 +3,7 @@ from flask import send_from_directory
 Dexter Restaurant Management Assistant - Flask Web Application
 Multi-tenant restaurant management system
 """
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
@@ -13,6 +13,8 @@ import csv
 import json
 import sqlite3
 import shutil
+import tempfile
+import zipfile
 from datetime import datetime, timedelta
 import secrets
 import re
@@ -25,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 import database
-from security import InputValidator
+from security import InputValidator, ComplianceLogger
 
 
 def _is_subpath(path: Path, root: Path) -> bool:
@@ -171,8 +173,9 @@ def _load_persistent_secret_key() -> str:
 app = Flask(__name__)
 app.config['SECRET_KEY'] = _load_persistent_secret_key()
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
-app.config['TEMPLATES_AUTO_RELOAD'] = os.environ.get('MGR_TEMPLATE_RELOAD', '0') == '1'
-app.jinja_env.auto_reload = app.config['TEMPLATES_AUTO_RELOAD']
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.jinja_env.auto_reload = True
+app.jinja_env.cache = {}
 
 # Cookie isolation: Manager App is proxied behind Dexter on the same browser
 # origin (localhost:5080). Distinct cookie names + path scope prevent the
@@ -204,7 +207,8 @@ def _rate_limit_key() -> str:
 limiter = Limiter(
     key_func=_rate_limit_key,
     app=app,
-    default_limits=[]
+    default_limits=[],
+    storage_uri=os.environ.get('MGR_RATE_LIMIT_STORAGE', 'memory://')
 )
 
 # Password strength checker
@@ -333,6 +337,229 @@ def _resolve_effective_location_id(locations_list):
 
     session.pop('selected_location_id', None)
     return None
+
+
+def _build_admin_export_bundle() -> Path:
+    export_root = Path(tempfile.mkdtemp(prefix='managerapp_export_'))
+    bundle_root = export_root / 'managerapp_export'
+    bundle_root.mkdir(parents=True, exist_ok=True)
+
+    company_id = current_user.current_company_id
+    company = db.get_company(company_id) or {}
+    users = db.get_company_users(company_id)
+    audit_logs = db.get_audit_log(company_id=company_id, limit=1000)
+
+    manifest = {
+        'generated_at': datetime.now().isoformat(timespec='seconds'),
+        'export_scope': 'business_admin_company',
+        'company_id': company_id,
+        'company_name': company.get('name'),
+        'user_id': current_user.id,
+        'username': current_user.username,
+        'company_users_count': len(users),
+        'audit_log_count': len(audit_logs),
+        'source_is_read_only': True,
+    }
+    (bundle_root / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+
+    user_profile = {
+        'id': current_user.id,
+        'username': current_user.username,
+        'email': current_user.email,
+        'full_name': current_user.full_name,
+        'current_company_id': current_user.current_company_id,
+        'current_role': current_user.current_role,
+        'companies': current_user.companies,
+    }
+    (bundle_root / 'user_profile.json').write_text(json.dumps(user_profile, indent=2), encoding='utf-8')
+    (bundle_root / 'company.json').write_text(json.dumps(company, indent=2), encoding='utf-8')
+    (bundle_root / 'company_users.json').write_text(json.dumps(users, indent=2, default=str), encoding='utf-8')
+    (bundle_root / 'audit_logs.json').write_text(json.dumps(audit_logs, indent=2, default=str), encoding='utf-8')
+
+    csv_path = bundle_root / 'audit_logs.csv'
+    if audit_logs:
+        with csv_path.open('w', newline='', encoding='utf-8') as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(audit_logs[0].keys()))
+            writer.writeheader()
+            writer.writerows(audit_logs)
+
+    company_data_root = (Path(__file__).resolve().parent / 'company_data' / str(company_id)).resolve()
+    if company_data_root.exists() and company_data_root.is_dir():
+        export_company_root = bundle_root / 'company_data' / str(company_id)
+        for source_path in company_data_root.rglob('*'):
+            relative_path = source_path.relative_to(company_data_root)
+            destination_path = export_company_root / relative_path
+            if source_path.is_dir():
+                destination_path.mkdir(parents=True, exist_ok=True)
+            else:
+                destination_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination_path)
+
+    readme_path = bundle_root / 'README.txt'
+    readme_path.write_text(
+        'Manager App export package\n\n'
+        'This archive contains read-only company and user data for local analysis.\n\n'
+        'Contents:\n'
+        '- manifest.json\n'
+        '- user_profile.json\n'
+        '- company.json\n'
+        '- company_users.json\n'
+        '- audit_logs.json\n'
+        '- audit_logs.csv (if available)\n'
+        '- company_data/<company_id>/\n',
+        encoding='utf-8',
+    )
+
+    zip_path = export_root / f"managerapp_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
+        for file_path in bundle_root.rglob('*'):
+            if file_path.is_file():
+                zipf.write(file_path, file_path.relative_to(bundle_root))
+
+    return zip_path
+
+
+def _send_admin_export_zip() -> Response:
+    export_zip = _build_admin_export_bundle()
+    response = send_file(
+        export_zip,
+        as_attachment=True,
+        download_name=export_zip.name,
+        mimetype='application/zip',
+        max_age=0,
+        conditional=False,
+    )
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+    response.headers['Pragma'] = 'no-cache'
+
+    cleanup_root = export_zip.parent
+
+    @response.call_on_close
+    def _cleanup_export_bundle() -> None:
+        shutil.rmtree(cleanup_root, ignore_errors=True)
+
+    try:
+        ComplianceLogger.log_data_export(current_user.id, current_user.current_company_id, 'admin_bundle')
+    except Exception:
+        pass
+
+    return response
+
+
+def _safe_parse_inventory_default_groups(raw_value):
+    if isinstance(raw_value, dict):
+        payload = raw_value
+    elif isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text:
+            payload = {}
+        else:
+            try:
+                payload = json.loads(text)
+            except Exception:
+                payload = {}
+    else:
+        payload = {}
+
+    company_rows = payload.get('company') if isinstance(payload, dict) else []
+    location_rows = payload.get('location_overrides') if isinstance(payload, dict) else {}
+    defaults_map = payload.get('default_group_by_location') if isinstance(payload, dict) else {}
+
+    if not isinstance(company_rows, list):
+        company_rows = []
+    if not isinstance(location_rows, dict):
+        location_rows = {}
+    if not isinstance(defaults_map, dict):
+        defaults_map = {}
+
+    def _normalize_group_rows(rows):
+        normalized = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            group_id = str(row.get('id') or '').strip()
+            group_name = str(row.get('name') or '').strip()
+            if not group_id:
+                group_id = f"grp_{uuid.uuid4().hex[:10]}"
+            if not group_name:
+                continue
+            item_keys = row.get('item_keys')
+            if isinstance(item_keys, str):
+                item_keys = [part.strip() for part in item_keys.split(',') if part.strip()]
+            if not isinstance(item_keys, list):
+                item_keys = []
+            canonical_keys = []
+            seen = set()
+            for value in item_keys:
+                key = str(value or '').strip()
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                canonical_keys.append(key)
+            normalized.append({'id': group_id, 'name': group_name, 'item_keys': canonical_keys})
+        return normalized
+
+    normalized_company = _normalize_group_rows(company_rows)
+    normalized_location = {}
+    for location_id, rows in location_rows.items():
+        loc_key = str(location_id or '').strip()
+        if not loc_key or not isinstance(rows, list):
+            continue
+        normalized_location[loc_key] = _normalize_group_rows(rows)
+
+    normalized_defaults = {}
+    for key, value in defaults_map.items():
+        map_key = str(key or '').strip()
+        map_value = str(value or '').strip()
+        if map_key and map_value:
+            normalized_defaults[map_key] = map_value
+
+    return {
+        'company': normalized_company,
+        'location_overrides': normalized_location,
+        'default_group_by_location': normalized_defaults,
+    }
+
+
+def _safe_parse_inventory_group_saved_lists(raw_value):
+    if isinstance(raw_value, list):
+        payload = raw_value
+    elif isinstance(raw_value, dict):
+        candidate = raw_value.get('lists')
+        payload = candidate if isinstance(candidate, list) else []
+    elif isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text:
+            payload = []
+        else:
+            try:
+                decoded = json.loads(text)
+            except Exception:
+                decoded = []
+            if isinstance(decoded, list):
+                payload = decoded
+            elif isinstance(decoded, dict) and isinstance(decoded.get('lists'), list):
+                payload = decoded.get('lists')
+            else:
+                payload = []
+    else:
+        payload = []
+
+    normalized = []
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        list_id = str(entry.get('id') or '').strip() or f"list_{uuid.uuid4().hex[:10]}"
+        list_name = str(entry.get('name') or '').strip()
+        if not list_name:
+            continue
+        config = _safe_parse_inventory_default_groups(entry.get('config'))
+        normalized.append({
+            'id': list_id,
+            'name': list_name,
+            'config': config,
+        })
+    return normalized
 
 
 def _find_active_user_for_dexter_bridge(username, email):
@@ -1580,6 +1807,9 @@ def create_company():
 def dashboard():
     """Main dashboard"""
     company = db.get_company(current_user.current_company_id)
+    selected_location = _resolve_effective_location_id(
+        _effective_location_options(current_user.current_company_id)
+    )
     
     # Get today's sales from daily log
     today = datetime.now().strftime('%Y-%m-%d')
@@ -1606,7 +1836,8 @@ def dashboard():
         users=users,
         user_count=len(users),
         today_sales=today_sales,
-        cash_on_hand=cash_on_hand
+        cash_on_hand=cash_on_hand,
+        selected_location_id=selected_location
     )
 
 
@@ -2516,8 +2747,16 @@ def settings():
                 
                 conn.commit()
                 
-                db.log_action(current_user.id, 'company_updated', current_user.current_company_id,
-                             {'company_name': name, 'archive_retention_days': settings_data['archive_retention_days']})
+                db.log_action(
+                    current_user.id,
+                    'company_updated',
+                    current_user.current_company_id,
+                    {
+                        'company_name': name,
+                        'archive_retention_days': settings_data['archive_retention_days'],
+                        'inventory_default_group_count': len((settings_data.get('inventory_default_groups') or {}).get('company') or []),
+                    }
+                )
                 flash('Company information updated successfully!', 'success')
             except Exception as e:
                 flash(f'Error updating company information: {str(e)}', 'danger')
@@ -2525,7 +2764,90 @@ def settings():
                 conn.close()
 
     archive_retention_days = int((settings_data or {}).get('archive_retention_days') or 30)
-    return render_template('settings.html', company=company, archive_retention_days=archive_retention_days)
+    return render_template(
+        'settings.html',
+        company=company,
+        archive_retention_days=archive_retention_days,
+    )
+
+
+@app.route('/inventory-groups', methods=['GET', 'POST'])
+@login_required
+@company_required
+@role_required('business_admin', 'manager')
+def inventory_groups():
+    """Dedicated page for IC3 inventory group management."""
+    company = db.get_company(current_user.current_company_id) or {}
+    locations_list = _effective_location_options(current_user.current_company_id)
+    selected_location_id = _resolve_effective_location_id(locations_list)
+    settings_data = company.get('settings') or {}
+    if isinstance(settings_data, str):
+        try:
+            settings_data = json.loads(settings_data)
+        except Exception:
+            settings_data = {}
+
+    inventory_default_groups = _safe_parse_inventory_default_groups((settings_data or {}).get('inventory_default_groups'))
+    inventory_group_saved_lists = _safe_parse_inventory_group_saved_lists((settings_data or {}).get('inventory_group_saved_lists'))
+
+    if request.method == 'POST':
+        inventory_default_groups_raw = request.form.get('inventory_default_groups_json', '').strip()
+        inventory_group_saved_lists_raw = request.form.get('inventory_group_saved_lists_json', '').strip()
+        if inventory_default_groups_raw:
+            settings_data['inventory_default_groups'] = _safe_parse_inventory_default_groups(inventory_default_groups_raw)
+        else:
+            settings_data['inventory_default_groups'] = _safe_parse_inventory_default_groups(
+                (settings_data or {}).get('inventory_default_groups')
+            )
+
+        if inventory_group_saved_lists_raw:
+            settings_data['inventory_group_saved_lists'] = _safe_parse_inventory_group_saved_lists(inventory_group_saved_lists_raw)
+        else:
+            settings_data['inventory_group_saved_lists'] = _safe_parse_inventory_group_saved_lists(
+                (settings_data or {}).get('inventory_group_saved_lists')
+            )
+
+        saved_lists = _safe_parse_inventory_group_saved_lists(settings_data.get('inventory_group_saved_lists'))
+        if saved_lists:
+            first_config = _safe_parse_inventory_default_groups((saved_lists[0] or {}).get('config'))
+            settings_data['inventory_default_groups'] = first_config
+
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                '''
+                UPDATE companies
+                SET settings = ?, updated_at = ?
+                WHERE id = ?
+                ''',
+                (json.dumps(settings_data), datetime.now().isoformat(), current_user.current_company_id),
+            )
+            conn.commit()
+            db.log_action(
+                current_user.id,
+                'inventory_groups_updated',
+                current_user.current_company_id,
+                {
+                    'inventory_default_group_count': len((settings_data.get('inventory_default_groups') or {}).get('company') or []),
+                },
+            )
+            flash('Inventory groups updated successfully!', 'success')
+        except Exception as exc:
+            flash(f'Error updating inventory groups: {str(exc)}', 'danger')
+        finally:
+            conn.close()
+
+        return redirect(url_for('inventory_groups'))
+
+    return render_template(
+        'inventory_groups.html',
+        company=company,
+        locations=locations_list,
+        selected_location_id=selected_location_id,
+        inventory_default_groups=inventory_default_groups,
+        inventory_group_saved_lists=inventory_group_saved_lists,
+    )
 
 
 def _redirect_to_central_location_admin():
@@ -2622,6 +2944,16 @@ def api_data_export():
     # This would generate and return the export
     # For now, return status
     return jsonify({'status': 'Export initiated'})
+
+
+@app.route('/admin/data-export')
+@app.route('/api/admin/data-export')
+@login_required
+@company_required
+@role_required('business_admin')
+def api_admin_data_export():
+    """Download a read-only company export ZIP for local analysis."""
+    return _send_admin_export_zip()
 
 
 @app.route('/api/employee-names')
