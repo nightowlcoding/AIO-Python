@@ -1082,11 +1082,13 @@ def _sqlite_backup_copy(source_path: Path, destination_path: Path) -> bool:
 
 
 def _collect_export_manifest() -> dict[str, Any]:
+    backup_paths = _manager_backup_paths()
     manifest: dict[str, Any] = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "auth_users_path": str(AUTH_USERS_PATH),
         "rbac_db_path": str(RBAC_DB_PATH),
         "company_storage_root": str(COMPANY_STORAGE_ROOT),
+        "manager_backup_paths": {k: str(v) for k, v in backup_paths.items()},
         "source_is_read_only": True,
     }
 
@@ -1123,10 +1125,40 @@ def _collect_export_manifest() -> dict[str, Any]:
     except Exception as exc:
         manifest["company_storage_error"] = str(exc)
 
+    for key, manifest_key in [
+        ("company_data_path", "manager_company_data_files"),
+        ("inventory_data_root", "inventory_data_files"),
+        ("daily_logs_root", "daily_logs_files"),
+        ("uploads_root", "uploads_files"),
+        ("order_invoices_root", "order_invoices_files"),
+        ("reports_root", "reports_files"),
+        ("ic3_data_path", "ic3_data_files"),
+    ]:
+        try:
+            source_root = backup_paths[key]
+            manifest[manifest_key] = sum(1 for path in source_root.rglob("*") if path.is_file()) if source_root.exists() else 0
+        except Exception as exc:
+            manifest[f"{manifest_key}_error"] = str(exc)
+
+    try:
+        product_mix_db = backup_paths["productmix_root"] / "product_mix.db"
+        manifest["product_mix_db_exists"] = product_mix_db.exists()
+        manifest["product_mix_db_bytes"] = int(product_mix_db.stat().st_size) if product_mix_db.exists() else 0
+    except Exception as exc:
+        manifest["product_mix_db_error"] = str(exc)
+
+    try:
+        manager_db = backup_paths["db_path"]
+        manifest["manager_db_exists"] = manager_db.exists()
+        manifest["manager_db_bytes"] = int(manager_db.stat().st_size) if manager_db.exists() else 0
+    except Exception as exc:
+        manifest["manager_db_error"] = str(exc)
+
     return manifest
 
 
 def _build_export_bundle() -> Path:
+    backup_paths = _manager_backup_paths()
     export_root = Path(tempfile.mkdtemp(prefix="dexter_export_"))
     bundle_root = export_root / "dexter_data_export"
     bundle_root.mkdir(parents=True, exist_ok=True)
@@ -1158,6 +1190,50 @@ def _build_export_bundle() -> Path:
                 destination_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source_path, destination_path)
 
+    manager_root = bundle_root / "managerapp"
+    manager_company_data = backup_paths["company_data_path"]
+    if manager_company_data.exists() and manager_company_data.is_dir():
+        manager_company_dest = manager_root / "company_data"
+        for source_path in manager_company_data.rglob("*"):
+            relative_path = source_path.relative_to(manager_company_data)
+            destination_path = manager_company_dest / relative_path
+            if source_path.is_dir():
+                destination_path.mkdir(parents=True, exist_ok=True)
+            else:
+                destination_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination_path)
+
+    manager_db_path = backup_paths["db_path"]
+    if manager_db_path.exists():
+        manager_root.mkdir(parents=True, exist_ok=True)
+        _sqlite_backup_copy(manager_db_path, manager_root / manager_db_path.name)
+
+    productmix_db_path = backup_paths["productmix_root"] / "product_mix.db"
+    if productmix_db_path.exists():
+        productmix_dest = bundle_root / "ProductMixRestaurantDB"
+        productmix_dest.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(productmix_db_path, productmix_dest / productmix_db_path.name)
+
+    for source_root, folder_name in [
+        (backup_paths["inventory_data_root"], "inventory_data"),
+        (backup_paths["daily_logs_root"], "daily_logs"),
+        (backup_paths["uploads_root"], "uploads"),
+        (backup_paths["order_invoices_root"], "OrderInvoices"),
+        (backup_paths["reports_root"], "reports"),
+        (backup_paths["ic3_data_path"], "ic3_data"),
+    ]:
+        if not source_root.exists() or not source_root.is_dir():
+            continue
+        destination_root = bundle_root / folder_name
+        for source_path in source_root.rglob("*"):
+            relative_path = source_path.relative_to(source_root)
+            destination_path = destination_root / relative_path
+            if source_path.is_dir():
+                destination_path.mkdir(parents=True, exist_ok=True)
+            else:
+                destination_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, destination_path)
+
     readme_path = bundle_root / "README.txt"
     readme_path.write_text(
         "Dexter Assistant export package\n\n"
@@ -1167,6 +1243,15 @@ def _build_export_bundle() -> Path:
         "- auth/dexter_assistant_users.json\n"
         "- auth/dexter_assistant_rbac.db\n"
         "- company_data/\n"
+        "- managerapp/company_data/\n"
+        "- managerapp/manager_app.db\n"
+        "- ProductMixRestaurantDB/product_mix.db\n"
+        "- inventory_data/\n"
+        "- daily_logs/\n"
+        "- uploads/\n"
+        "- OrderInvoices/\n"
+        "- reports/\n"
+        "- ic3_data/\n"
         "- manifest.json\n"
         "- dexter_assistant_config.json (if present)\n",
         encoding="utf-8",
@@ -1292,6 +1377,49 @@ def _import_export_bundle(zip_path: Path) -> dict[str, Any]:
         COMPANY_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
         shutil.copytree(company_data_source, COMPANY_STORAGE_ROOT, dirs_exist_ok=True)
         imported["applied"].append("company_data")
+
+    backup_paths = _manager_backup_paths()
+
+    manager_root = extract_root / "managerapp"
+    manager_company_data_source = manager_root / "company_data"
+    if manager_company_data_source.exists() and manager_company_data_source.is_dir():
+        manager_company_target = backup_paths["company_data_path"]
+        if manager_company_target.exists() and manager_company_target.is_dir():
+            shutil.rmtree(manager_company_target, ignore_errors=True)
+        manager_company_target.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(manager_company_data_source, manager_company_target, dirs_exist_ok=True)
+        imported["applied"].append("manager_company_data")
+
+    manager_db_source = manager_root / backup_paths["db_path"].name
+    if manager_db_source.exists():
+        manager_db_target = backup_paths["db_path"]
+        manager_db_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(manager_db_source, manager_db_target)
+        imported["applied"].append("manager_db")
+
+    productmix_db_source = extract_root / "ProductMixRestaurantDB" / "product_mix.db"
+    if productmix_db_source.exists():
+        productmix_target_dir = backup_paths["productmix_root"]
+        productmix_target_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(productmix_db_source, productmix_target_dir / "product_mix.db")
+        imported["applied"].append("product_mix_db")
+
+    for folder_name, target_path, applied_name in [
+        ("inventory_data", backup_paths["inventory_data_root"], "inventory_data"),
+        ("daily_logs", backup_paths["daily_logs_root"], "daily_logs"),
+        ("uploads", backup_paths["uploads_root"], "uploads"),
+        ("OrderInvoices", backup_paths["order_invoices_root"], "order_invoices"),
+        ("reports", backup_paths["reports_root"], "reports"),
+        ("ic3_data", backup_paths["ic3_data_path"], "ic3_data"),
+    ]:
+        source_root = extract_root / folder_name
+        if not source_root.exists() or not source_root.is_dir():
+            continue
+        if target_path.exists() and target_path.is_dir():
+            shutil.rmtree(target_path, ignore_errors=True)
+        target_path.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source_root, target_path, dirs_exist_ok=True)
+        imported["applied"].append(applied_name)
 
     imported["manifest"] = manifest
     imported["users_imported"] = imported_users
@@ -6708,7 +6836,7 @@ def manager_backup_status() -> Response:
 @login_required
 @role_required("Super Admin")
 def manager_backup_run_now() -> Response:
-    payload = _run_manager_backup("manual")
+    payload = _run_manager_backup("manual", mode="full")
     status = 200 if payload.get("ok") else 500
     return jsonify(payload), status
 
