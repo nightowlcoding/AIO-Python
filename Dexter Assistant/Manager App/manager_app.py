@@ -3,7 +3,7 @@ from flask import send_from_directory
 Dexter Restaurant Management Assistant - Flask Web Application
 Multi-tenant restaurant management system
 """
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
+from flask import Flask, Response, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
