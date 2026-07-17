@@ -53,6 +53,7 @@ LEGACY_BRANDING_LOGO_PATH = ROOT.parent / "Restaurant Management" / "Manager App
 _render_data_root = Path("/dexter-data")
 _render_data_writable = False
 _running_on_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID") or os.environ.get("RENDER_EXTERNAL_URL"))
+_allow_hosted_data_import = str(os.environ.get("DEXTER_ALLOW_HOSTED_DATA_IMPORT", "")).strip().lower() in {"1", "true", "yes", "on"}
 if not _running_on_render and _render_data_root.exists():
     _running_on_render = True
 if _render_data_root.exists():
@@ -88,6 +89,10 @@ except OSError as e:
         print(f"[dexter] FATAL: Could not create fallback AUTH_STORAGE_ROOT: {e2}", file=sys.stderr)
     AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 AUTH_USERS_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_users.json"
+
+
+def _hosted_data_import_enabled() -> bool:
+    return (not _running_on_render) or _allow_hosted_data_import
 RBAC_DB_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_rbac.db"
 
 LEGACY_AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
@@ -4623,10 +4628,11 @@ def admin_audit_logs_page() -> Response:
 @login_required
 @role_required("Super Admin")
 def admin_data_export_page() -> Response:
-        manifest = _collect_export_manifest()
-        return Response(
-                render_template_string(
-                        """
+    manifest = _collect_export_manifest()
+    import_enabled = _hosted_data_import_enabled()
+    return Response(
+        render_template_string(
+            """
 <!doctype html>
 <html lang="en">
 <head>
@@ -4657,11 +4663,15 @@ def admin_data_export_page() -> Response:
         {% if message %}<div class="warn" style="background:#ecfdf5;border-color:#86efac;color:#166534;">{{ message }}</div>{% endif %}
         {% if error %}<div class="warn" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">{{ error }}</div>{% endif %}
         <a class="btn primary" href="/api/admin/data-export">Download ZIP export</a>
+        {% if import_enabled %}
         <form method="post" action="/api/admin/data-import" enctype="multipart/form-data" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <input type="file" name="export_zip" accept=".zip" required />
             <button class="btn" type="submit">Import ZIP into local app</button>
         </form>
         <div class="small" style="margin-top:8px;">The import backs up the current local auth DB, users JSON, and company_data tree before replacing them with the selected export.</div>
+        {% else %}
+        <div class="warn">Hosted import is disabled. Download the ZIP here, then import it only into your local Dexter Assistant copy.</div>
+        {% endif %}
         <div class="grid">
             <div class="stat"><div class="label">Users</div><div class="value">{{ manifest.rbac_counts.users if manifest.rbac_counts else 'n/a' }}</div></div>
             <div class="stat"><div class="label">Companies</div><div class="value">{{ manifest.rbac_counts.companies if manifest.rbac_counts else 'n/a' }}</div></div>
@@ -4673,12 +4683,13 @@ def admin_data_export_page() -> Response:
     </div>
 </body>
 </html>
-                        """,
-                        manifest=manifest,
+            """,
+            manifest=manifest,
+            import_enabled=import_enabled,
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
-                )
         )
+    )
 
 
 @app.route("/api/admin/data-export", methods=["GET"])
@@ -4711,6 +4722,11 @@ def api_admin_data_export() -> Response:
 @login_required
 @role_required("Super Admin")
 def api_admin_data_import() -> Response:
+    if not _hosted_data_import_enabled():
+        return redirect(
+            f"/admin/data-export?error={requests.utils.quote('Hosted import is disabled. Use your local Dexter Assistant copy for imports only.')}"
+        )
+
     upload = request.files.get("export_zip")
     if upload is None or not str(getattr(upload, "filename", "") or "").strip():
         return redirect(f"/admin/data-export?error={requests.utils.quote('Please choose a ZIP export file.')}")
@@ -6737,6 +6753,7 @@ def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str,
 def _manager_backup_config() -> dict[str, Any]:
     keep_snapshots = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_KEEP_SNAPSHOTS", "672")))
     enabled = _env_flag("DEXTER_MGR_BACKUP_ENABLED", default=True)
+    interval_minutes = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_INTERVAL_MINUTES", "30")))
     nas_enabled = _env_flag("DEXTER_NAS_BACKUP_ENABLED", default=(os.name == "nt"))
     nas_required = _env_flag("DEXTER_NAS_BACKUP_REQUIRED", default=False)
     nas_root = str((os.environ.get("DEXTER_NAS_BACKUP_ROOT") or DEFAULT_NAS_BACKUP_ROOT).strip())
@@ -6749,6 +6766,7 @@ def _manager_backup_config() -> dict[str, Any]:
             critical_schedule_times.append(value)
     return {
         "enabled": enabled,
+        "interval_minutes": interval_minutes,
         "keep_snapshots": keep_snapshots,
         "nas_enabled": nas_enabled,
         "nas_required": nas_required,
