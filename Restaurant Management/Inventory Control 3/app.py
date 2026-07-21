@@ -85,6 +85,7 @@ OVERRIDE_SCRIPT = r"""
     const state = {
         bulkInvoices: [],
         selectedInvoiceImportIds: new Set(),
+        selectedInvoiceRowKeys: new Set(),
     };
 
     function parseDateFromFilename(filename) {
@@ -163,6 +164,15 @@ OVERRIDE_SCRIPT = r"""
         return headers.includes('import id') && headers.includes('date/time') && headers.includes('filename') && headers.includes('actions');
     }
 
+    function buildInvoiceRowKey(row, fallbackIndex) {
+        const cells = Array.from(row.querySelectorAll('td'));
+        const importId = cells[0] ? String(cells[0].innerText || '').trim() : '';
+        const timestamp = cells[1] ? String(cells[1].innerText || '').trim() : '';
+        const filename = cells[2] ? String(cells[2].innerText || '').trim() : '';
+        const deliveryDate = cells[3] ? String(cells[3].innerText || '').trim() : '';
+        return [importId, timestamp, filename, deliveryDate, String(fallbackIndex || 0)].join('||');
+    }
+
     function updateInvoiceSelectionUi(table) {
         const panel = table.previousElementSibling;
         const countEl = panel && panel.classList.contains('ic3-invoice-bulk-tools')
@@ -196,22 +206,26 @@ OVERRIDE_SCRIPT = r"""
     async function bulkDeleteInvoiceImports(table) {
         const checkboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox:checked'));
         const selectedRows = checkboxes
-            .map((cb) => ({ importId: String(cb.dataset.importId || '').trim() }))
+            .map((cb) => ({
+                importId: String(cb.dataset.importId || '').trim(),
+                rowKey: String(cb.dataset.rowKey || '').trim(),
+            }))
             .filter((row) => !!row.importId);
         if (!selectedRows.length) {
             alert('Select at least one invoice import to delete.');
             return;
         }
 
-        if (!confirm('Delete ' + selectedRows.length + ' selected invoice import(s)? This cannot be undone.')) {
+        const uniqueImportIds = Array.from(new Set(selectedRows.map((row) => row.importId)));
+
+        if (!confirm('Delete ' + uniqueImportIds.length + ' selected invoice import(s)? This cannot be undone.')) {
             return;
         }
 
         let successCount = 0;
         const failed = [];
 
-        for (const row of selectedRows) {
-            const importId = row.importId;
+        for (const importId of uniqueImportIds) {
             try {
                 const response = await fetch('/api/invoices/import/' + encodeURIComponent(importId), {
                     method: 'DELETE',
@@ -220,6 +234,11 @@ OVERRIDE_SCRIPT = r"""
                 if (response.ok && payload && payload.success) {
                     successCount += 1;
                     state.selectedInvoiceImportIds.delete(importId);
+                    selectedRows.forEach((row) => {
+                        if (row.importId === importId && row.rowKey) {
+                            state.selectedInvoiceRowKeys.delete(row.rowKey);
+                        }
+                    });
                 } else {
                     failed.push(importId + (payload && payload.message ? ' (' + payload.message + ')' : ''));
                 }
@@ -264,14 +283,16 @@ OVERRIDE_SCRIPT = r"""
                 bodyRows.forEach((row) => {
                     const firstCell = row.querySelector('td');
                     const importId = firstCell ? (firstCell.innerText || '').trim() : '';
+                    const rowKey = buildInvoiceRowKey(row, row.rowIndex);
                     row.dataset.importId = importId;
+                    row.dataset.rowKey = rowKey;
 
                     const td = document.createElement('td');
                     td.style.padding = '8px';
                     td.style.textAlign = 'center';
 
-                    const checked = importId && state.selectedInvoiceImportIds.has(importId) ? ' checked' : '';
-                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '"' + checked + '>';
+                    const checked = rowKey && state.selectedInvoiceRowKeys.has(rowKey) ? ' checked' : '';
+                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '" data-row-key="' + escapeHtml(rowKey) + '"' + checked + '>';
                     row.insertBefore(td, row.firstElementChild);
                 });
 
@@ -297,11 +318,11 @@ OVERRIDE_SCRIPT = r"""
                     const checkboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
                     checkboxes.forEach((cb) => {
                         cb.checked = value;
-                        if (cb.dataset.importId) {
+                        if (cb.dataset.rowKey) {
                             if (value) {
-                                state.selectedInvoiceImportIds.add(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.add(cb.dataset.rowKey);
                             } else {
-                                state.selectedInvoiceImportIds.delete(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.delete(cb.dataset.rowKey);
                             }
                         }
                     });
@@ -319,11 +340,11 @@ OVERRIDE_SCRIPT = r"""
                     const all = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
                     all.forEach((cb) => {
                         cb.checked = headerCheckbox.checked;
-                        if (cb.dataset.importId) {
+                        if (cb.dataset.rowKey) {
                             if (cb.checked) {
-                                state.selectedInvoiceImportIds.add(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.add(cb.dataset.rowKey);
                             } else {
-                                state.selectedInvoiceImportIds.delete(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.delete(cb.dataset.rowKey);
                             }
                         }
                     });
@@ -336,12 +357,12 @@ OVERRIDE_SCRIPT = r"""
             rowCheckboxes.forEach((checkbox) => {
                 if (!checkbox.dataset.ic3Wired) {
                     checkbox.addEventListener('change', function () {
-                        const importId = checkbox.dataset.importId;
-                        if (importId) {
+                        const rowKey = checkbox.dataset.rowKey;
+                        if (rowKey) {
                             if (checkbox.checked) {
-                                state.selectedInvoiceImportIds.add(importId);
+                                state.selectedInvoiceRowKeys.add(rowKey);
                             } else {
-                                state.selectedInvoiceImportIds.delete(importId);
+                                state.selectedInvoiceRowKeys.delete(rowKey);
                             }
                         }
                         updateInvoiceSelectionUi(table);
@@ -349,7 +370,7 @@ OVERRIDE_SCRIPT = r"""
                     checkbox.dataset.ic3Wired = '1';
                 }
 
-                if (checkbox.dataset.importId && state.selectedInvoiceImportIds.has(checkbox.dataset.importId)) {
+                if (checkbox.dataset.rowKey && state.selectedInvoiceRowKeys.has(checkbox.dataset.rowKey)) {
                     checkbox.checked = true;
                 }
             });
@@ -365,6 +386,30 @@ OVERRIDE_SCRIPT = r"""
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function buildInvoiceDedupKey(location, deliveryDate, filename) {
+        const loc = String(location || '').trim().toLowerCase();
+        const day = String(deliveryDate || '').trim();
+        const file = String(filename || '').trim().toLowerCase();
+        return loc + '||' + day + '||' + file;
+    }
+
+    async function loadExistingInvoiceDedupKeys() {
+        const response = await fetch('/api/invoices/import-log');
+        const result = await response.json();
+        const keys = new Set();
+        if (!response.ok || !result || !result.success || !Array.isArray(result.imports)) {
+            return keys;
+        }
+
+        result.imports.forEach((item) => {
+            const key = buildInvoiceDedupKey(item.location, item.delivery_date, item.filename);
+            if (key) {
+                keys.add(key);
+            }
+        });
+        return keys;
     }
 
     function installOrderRenameTab() {
@@ -671,7 +716,7 @@ OVERRIDE_SCRIPT = r"""
         clearBulkUi();
     };
 
-    window.uploadInvoiceCSV = function () {
+    window.uploadInvoiceCSV = async function () {
         const fileInput = document.getElementById('uploadInvoiceCSV');
         const file = fileInput && fileInput.files ? fileInput.files[0] : null;
         const location = document.getElementById('invoiceLocation')?.value;
@@ -698,9 +743,25 @@ OVERRIDE_SCRIPT = r"""
         statusDiv.style.color = '#0c5460';
         statusDiv.innerHTML = '&#8987; Uploading invoice...';
 
+        const resolvedLocation = location || 'Kingsville';
+        const dedupKey = buildInvoiceDedupKey(resolvedLocation, deliveryDate, file.name);
+        try {
+            const existingKeys = await loadExistingInvoiceDedupKeys();
+            if (existingKeys.has(dedupKey)) {
+                statusDiv.style.background = '#fff3cd';
+                statusDiv.style.color = '#7a5200';
+                statusDiv.innerHTML = '&#9888; Duplicate blocked: this invoice file/date/location is already imported.';
+                fileInput.value = '';
+                if (fileNameSpan) fileNameSpan.textContent = '';
+                return;
+            }
+        } catch (error) {
+            // Continue upload if duplicate check fails to avoid blocking operations on transient log errors.
+        }
+
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('location', location || 'Kingsville');
+        formData.append('location', resolvedLocation);
         formData.append('delivery_date', deliveryDate);
 
         fetch('/api/orders/upload-invoice', {
@@ -752,6 +813,13 @@ OVERRIDE_SCRIPT = r"""
         let successCount = 0;
         let failCount = 0;
         const results = [];
+        let existingKeys = new Set();
+
+        try {
+            existingKeys = await loadExistingInvoiceDedupKeys();
+        } catch (error) {
+            existingKeys = new Set();
+        }
 
         for (let i = 0; i < state.bulkInvoices.length; i++) {
             const invoice = state.bulkInvoices[i];
@@ -763,6 +831,12 @@ OVERRIDE_SCRIPT = r"""
             try {
                 const parsedDate = parseDateFromFilename(invoice.file.name);
                 invoice.date = invoice.date || parsedDate;
+                const dedupKey = buildInvoiceDedupKey(location, invoice.date, invoice.file.name);
+                if (existingKeys.has(dedupKey)) {
+                    failCount++;
+                    results.push({ filename: invoice.file.name, date: invoice.date, success: false, error: 'Duplicate blocked (already imported).' });
+                    continue;
+                }
 
                 const formData = new FormData();
                 formData.append('file', invoice.file);
@@ -777,6 +851,7 @@ OVERRIDE_SCRIPT = r"""
 
                 if (result.success) {
                     successCount++;
+                    existingKeys.add(dedupKey);
                     results.push({ filename: invoice.file.name, date: invoice.date, success: true, matched: result.matched_count, total: result.total_items, newProducts: result.new_products_created || 0 });
                 } else {
                     failCount++;
@@ -2032,6 +2107,91 @@ def _install_order_csv_rename_api_patch() -> None:
         except Exception:
             pass
 
+
+def _register_invoice_duplicate_guard(flask_app) -> None:
+    if getattr(flask_app, "_ic3_invoice_duplicate_guard_registered", False):
+        return
+
+    try:
+        from flask import jsonify, request
+    except Exception:
+        return
+
+    def _normalize_text(value) -> str:
+        return str(value or "").strip().lower()
+
+    @flask_app.before_request
+    def _prevent_duplicate_invoice_imports():
+        if request.method != "POST":
+            return None
+
+        path = (request.path or "").rstrip("/")
+        if path != "/api/orders/upload-invoice":
+            return None
+
+        location = str(request.form.get("location") or "").strip()
+        delivery_date = str(request.form.get("delivery_date") or "").strip()
+        upload = request.files.get("file")
+        filename = str(upload.filename or "").strip() if upload else ""
+
+        if not location or not delivery_date or not filename:
+            return None
+
+        candidate_key = (
+            _normalize_text(location),
+            str(delivery_date),
+            _normalize_text(Path(filename).name),
+        )
+
+        invoice_import_log_obj = globals().get("invoice_import_log") or []
+        for entry in invoice_import_log_obj:
+            existing_key = (
+                _normalize_text(entry.get("location")),
+                str(entry.get("delivery_date") or "").strip(),
+                _normalize_text(Path(str(entry.get("filename") or "")).name),
+            )
+            if existing_key == candidate_key:
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": "Duplicate blocked: invoice already imported for this location/date/filename.",
+                        "duplicate": True,
+                    }
+                ), 409
+
+        return None
+
+    flask_app._ic3_invoice_duplicate_guard_registered = True
+
+
+def _install_invoice_duplicate_guard_patch() -> None:
+    try:
+        from flask import Flask
+    except Exception:
+        return
+
+    if getattr(Flask, "_ic3_invoice_duplicate_guard_patch_installed", False):
+        return
+
+    original_init = Flask.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        try:
+            _register_invoice_duplicate_guard(self)
+        except Exception:
+            pass
+
+    Flask.__init__ = patched_init
+    Flask._ic3_invoice_duplicate_guard_patch_installed = True
+
+    existing_app = globals().get("app")
+    if existing_app is not None:
+        try:
+            _register_invoice_duplicate_guard(existing_app)
+        except Exception:
+            pass
+
     Flask.__init__ = patched_init
     Flask._ic3_order_csv_rename_patch_installed = True
 
@@ -2187,6 +2347,7 @@ def _patch_bulk_upload_limit_runtime() -> None:
 _install_global_flask_response_patch()
 _install_order_csv_rename_api_patch()
 _install_product_detail_api_patch()
+_install_invoice_duplicate_guard_patch()
 _exec_bytecode()
 _patch_favicon_endpoint()
 _patch_bulk_upload_limit_runtime()
