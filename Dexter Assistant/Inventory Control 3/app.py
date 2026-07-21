@@ -1,5 +1,7 @@
 from flask import jsonify, request
 from pathlib import Path
+from collections import defaultdict
+from bisect import bisect_left, bisect_right
 import json
 import marshal
 import logging
@@ -177,7 +179,6 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
             panel = document.createElement('div');
             panel.id = 'ic3ProductMixSyncPanel';
             panel.innerHTML = [
-                '<button id="ic3ProductMixSyncButton" type="button">Sync ProductMix</button>',
                 '<span id="ic3ProductMixSyncStatus">Waiting for first sync check...</span>'
             ].join('');
 
@@ -275,8 +276,9 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
                 const options = ['<option value="">Select Location</option>'];
                 for (const row of restaurants) {
                     const label = labelOf(row);
+                    const locValue = String(row && row.location || '').trim() || label;
                     if (!label) continue;
-                    options.push('<option value="' + label.replace(/"/g, '&quot;') + '">' + label + '</option>');
+                    options.push('<option value="' + locValue.replace(/"/g, '&quot;') + '">' + label + '</option>');
                 }
                 select.innerHTML = options.join('');
 
@@ -659,6 +661,7 @@ OVERRIDE_SCRIPT = r"""
     const state = {
         bulkInvoices: [],
         selectedInvoiceImportIds: new Set(),
+        selectedInvoiceRowKeys: new Set(),
     };
 
     function parseDateFromFilename(filename) {
@@ -735,6 +738,15 @@ OVERRIDE_SCRIPT = r"""
             return false;
         }
         return headers.includes('import id') && headers.includes('date/time') && headers.includes('filename') && headers.includes('actions');
+    }
+
+    function buildInvoiceRowKey(row, fallbackIndex) {
+        const cells = Array.from(row.querySelectorAll('td'));
+        const importId = cells[0] ? String(cells[0].innerText || '').trim() : '';
+        const timestamp = cells[1] ? String(cells[1].innerText || '').trim() : '';
+        const filename = cells[2] ? String(cells[2].innerText || '').trim() : '';
+        const deliveryDate = cells[3] ? String(cells[3].innerText || '').trim() : '';
+        return [importId, timestamp, filename, deliveryDate, String(fallbackIndex || 0)].join('||');
     }
 
     function sortInvoiceHistoryTableRows(table) {
@@ -828,22 +840,26 @@ OVERRIDE_SCRIPT = r"""
     async function bulkDeleteInvoiceImports(table) {
         const checkboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox:checked'));
         const selectedRows = checkboxes
-            .map((cb) => ({ importId: String(cb.dataset.importId || '').trim() }))
+            .map((cb) => ({
+                importId: String(cb.dataset.importId || '').trim(),
+                rowKey: String(cb.dataset.rowKey || '').trim(),
+            }))
             .filter((row) => !!row.importId);
         if (!selectedRows.length) {
             alert('Select at least one invoice import to delete.');
             return;
         }
 
-        if (!confirm('Delete ' + selectedRows.length + ' selected invoice import(s)? This cannot be undone.')) {
+        const uniqueImportIds = Array.from(new Set(selectedRows.map((row) => row.importId)));
+
+        if (!confirm('Delete ' + uniqueImportIds.length + ' selected invoice import(s)? This cannot be undone.')) {
             return;
         }
 
         let successCount = 0;
         const failed = [];
 
-        for (const row of selectedRows) {
-            const importId = row.importId;
+        for (const importId of uniqueImportIds) {
             try {
                 const response = await fetch('/api/invoices/import/' + encodeURIComponent(importId), {
                     method: 'DELETE',
@@ -852,6 +868,11 @@ OVERRIDE_SCRIPT = r"""
                 if (response.ok && payload && payload.success) {
                     successCount += 1;
                     state.selectedInvoiceImportIds.delete(importId);
+                    selectedRows.forEach((row) => {
+                        if (row.importId === importId && row.rowKey) {
+                            state.selectedInvoiceRowKeys.delete(row.rowKey);
+                        }
+                    });
                 } else {
                     failed.push(importId + (payload && payload.message ? ' (' + payload.message + ')' : ''));
                 }
@@ -897,14 +918,16 @@ OVERRIDE_SCRIPT = r"""
                 bodyRows.forEach((row) => {
                     const firstCell = row.querySelector('td');
                     const importId = firstCell ? (firstCell.innerText || '').trim() : '';
+                    const rowKey = buildInvoiceRowKey(row, row.rowIndex);
                     row.dataset.importId = importId;
+                    row.dataset.rowKey = rowKey;
 
                     const td = document.createElement('td');
                     td.style.padding = '8px';
                     td.style.textAlign = 'center';
 
-                    const checked = importId && state.selectedInvoiceImportIds.has(importId) ? ' checked' : '';
-                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '"' + checked + '>';
+                    const checked = rowKey && state.selectedInvoiceRowKeys.has(rowKey) ? ' checked' : '';
+                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '" data-row-key="' + escapeHtml(rowKey) + '"' + checked + '>';
                     row.insertBefore(td, row.firstElementChild);
                 });
 
@@ -930,11 +953,11 @@ OVERRIDE_SCRIPT = r"""
                     const checkboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
                     checkboxes.forEach((cb) => {
                         cb.checked = value;
-                        if (cb.dataset.importId) {
+                        if (cb.dataset.rowKey) {
                             if (value) {
-                                state.selectedInvoiceImportIds.add(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.add(cb.dataset.rowKey);
                             } else {
-                                state.selectedInvoiceImportIds.delete(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.delete(cb.dataset.rowKey);
                             }
                         }
                     });
@@ -952,11 +975,11 @@ OVERRIDE_SCRIPT = r"""
                     const all = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
                     all.forEach((cb) => {
                         cb.checked = headerCheckbox.checked;
-                        if (cb.dataset.importId) {
+                        if (cb.dataset.rowKey) {
                             if (cb.checked) {
-                                state.selectedInvoiceImportIds.add(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.add(cb.dataset.rowKey);
                             } else {
-                                state.selectedInvoiceImportIds.delete(cb.dataset.importId);
+                                state.selectedInvoiceRowKeys.delete(cb.dataset.rowKey);
                             }
                         }
                     });
@@ -969,12 +992,12 @@ OVERRIDE_SCRIPT = r"""
             rowCheckboxes.forEach((checkbox) => {
                 if (!checkbox.dataset.ic3Wired) {
                     checkbox.addEventListener('change', function () {
-                        const importId = checkbox.dataset.importId;
-                        if (importId) {
+                        const rowKey = checkbox.dataset.rowKey;
+                        if (rowKey) {
                             if (checkbox.checked) {
-                                state.selectedInvoiceImportIds.add(importId);
+                                state.selectedInvoiceRowKeys.add(rowKey);
                             } else {
-                                state.selectedInvoiceImportIds.delete(importId);
+                                state.selectedInvoiceRowKeys.delete(rowKey);
                             }
                         }
                         updateInvoiceSelectionUi(table);
@@ -982,7 +1005,7 @@ OVERRIDE_SCRIPT = r"""
                     checkbox.dataset.ic3Wired = '1';
                 }
 
-                if (checkbox.dataset.importId && state.selectedInvoiceImportIds.has(checkbox.dataset.importId)) {
+                if (checkbox.dataset.rowKey && state.selectedInvoiceRowKeys.has(checkbox.dataset.rowKey)) {
                     checkbox.checked = true;
                 }
             });
@@ -998,6 +1021,473 @@ OVERRIDE_SCRIPT = r"""
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function buildInvoiceDedupKey(location, deliveryDate, filename) {
+        const loc = String(location || '').trim().toLowerCase();
+        const day = String(deliveryDate || '').trim();
+        const file = String(filename || '').trim().toLowerCase();
+        return loc + '||' + day + '||' + file;
+    }
+
+    async function loadExistingInvoiceDedupKeys() {
+        const response = await fetch('/api/invoices/import-log');
+        const result = await response.json();
+        const keys = new Set();
+        if (!response.ok || !result || !result.success || !Array.isArray(result.imports)) {
+            return keys;
+        }
+
+        result.imports.forEach((item) => {
+            const key = buildInvoiceDedupKey(item.location, item.delivery_date, item.filename);
+            if (key) {
+                keys.add(key);
+            }
+        });
+        return keys;
+    }
+
+    function normalizeMenuText(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+    }
+
+    function removeInventorySortAndViewControls() {
+        const inventoryTab = document.getElementById('inventory');
+        if (!inventoryTab) {
+            return;
+        }
+
+        const panel = inventoryTab.querySelector('.inventory-controls-panel');
+        if (panel) {
+            const sortSelect = panel.querySelector('#sortBy');
+            const viewSelect = panel.querySelector('#viewMode');
+
+            const sortGroup = sortSelect && sortSelect.closest ? sortSelect.closest('.control-group') : null;
+            const viewGroup = viewSelect && viewSelect.closest ? viewSelect.closest('.control-group') : null;
+
+            if (sortGroup && sortGroup.parentElement) {
+                sortGroup.parentElement.removeChild(sortGroup);
+            }
+            if (viewGroup && viewGroup.parentElement) {
+                viewGroup.parentElement.removeChild(viewGroup);
+            }
+        }
+
+        let hiddenControls = inventoryTab.querySelector('#ic3HiddenInventoryControls');
+        if (!hiddenControls) {
+            hiddenControls = document.createElement('div');
+            hiddenControls.id = 'ic3HiddenInventoryControls';
+            hiddenControls.style.display = 'none';
+            inventoryTab.appendChild(hiddenControls);
+        }
+
+        if (!document.getElementById('sortBy')) {
+            const sortFallback = document.createElement('select');
+            sortFallback.id = 'sortBy';
+            sortFallback.innerHTML = [
+                '<option value="csv-order" selected>CSV Order (Row Numbers)</option>',
+                '<option value="category">By Category</option>',
+                '<option value="product-name">By Product Name</option>',
+                '<option value="product-number">By Product Number</option>'
+            ].join('');
+            hiddenControls.appendChild(sortFallback);
+        }
+
+        if (!document.getElementById('viewMode')) {
+            const viewFallback = document.createElement('select');
+            viewFallback.id = 'viewMode';
+            viewFallback.innerHTML = [
+                '<option value="list">Single List View (Shows Row Order)</option>',
+                '<option value="categorized" selected>Categorized View (Groups by Category)</option>'
+            ].join('');
+            hiddenControls.appendChild(viewFallback);
+        }
+    }
+
+    function organizeInventoryControlsPanel() {
+        const inventoryTab = document.getElementById('inventory');
+        if (!inventoryTab) {
+            return;
+        }
+
+        const panel = inventoryTab.querySelector('.inventory-controls-panel');
+        if (!panel) {
+            return;
+        }
+
+        const searchBox = panel.querySelector('#searchBox');
+        const showEditToggle = panel.querySelector('#showEditButtons');
+        const inventoryListWrap = panel.querySelector('#dexterIc3InventoryListInventoryWrap') || panel.querySelector('.dexter-inventory-list-control');
+
+        const searchGroup = searchBox && searchBox.closest ? searchBox.closest('.control-group') : null;
+        const editGroup = showEditToggle && showEditToggle.closest ? showEditToggle.closest('.control-group') : null;
+
+        if (searchGroup && searchBox) {
+            searchGroup.classList.add('ic3-search-group');
+            const searchLabel = searchGroup.querySelector('label[for="searchBox"]') || searchGroup.querySelector('label');
+            if (searchLabel) {
+                searchLabel.classList.add('ic3-search-trigger');
+            }
+
+            if (searchGroup.dataset.ic3SearchBound !== '1') {
+                searchGroup.dataset.ic3SearchBound = '1';
+
+                const expand = function () {
+                    searchGroup.classList.add('is-expanded');
+                };
+                const collapseIfEmpty = function () {
+                    if (searchGroup.dataset.ic3SearchPinnedOpen === '1') {
+                        return;
+                    }
+                    if (!String(searchBox.value || '').trim()) {
+                        searchGroup.classList.remove('is-expanded');
+                    }
+                };
+
+                if (searchLabel) {
+                    searchLabel.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        const nextOpen = !searchGroup.classList.contains('is-expanded');
+                        searchGroup.classList.toggle('is-expanded', nextOpen);
+                        searchGroup.dataset.ic3SearchPinnedOpen = nextOpen ? '1' : '0';
+                        if (searchGroup.classList.contains('is-expanded')) {
+                            searchBox.focus();
+                        }
+                    });
+                }
+
+                searchBox.addEventListener('focus', expand);
+                searchBox.addEventListener('blur', function () {
+                    window.setTimeout(collapseIfEmpty, 120);
+                });
+            }
+
+            const hasQuery = String(searchBox.value || '').trim().length > 0;
+            if (hasQuery || searchGroup.dataset.ic3SearchPinnedOpen === '1') {
+                searchGroup.classList.add('is-expanded');
+            } else {
+                searchGroup.classList.remove('is-expanded');
+            }
+        }
+
+        if (editGroup) {
+            let hiddenControls = inventoryTab.querySelector('#ic3HiddenInventoryControls');
+            if (!hiddenControls) {
+                hiddenControls = document.createElement('div');
+                hiddenControls.id = 'ic3HiddenInventoryControls';
+                hiddenControls.style.display = 'none';
+                inventoryTab.appendChild(hiddenControls);
+            }
+
+            if (showEditToggle && showEditToggle.parentElement !== hiddenControls) {
+                showEditToggle.checked = false;
+                hiddenControls.appendChild(showEditToggle);
+            }
+
+            if (editGroup.parentElement) {
+                editGroup.parentElement.removeChild(editGroup);
+            }
+        }
+
+        if (inventoryListWrap) {
+            inventoryListWrap.classList.add('ic3-inventory-list-group');
+        }
+    }
+
+    function installCompactInventoryHeaderRow() {
+        const inventoryTab = document.getElementById('inventory');
+        if (!inventoryTab) {
+            return;
+        }
+
+        const directChildren = Array.from(inventoryTab.children || []);
+        const directLocationSelector = directChildren.find((el) => el.classList && el.classList.contains('location-selector'));
+        const directDateSelector = directChildren.find((el) => el.classList && el.classList.contains('date-selector'));
+
+        let row = inventoryTab.querySelector('.ic3-header-row');
+        const rowLocationSelector = row ? row.querySelector('.location-selector') : null;
+        const rowDateSelector = row ? row.querySelector('.date-selector') : null;
+
+        const locationSelector = directLocationSelector || rowLocationSelector;
+        const dateSelector = directDateSelector || rowDateSelector;
+        if (!locationSelector || !dateSelector) {
+            return;
+        }
+
+        if (!row) {
+            row = document.createElement('div');
+            row.className = 'ic3-header-row';
+            inventoryTab.insertBefore(row, locationSelector || inventoryTab.firstChild || null);
+        }
+
+        if (locationSelector.parentElement !== row) {
+            row.appendChild(locationSelector);
+        }
+        if (dateSelector.parentElement !== row) {
+            row.appendChild(dateSelector);
+        }
+
+        const todayButton = dateSelector.querySelector('button[onclick*="setToday"], .btn.btn-secondary');
+        if (todayButton && todayButton.parentElement) {
+            todayButton.parentElement.removeChild(todayButton);
+        }
+
+        const menuNav = document.getElementById('ic3HamburgerNav');
+        if (menuNav && menuNav.parentElement !== row) {
+            row.insertBefore(menuNav, row.firstChild || null);
+        }
+    }
+
+    function installHamburgerMenu() {
+        const tabsContainer = document.querySelector('.tabs');
+        if (!tabsContainer || !tabsContainer.parentNode) {
+            return;
+        }
+
+        const styleId = 'ic3HamburgerNavStyle';
+        if (!document.getElementById(styleId)) {
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = [
+                '.tabs.ic3-tabs-collapsed { display: none !important; }',
+                '#ic3HamburgerNav { position: relative; margin: 8px 0 14px; }',
+                '#ic3HamburgerToggle { min-height: 40px; border: 1px solid #0f4c81; border-radius: 10px; background: #0b5c9e; color: #fff; font-weight: 700; letter-spacing: 0.2px; padding: 8px 14px; cursor: pointer; }',
+                '#ic3HamburgerToggle:hover { background: #084c83; }',
+                '#ic3HamburgerPanel { position: absolute; left: 0; top: 48px; z-index: 20; width: min(380px, calc(100vw - 28px)); max-height: min(70vh, 620px); overflow: auto; border: 1px solid #cfd8dc; border-radius: 12px; background: #fff; box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18); padding: 10px; display: none; }',
+                '#ic3HamburgerNav.open #ic3HamburgerPanel { display: block; }',
+                '.ic3-h-menu-group { padding: 6px 4px 2px; }',
+                '.ic3-h-menu-title { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.4px; color: #546e7a; text-transform: uppercase; margin: 0 0 6px; }',
+                '.ic3-h-menu-item { width: 100%; text-align: left; border: 0; background: #f7fafc; border-radius: 8px; padding: 9px 10px; margin: 3px 0; cursor: pointer; color: #1f2937; font-weight: 600; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }',
+                '.ic3-h-menu-item:hover { background: #e8f1f8; }',
+                '.ic3-h-menu-item.is-active { background: #d9ecfb; color: #0f4c81; }',
+                '#inventory .ic3-header-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; width: min(100%, 1120px); margin: 4px auto 10px; }',
+                '#inventory .ic3-header-row #ic3HamburgerNav { margin: 0; justify-self: start; }',
+                '#inventory .ic3-header-row #ic3HamburgerToggle { min-height: 44px; padding: 8px 16px; }',
+                '#inventory .ic3-header-row .location-selector { margin: 0; display: flex; justify-content: center; justify-self: center; width: auto; max-width: none; }',
+                '#inventory .ic3-header-row .date-selector { margin: 0; display: flex; align-items: center; justify-content: flex-end; justify-self: end; gap: 10px; }',
+                '#inventory .ic3-header-row .date-selector label { margin: 0; }',
+                '#inventory .inventory-controls-panel { grid-template-columns: minmax(260px, 1fr) !important; align-items: center; gap: 12px 18px !important; }',
+                '#inventory .inventory-controls-panel > .control-group, #inventory .inventory-controls-panel > .dexter-inventory-list-control { min-width: 0; }',
+                '#inventory .inventory-controls-panel .ic3-search-group { grid-column: 1; }',
+                '#inventory .inventory-controls-panel .ic3-inventory-list-group { grid-column: 1 / -1; justify-self: stretch; width: 100%; }',
+                '#inventory .inventory-controls-panel .ic3-search-group label { margin-bottom: 0; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }',
+                '#inventory .inventory-controls-panel .ic3-search-group #searchBox { width: 100%; overflow: hidden; max-height: 52px; transition: max-height 0.2s ease, opacity 0.2s ease, margin 0.2s ease, padding 0.2s ease, border-width 0.2s ease; }',
+                '#inventory .inventory-controls-panel .ic3-search-group:not(.is-expanded) #searchBox { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; border-width: 0; pointer-events: none; }',
+                '#inventory .inventory-controls-panel .ic3-search-group.is-expanded #searchBox { max-height: 52px; opacity: 1; margin-top: 8px; }',
+                '#inventory .inventory-controls-panel .ic3-inventory-list-group { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: auto; max-width: 520px; }',
+                '#inventory .inventory-controls-panel .ic3-inventory-list-group label { margin: 0; text-align: left; font-weight: 700; color: #24344d; white-space: nowrap; }',
+                '#inventory .inventory-controls-panel .ic3-inventory-list-group select { width: clamp(180px, 28vw, 300px); min-width: 160px; }',
+                '@media (max-width: 700px) {',
+                '  #inventory .inventory-controls-panel { grid-template-columns: 1fr !important; }',
+                '  #inventory .inventory-controls-panel .ic3-search-group, #inventory .inventory-controls-panel .ic3-inventory-list-group { grid-column: 1; justify-self: stretch; width: 100%; }',
+                '  #inventory .inventory-controls-panel .ic3-inventory-list-group { display: flex !important; align-items: center; flex-wrap: nowrap; gap: 8px; max-width: 100%; width: auto; justify-self: start; }',
+                '  #inventory .inventory-controls-panel .ic3-inventory-list-group label { white-space: nowrap; margin: 0; }',
+                '  #inventory .inventory-controls-panel .ic3-inventory-list-group select { flex: 1 1 auto; width: clamp(140px, 42vw, 240px); min-width: 120px; max-width: 240px; }',
+                '}',
+                '@media (max-width: 768px) {',
+                '  #ic3HamburgerToggle { min-height: 44px; font-size: 1rem; }',
+                '  #ic3HamburgerPanel { width: calc(100vw - 28px); left: 0; }',
+                '  #inventory .ic3-header-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }',
+                '  #inventory .ic3-header-row #ic3HamburgerNav { justify-self: start; }',
+                '  #inventory .ic3-header-row .location-selector { justify-self: center; }',
+                '  #inventory .ic3-header-row .date-selector { justify-self: end; }',
+                '}'
+            ].join('\n');
+            (document.head || document.documentElement).appendChild(style);
+        }
+
+        const MENU_GROUPS = [
+            {
+                title: 'Inventory',
+                items: [
+                    { key: 'inventory', label: 'Enter Inventory', tabId: 'inventory', aliases: ['enter inventory'] },
+                    { key: 'saved', label: 'Saved Inventories', tabId: 'saved', aliases: ['saved inventories'] },
+                    { key: 'estimate', label: 'Estimated vs Actual', tabId: 'estimate', aliases: ['estimated vs actual'] },
+                ],
+            },
+            {
+                title: 'Product Management',
+                items: [
+                    { key: 'orders', label: 'Orders', tabId: 'orders', aliases: ['orders'] },
+                    { key: 'products', label: 'Manage Product', tabId: 'products', aliases: ['manage product', 'manage products'] },
+                    { key: 'productdetail', label: 'Product Info', tabId: 'productdetail', buttonId: 'ic3ProductDetailTabButton', aliases: ['product info'] },
+                ],
+            },
+            {
+                title: 'Reports',
+                items: [
+                    { key: 'report', label: 'Reports', tabId: 'report', aliases: ['reports', 'report analysis'] },
+                    { key: 'forecast', label: 'Forecast', tabId: 'forecast', aliases: ['forecast'] },
+                    { key: 'analytics', label: 'Analytics', tabId: 'analytics', aliases: ['analytics'] },
+                    { key: 'usagehistory', label: 'Usage History', tabId: 'usagehistory', aliases: ['usage history', 'useage history'] },
+                ],
+            },
+            {
+                title: 'Rename CSV',
+                items: [
+                    { key: 'renamecsv', label: 'Rename Order CSVs', tabId: 'renamecsv', buttonId: 'ic3RenameCsvTabButton', aliases: ['rename order csvs'] },
+                ],
+            },
+        ];
+
+        let nav = document.getElementById('ic3HamburgerNav');
+        if (!nav) {
+            nav = document.createElement('div');
+            nav.id = 'ic3HamburgerNav';
+            nav.innerHTML = [
+                '<button id="ic3HamburgerToggle" type="button" aria-haspopup="true" aria-expanded="false">&#9776; Menu</button>',
+                '<div id="ic3HamburgerPanel" role="menu" aria-label="Inventory control menu"></div>'
+            ].join('');
+            tabsContainer.parentNode.insertBefore(nav, tabsContainer);
+        }
+
+        tabsContainer.classList.add('ic3-tabs-collapsed');
+
+        const panel = document.getElementById('ic3HamburgerPanel');
+        const toggle = document.getElementById('ic3HamburgerToggle');
+        if (!panel || !toggle) {
+            return;
+        }
+
+        installCompactInventoryHeaderRow();
+
+        function findButtonForItem(item) {
+            if (item.buttonId) {
+                const byId = document.getElementById(item.buttonId);
+                if (byId) return byId;
+            }
+
+            if (item.tabId) {
+                const byTabId = tabsContainer.querySelector(".tab[onclick*=\"showTab('" + item.tabId + "'\"]");
+                if (byTabId) return byTabId;
+            }
+
+            const allTabs = Array.from(tabsContainer.querySelectorAll('.tab'));
+            const aliases = Array.isArray(item.aliases) ? item.aliases.map(normalizeMenuText) : [];
+            for (const tab of allTabs) {
+                const tabText = normalizeMenuText(tab.textContent || tab.innerText || '');
+                if (!tabText) {
+                    continue;
+                }
+                if (aliases.some((alias) => alias && (tabText === alias || tabText.includes(alias)))) {
+                    return tab;
+                }
+            }
+
+            return null;
+        }
+
+        function currentActiveKey() {
+            const active = tabsContainer.querySelector('.tab.active');
+            if (!active) {
+                return '';
+            }
+            const onclickText = String(active.getAttribute('onclick') || '');
+            const match = onclickText.match(/showTab\(['\"]([^'\"]+)['\"]/);
+            if (match && match[1]) {
+                return match[1];
+            }
+            if (active.id === 'ic3ProductDetailTabButton') return 'productdetail';
+            if (active.id === 'ic3RenameCsvTabButton') return 'renamecsv';
+            return '';
+        }
+
+        function closeMenu() {
+            nav.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        function openMenu() {
+            nav.classList.add('open');
+            toggle.setAttribute('aria-expanded', 'true');
+        }
+
+        function toggleMenu() {
+            if (nav.classList.contains('open')) {
+                closeMenu();
+            } else {
+                openMenu();
+            }
+        }
+
+        function renderMenu() {
+            const activeKey = currentActiveKey();
+            let html = '';
+            MENU_GROUPS.forEach((group) => {
+                html += '<section class="ic3-h-menu-group">';
+                html += '<div class="ic3-h-menu-title">' + escapeHtml(group.title) + '</div>';
+                (group.items || []).forEach((item) => {
+                    const activeClass = item.key === activeKey ? ' is-active' : '';
+                    html += '<button type="button" class="ic3-h-menu-item' + activeClass + '" data-menu-key="' + escapeHtml(item.key) + '" role="menuitem">' + escapeHtml(item.label) + '</button>';
+                });
+                html += '</section>';
+            });
+            panel.innerHTML = html;
+        }
+
+        renderMenu();
+
+        if (!toggle.dataset.ic3Bound) {
+            toggle.dataset.ic3Bound = '1';
+            toggle.addEventListener('click', function () {
+                toggleMenu();
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!nav.contains(event.target)) {
+                    closeMenu();
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    closeMenu();
+                }
+            });
+        }
+
+        if (!panel.dataset.ic3Bound) {
+            panel.dataset.ic3Bound = '1';
+            panel.addEventListener('click', function (event) {
+                const itemButton = event.target && event.target.closest ? event.target.closest('.ic3-h-menu-item') : null;
+                if (!itemButton) {
+                    return;
+                }
+                const key = String(itemButton.getAttribute('data-menu-key') || '').trim();
+                if (!key) {
+                    return;
+                }
+
+                let selected = null;
+                MENU_GROUPS.forEach((group) => {
+                    (group.items || []).forEach((item) => {
+                        if (item.key === key) {
+                            selected = item;
+                        }
+                    });
+                });
+                if (!selected) {
+                    return;
+                }
+
+                const targetButton = findButtonForItem(selected);
+                if (targetButton && typeof targetButton.click === 'function') {
+                    targetButton.click();
+                    closeMenu();
+                    window.setTimeout(renderMenu, 10);
+                    return;
+                }
+
+                if (selected.tabId && typeof showTab === 'function') {
+                    showTab(selected.tabId, { currentTarget: tabsContainer.querySelector('.tab.active') || null });
+                    closeMenu();
+                    window.setTimeout(renderMenu, 10);
+                }
+            });
+        }
     }
 
     function installOrderRenameTab() {
@@ -1390,7 +1880,7 @@ OVERRIDE_SCRIPT = r"""
         clearBulkUi();
     };
 
-    window.uploadInvoiceCSV = function () {
+    window.uploadInvoiceCSV = async function () {
         const fileInput = document.getElementById('uploadInvoiceCSV');
         const file = fileInput && fileInput.files ? fileInput.files[0] : null;
         const location = document.getElementById('invoiceLocation')?.value;
@@ -1417,9 +1907,25 @@ OVERRIDE_SCRIPT = r"""
         statusDiv.style.color = '#0c5460';
         statusDiv.innerHTML = '&#8987; Uploading invoice...';
 
+        const resolvedLocation = location || guessCurrentLocation() || 'Kingsville';
+        const dedupKey = buildInvoiceDedupKey(resolvedLocation, deliveryDate, file.name);
+        try {
+            const existingKeys = await loadExistingInvoiceDedupKeys();
+            if (existingKeys.has(dedupKey)) {
+                statusDiv.style.background = '#fff3cd';
+                statusDiv.style.color = '#7a5200';
+                statusDiv.innerHTML = '&#9888; Duplicate blocked: this invoice file/date/location is already imported.';
+                fileInput.value = '';
+                if (fileNameSpan) fileNameSpan.textContent = '';
+                return;
+            }
+        } catch (error) {
+            // Continue upload if duplicate check fails to avoid blocking operations on transient log errors.
+        }
+
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('location', location || guessCurrentLocation() || 'Kingsville');
+        formData.append('location', resolvedLocation);
         formData.append('delivery_date', deliveryDate);
 
         fetch('/api/orders/upload-invoice', {
@@ -1471,6 +1977,13 @@ OVERRIDE_SCRIPT = r"""
         let successCount = 0;
         let failCount = 0;
         const results = [];
+        let existingKeys = new Set();
+
+        try {
+            existingKeys = await loadExistingInvoiceDedupKeys();
+        } catch (error) {
+            existingKeys = new Set();
+        }
 
         for (let i = 0; i < state.bulkInvoices.length; i++) {
             const invoice = state.bulkInvoices[i];
@@ -1482,6 +1995,12 @@ OVERRIDE_SCRIPT = r"""
             try {
                 const parsedDate = parseDateFromFilename(invoice.file.name);
                 invoice.date = invoice.date || parsedDate;
+                const dedupKey = buildInvoiceDedupKey(location, invoice.date, invoice.file.name);
+                if (existingKeys.has(dedupKey)) {
+                    failCount++;
+                    results.push({ filename: invoice.file.name, date: invoice.date, success: false, error: 'Duplicate blocked (already imported).' });
+                    continue;
+                }
 
                 const formData = new FormData();
                 formData.append('file', invoice.file);
@@ -1496,6 +2015,7 @@ OVERRIDE_SCRIPT = r"""
 
                 if (result.success) {
                     successCount++;
+                    existingKeys.add(dedupKey);
                     results.push({ filename: invoice.file.name, date: invoice.date, success: true, matched: result.matched_count, total: result.total_items, newProducts: result.new_products_created || 0 });
                 } else {
                     failCount++;
@@ -1544,14 +2064,22 @@ OVERRIDE_SCRIPT = r"""
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             renderBulkInvoiceList();
+            installCompactInventoryHeaderRow();
+            removeInventorySortAndViewControls();
             installInventorySearchFilter();
+            organizeInventoryControlsPanel();
             installOrderRenameTab();
+            installHamburgerMenu();
             installInvoiceBulkDeleteControls();
         });
     } else {
         renderBulkInvoiceList();
+        installCompactInventoryHeaderRow();
+        removeInventorySortAndViewControls();
         installInventorySearchFilter();
+        organizeInventoryControlsPanel();
         installOrderRenameTab();
+        installHamburgerMenu();
         installInvoiceBulkDeleteControls();
     }
 
@@ -1563,9 +2091,13 @@ OVERRIDE_SCRIPT = r"""
         ic3UiRefreshScheduled = true;
         window.setTimeout(function () {
             ic3UiRefreshScheduled = false;
+            installCompactInventoryHeaderRow();
+            removeInventorySortAndViewControls();
             installInventorySearchFilter();
+            organizeInventoryControlsPanel();
             applyInventorySearchFilter();
             installOrderRenameTab();
+            installHamburgerMenu();
             installInvoiceBulkDeleteControls();
         }, 120);
     };
@@ -2748,6 +3280,731 @@ def _window_filter_dates(items, window_key):
     return sorted(filtered, key=lambda row: str(row.get("date") or ""))
 
 
+def _usage_parse_bool(raw_value, default=False) -> bool:
+    if raw_value is None:
+        return bool(default)
+    text = str(raw_value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off", ""}:
+        return False
+    return bool(default)
+
+
+def _usage_to_float(raw_value, default=0.0) -> float:
+    try:
+        return float(raw_value)
+    except Exception:
+        return float(default)
+
+
+def _usage_iter_days(start_day, end_day):
+    current = start_day
+    while current <= end_day:
+        yield current
+        current += timedelta(days=1)
+
+
+def _usage_group_by_product_inventory(location_name: str) -> dict[str, dict[str, float]]:
+    inventory_data_obj = globals().get("inventory_data") or {}
+    by_product: dict[str, dict[str, float]] = defaultdict(dict)
+    by_date = inventory_data_obj.get(location_name, {}) if isinstance(inventory_data_obj, dict) else {}
+
+    if not isinstance(by_date, dict):
+        return {}
+
+    for date_key, snapshot in by_date.items():
+        if not isinstance(snapshot, dict):
+            continue
+        date_str = str(date_key or "").strip()
+        if not date_str:
+            continue
+        for raw_product_num, raw_qty in snapshot.items():
+            product_num = _canonical_product_number(raw_product_num)
+            if not product_num:
+                continue
+            by_product[product_num][date_str] = _usage_to_float(raw_qty, 0.0)
+
+    return dict(by_product)
+
+
+def _usage_group_by_product_receipts(location_name: str) -> dict[str, dict[str, float]]:
+    log_rows = globals().get("invoice_import_log") or []
+    by_product: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+
+    for entry in log_rows if isinstance(log_rows, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("location") or "").strip() != location_name:
+            continue
+
+        date_str = str(entry.get("delivery_date") or "").strip()
+        if not date_str:
+            continue
+
+        products_map = entry.get("products")
+        if isinstance(products_map, dict):
+            for raw_product_num, raw_qty in products_map.items():
+                product_num = _canonical_product_number(raw_product_num)
+                if not product_num:
+                    continue
+                by_product[product_num][date_str] += _usage_to_float(raw_qty, 0.0)
+            continue
+
+        line_items = entry.get("line_items")
+        if isinstance(line_items, list):
+            for row in line_items:
+                if not isinstance(row, dict):
+                    continue
+                product_num = _canonical_product_number(
+                    row.get("canonical_product_number")
+                    or row.get("raw_product_number")
+                    or row.get("product_number")
+                )
+                if not product_num:
+                    continue
+                by_product[product_num][date_str] += _usage_to_float(row.get("quantity"), 0.0)
+
+    return {k: dict(v) for k, v in by_product.items()}
+
+
+def _usage_snapshot_value(inv_map: dict[str, float], target_day, direction: str):
+    exact_key = target_day.isoformat()
+    if exact_key in inv_map:
+        return inv_map[exact_key], exact_key, True
+
+    dated_values = []
+    for date_key, qty in inv_map.items():
+        day = _safe_parse_date(date_key)
+        if day is None:
+            continue
+        dated_values.append((day, date_key, _usage_to_float(qty, 0.0)))
+
+    if not dated_values:
+        return 0.0, "", False
+
+    if direction == "backward":
+        prior = [row for row in dated_values if row[0] <= target_day]
+        if prior:
+            row = max(prior, key=lambda r: r[0])
+            return row[2], row[1], False
+        row = min(dated_values, key=lambda r: r[0])
+        return row[2], row[1], False
+
+    ahead = [row for row in dated_values if row[0] >= target_day]
+    if ahead:
+        row = min(ahead, key=lambda r: r[0])
+        return row[2], row[1], False
+    row = max(dated_values, key=lambda r: r[0])
+    return row[2], row[1], False
+
+
+def _usage_prepare_inventory(inv_map: dict[str, float]):
+    dated_values = []
+    for date_key, qty in (inv_map or {}).items():
+        day = _safe_parse_date(date_key)
+        if day is None:
+            continue
+        dated_values.append((day, str(date_key), _usage_to_float(qty, 0.0)))
+
+    dated_values.sort(key=lambda row: row[0])
+    days = [row[0] for row in dated_values]
+    exact_lookup = {row[1]: row[2] for row in dated_values}
+    return {
+        "dated_values": dated_values,
+        "days": days,
+        "exact_lookup": exact_lookup,
+    }
+
+
+def _usage_snapshot_value_prepared(prepared_inv, target_day, direction: str):
+    exact_key = target_day.isoformat()
+    exact_lookup = prepared_inv.get("exact_lookup", {}) if isinstance(prepared_inv, dict) else {}
+    if exact_key in exact_lookup:
+        return _usage_to_float(exact_lookup[exact_key], 0.0), exact_key, True
+
+    dated_values = prepared_inv.get("dated_values", []) if isinstance(prepared_inv, dict) else []
+    days = prepared_inv.get("days", []) if isinstance(prepared_inv, dict) else []
+    if not dated_values or not days:
+        return 0.0, "", False
+
+    if direction == "backward":
+        idx = bisect_right(days, target_day) - 1
+        if idx < 0:
+            idx = 0
+        row = dated_values[idx]
+        return row[2], row[1], False
+
+    idx = bisect_left(days, target_day)
+    if idx >= len(dated_values):
+        idx = len(dated_values) - 1
+    row = dated_values[idx]
+    return row[2], row[1], False
+
+
+def _usage_daily_series_for_product(inv_map: dict[str, float], receipt_map: dict[str, float], start_day, end_day, prepared_inv=None):
+    rows = []
+    weekday_usage = defaultdict(list)
+    if prepared_inv is None:
+        prepared_inv = _usage_prepare_inventory(inv_map)
+
+    for day in _usage_iter_days(start_day, end_day):
+        next_day = day + timedelta(days=1)
+        opening_qty, opening_date_key, opening_exact = _usage_snapshot_value_prepared(prepared_inv, day, "backward")
+        closing_qty, closing_date_key, closing_exact = _usage_snapshot_value_prepared(prepared_inv, next_day, "forward")
+
+        receipts_qty = _usage_to_float(receipt_map.get(day.isoformat()), 0.0)
+        usage_qty = opening_qty + receipts_qty - closing_qty
+        weekday_name = day.strftime("%A")
+
+        calc_mode = "count_to_count" if (opening_exact and closing_exact) else "estimated_fallback"
+        weekday_usage[weekday_name].append(usage_qty)
+        rows.append(
+            {
+                "date": day.isoformat(),
+                "weekday": weekday_name,
+                "opening_inventory": round(opening_qty, 4),
+                "receipts": round(receipts_qty, 4),
+                "closing_inventory": round(closing_qty, 4),
+                "usage": round(usage_qty, 4),
+                "calculation_mode": calc_mode,
+                "opening_inventory_date": opening_date_key,
+                "closing_inventory_date": closing_date_key,
+            }
+        )
+
+    weekday_avg = {}
+    for weekday_name in ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"):
+        values = weekday_usage.get(weekday_name, [])
+        weekday_avg[weekday_name.lower()] = round(sum(values) / len(values), 4) if values else 0.0
+
+    return rows, weekday_avg
+
+
+def _register_usage_reports_endpoints(flask_app) -> None:
+    if flask_app is None:
+        return
+
+    def _usage_velocity_profile(avg_daily_usage: float):
+        profile_fn = globals().get("_velocity_profile")
+        if callable(profile_fn):
+            try:
+                band, target_days, upper_days = profile_fn(avg_daily_usage)
+                return str(band), float(target_days), float(upper_days)
+            except Exception:
+                pass
+
+        if avg_daily_usage >= 1.0:
+            return "fast", 7.0, 10.0
+        if avg_daily_usage >= 0.25:
+            return "medium", 10.0, 14.0
+        return "slow", 15.0, 20.0
+
+    def _usage_latest_unit_cost(location_name: str, product_num: str, as_of_day):
+        latest_cost = 0.0
+        latest_date = None
+        log_rows = globals().get("invoice_import_log") or []
+        for entry in log_rows if isinstance(log_rows, list) else []:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("location") or "").strip() != location_name:
+                continue
+            date_key = str(entry.get("delivery_date") or "").strip()
+            day = _safe_parse_date(date_key)
+            if day is None or day > as_of_day:
+                continue
+
+            price_map = entry.get("product_prices")
+            if not isinstance(price_map, dict):
+                continue
+
+            for raw_num, raw_price in price_map.items():
+                if _canonical_product_number(raw_num) != product_num:
+                    continue
+                price = _usage_to_float(raw_price, 0.0)
+                if latest_date is None or day >= latest_date:
+                    latest_date = day
+                    latest_cost = price
+        return round(latest_cost, 4)
+
+    def api_product_activity_usage_runtime():
+        location_name = str(request.args.get("location") or _effective_runtime_location()).strip()
+        start_day = _safe_parse_date(request.args.get("start_date"))
+        end_day = _safe_parse_date(request.args.get("end_date"))
+        include_zero_rows = _usage_parse_bool(request.args.get("include_zero_rows"), default=False)
+
+        if not location_name:
+            return jsonify({"success": False, "message": "location is required"}), 400
+        if not start_day or not end_day:
+            return jsonify({"success": False, "message": "start_date and end_date are required (YYYY-MM-DD)"}), 400
+        if start_day > end_day:
+            return jsonify({"success": False, "message": "start_date cannot be after end_date"}), 400
+
+        inventory_by_product = _usage_group_by_product_inventory(location_name)
+        receipts_by_product = _usage_group_by_product_receipts(location_name)
+        products = globals().get("products_list") or []
+        if not isinstance(products, list):
+            products = []
+
+        rows = []
+        for product_index, product in enumerate(products):
+            if not isinstance(product, dict):
+                continue
+
+            product_num = _canonical_product_number(product.get("Product Number"))
+            if not product_num:
+                continue
+
+            inv_map = inventory_by_product.get(product_num, {})
+            receipt_map = receipts_by_product.get(product_num, {})
+            daily_rows, weekday_avg = _usage_daily_series_for_product(inv_map, receipt_map, start_day, end_day)
+
+            total_usage = round(sum(_usage_to_float(row.get("usage"), 0.0) for row in daily_rows), 2)
+            total_receipts = round(sum(_usage_to_float(row.get("receipts"), 0.0) for row in daily_rows), 2)
+            begin_inv = _usage_to_float(daily_rows[0].get("opening_inventory"), 0.0) if daily_rows else 0.0
+            ending_inv = _usage_to_float(daily_rows[-1].get("closing_inventory"), 0.0) if daily_rows else 0.0
+
+            inventory_dates = []
+            for date_key, qty in sorted(inv_map.items()):
+                day = _safe_parse_date(date_key)
+                if day is None or day < start_day or day > end_day:
+                    continue
+                inventory_dates.append({"date": date_key, "location": location_name, "quantity": round(_usage_to_float(qty, 0.0), 4)})
+
+            order_dates = []
+            for date_key, qty in sorted(receipt_map.items()):
+                day = _safe_parse_date(date_key)
+                if day is None or day < start_day or day > end_day:
+                    continue
+                order_dates.append({"date": date_key, "location": location_name, "quantity": round(_usage_to_float(qty, 0.0), 4)})
+
+            if (not include_zero_rows) and abs(total_usage) < 1e-9 and abs(total_receipts) < 1e-9 and not inventory_dates:
+                continue
+
+            row = {
+                "product_order_index": product_index,
+                "product_number": product_num,
+                "description": str(product.get("Product Description") or ""),
+                "brand": str(product.get("Product Brand") or ""),
+                "package_size": str(product.get("Product Package Size") or ""),
+                "group": str(product.get("Group Name") or ""),
+                "case_count_type": str(product.get("Case Count Type") or "No"),
+                "member_product_numbers": [product_num],
+                "rolled_up_sub_count": 0,
+                "beginning_inventory": round(begin_inv, 2),
+                "beginning_inventory_meta": {"date": start_day.isoformat(), "location": location_name},
+                "ending_inventory": round(ending_inv, 2),
+                "ending_inventory_meta": {"date": (end_day + timedelta(days=1)).isoformat(), "location": location_name},
+                "total_orders": round(total_receipts, 2),
+                "total_orders_meta": {"source": "invoice_import_log"},
+                "usage": round(total_usage, 2),
+                "cases_required": round(max(0.0, total_usage - ending_inv), 2),
+                "inventory_count": len(inventory_dates),
+                "order_count": len(order_dates),
+                "total_activity": len(inventory_dates) + len(order_dates),
+                "inventory_dates": inventory_dates,
+                "order_dates": order_dates,
+                "weekday_usage_avg": weekday_avg,
+                "usage_daily": daily_rows,
+            }
+            rows.append(row)
+
+        rows.sort(key=lambda r: int(r.get("product_order_index") or 0))
+        return jsonify(
+            {
+                "success": True,
+                "location": location_name,
+                "date_range": {"start": start_day.isoformat(), "end": end_day.isoformat()},
+                "products": rows,
+                "total_products": len(rows),
+                "usage_model": {
+                    "week_start": "Sunday",
+                    "formula": "opening_inventory + receipts - next_day_closing_inventory",
+                    "receipts_source": "invoice_import_log",
+                    "negative_usage_allowed": True,
+                },
+            }
+        )
+
+    def api_weekly_usage_runtime():
+        location_name = str(request.args.get("location") or _effective_runtime_location()).strip()
+        start_day = _safe_parse_date(request.args.get("start_date"))
+        end_day = _safe_parse_date(request.args.get("end_date"))
+        include_zero_rows = _usage_parse_bool(request.args.get("include_zero_rows"), default=False)
+
+        if not location_name:
+            return jsonify({"success": False, "message": "location is required"}), 400
+        if not start_day or not end_day:
+            return jsonify({"success": False, "message": "start_date and end_date are required (YYYY-MM-DD)"}), 400
+        if start_day > end_day:
+            return jsonify({"success": False, "message": "start_date cannot be after end_date"}), 400
+
+        inventory_by_product = _usage_group_by_product_inventory(location_name)
+        receipts_by_product = _usage_group_by_product_receipts(location_name)
+        products = globals().get("products_list") or []
+        if not isinstance(products, list):
+            products = []
+
+        days_back_to_sunday = (start_day.weekday() + 1) % 7
+        first_sunday = start_day - timedelta(days=days_back_to_sunday)
+
+        windows = []
+        cursor = first_sunday
+        while cursor <= end_day:
+            window_start = cursor
+            window_end_marker = cursor + timedelta(days=8)
+            windows.append((window_start, window_end_marker))
+            cursor += timedelta(days=7)
+
+        rows = []
+        usage_history_by_product = defaultdict(list)
+        windows_skipped = 0
+
+        prepared_inventory_by_product = {
+            product_num: _usage_prepare_inventory(inventory_by_product.get(product_num, {}))
+            for product_num in set(list(inventory_by_product.keys()) + list(receipts_by_product.keys()))
+        }
+        product_activity_bounds = {}
+        for product_num, prepared_inv in prepared_inventory_by_product.items():
+            inv_days = prepared_inv.get("days", []) if isinstance(prepared_inv, dict) else []
+            receipt_days = []
+            for date_key in (receipts_by_product.get(product_num, {}) or {}).keys():
+                day = _safe_parse_date(date_key)
+                if day is not None:
+                    receipt_days.append(day)
+
+            all_days = list(inv_days) + receipt_days
+            if all_days:
+                product_activity_bounds[product_num] = (min(all_days), max(all_days))
+
+        for window_start, window_end_marker in windows:
+            daily_end = window_end_marker - timedelta(days=1)
+
+            for product_index, product in enumerate(products):
+                if not isinstance(product, dict):
+                    continue
+
+                product_num = _canonical_product_number(product.get("Product Number"))
+                if not product_num:
+                    continue
+
+                inv_map = inventory_by_product.get(product_num, {})
+                receipt_map = receipts_by_product.get(product_num, {})
+                if not inv_map and not receipt_map:
+                    continue
+
+                bounds = product_activity_bounds.get(product_num)
+                if bounds:
+                    activity_min, activity_max = bounds
+                    if daily_end < activity_min or window_start > (activity_max + timedelta(days=1)):
+                        continue
+
+                prepared_inv = prepared_inventory_by_product.get(product_num) or _usage_prepare_inventory(inv_map)
+                daily_rows, weekday_avg = _usage_daily_series_for_product(inv_map, receipt_map, window_start, daily_end, prepared_inv=prepared_inv)
+
+                if not daily_rows:
+                    continue
+
+                begin_inv = _usage_to_float(daily_rows[0].get("opening_inventory"), 0.0)
+                ending_inv = _usage_to_float(daily_rows[-1].get("closing_inventory"), 0.0)
+                total_orders = sum(_usage_to_float(row.get("receipts"), 0.0) for row in daily_rows)
+                usage = sum(_usage_to_float(row.get("usage"), 0.0) for row in daily_rows)
+
+                usage_history_by_product[product_num].append(usage)
+                trailing = usage_history_by_product[product_num][-4:]
+                avg_weekly_usage = (sum(trailing) / len(trailing)) if trailing else 0.0
+                avg_daily_usage = avg_weekly_usage / 8.0 if avg_weekly_usage else 0.0
+
+                velocity_band, target_dos, upper_dos = _usage_velocity_profile(avg_daily_usage)
+                days_of_supply = (ending_inv / avg_daily_usage) if avg_daily_usage > 0 else 0.0
+                reorder_point = avg_daily_usage * 3.0
+                target_stock = avg_daily_usage * target_dos
+                on_order_qty = 0.0
+                suggested_order_qty = max(0.0, target_stock - ending_inv - on_order_qty)
+                do_not_order = bool(avg_daily_usage > 0 and days_of_supply > upper_dos)
+
+                unit_cost = _usage_latest_unit_cost(location_name, product_num, window_end_marker)
+                on_hand_value = ending_inv * unit_cost
+                excess_qty = max(0.0, ending_inv - target_stock)
+                excess_value = excess_qty * unit_cost
+
+                if (not include_zero_rows) and abs(usage) < 1e-9 and abs(total_orders) < 1e-9 and abs(begin_inv) < 1e-9 and abs(ending_inv) < 1e-9:
+                    windows_skipped += 1
+                    continue
+
+                row = {
+                    "row_order": len(rows),
+                    "product_order_index": product_index,
+                    "product_number": product_num,
+                    "description": str(product.get("Product Description") or ""),
+                    "brand": str(product.get("Product Brand") or ""),
+                    "package_size": str(product.get("Product Package Size") or ""),
+                    "group": str(product.get("Group Name") or ""),
+                    "case_count_type": str(product.get("Case Count Type") or "No"),
+                    "member_product_numbers": [product_num],
+                    "rolled_up_sub_count": 0,
+                    "window_start": window_start.isoformat(),
+                    "window_end": window_end_marker.isoformat(),
+                    "start_snapshot_date": str(daily_rows[0].get("opening_inventory_date") or ""),
+                    "end_snapshot_date": str(daily_rows[-1].get("closing_inventory_date") or ""),
+                    "start_snapshot_offset_days": 0,
+                    "end_snapshot_offset_days": 0,
+                    "window_days": 8,
+                    "beginning_inventory": round(begin_inv, 2),
+                    "total_orders": round(total_orders, 2),
+                    "ending_inventory": round(ending_inv, 2),
+                    "usage": round(usage, 2),
+                    "avg_8day_usage_4w": round(avg_weekly_usage, 2),
+                    "avg_weekly_usage_4w": round(avg_weekly_usage, 2),
+                    "avg_daily_usage_4w": round(avg_daily_usage, 4),
+                    "velocity_band": velocity_band,
+                    "days_of_supply": round(days_of_supply, 2),
+                    "target_days_of_supply": round(target_dos, 2),
+                    "reorder_point": round(reorder_point, 2),
+                    "target_stock": round(target_stock, 2),
+                    "on_order_qty": round(on_order_qty, 2),
+                    "suggested_order_qty": round(suggested_order_qty, 2),
+                    "do_not_order": do_not_order,
+                    "unit_cost": round(unit_cost, 4),
+                    "on_hand_value": round(on_hand_value, 2),
+                    "excess_qty": round(excess_qty, 2),
+                    "excess_value": round(excess_value, 2),
+                    "weekday_usage_avg": weekday_avg,
+                    "avg_sunday_usage": round(weekday_avg.get("sunday", 0.0), 4),
+                    "avg_monday_usage": round(weekday_avg.get("monday", 0.0), 4),
+                    "avg_tuesday_usage": round(weekday_avg.get("tuesday", 0.0), 4),
+                    "avg_wednesday_usage": round(weekday_avg.get("wednesday", 0.0), 4),
+                    "avg_thursday_usage": round(weekday_avg.get("thursday", 0.0), 4),
+                    "avg_friday_usage": round(weekday_avg.get("friday", 0.0), 4),
+                    "avg_saturday_usage": round(weekday_avg.get("saturday", 0.0), 4),
+                    "usage_daily": daily_rows,
+                }
+                rows.append(row)
+
+        rows.sort(key=lambda r: (str(r.get("window_start") or ""), int(r.get("product_order_index") or 0)))
+        return jsonify(
+            {
+                "success": True,
+                "location": location_name,
+                "start_date": start_day.isoformat(),
+                "end_date": end_day.isoformat(),
+                "rows": rows,
+                "total_rows": len(rows),
+                "total_products": len({str(r.get("product_number") or "") for r in rows}),
+                "windows_used": len(windows),
+                "windows_skipped": windows_skipped,
+                "usage_model": {
+                    "week_start": "Sunday",
+                    "day_formula": "opening_inventory + receipts - next_day_closing_inventory",
+                    "averaging": "same_weekday_across_weeks",
+                    "receipts_source": "invoice_import_log",
+                    "negative_usage_allowed": True,
+                },
+                "assumptions": {
+                    "week_start": "Sunday",
+                    "window_days": 8,
+                    "formula": "opening_inventory + receipts - next_day_closing_inventory",
+                    "receipts_source": "invoice_import_log",
+                    "negative_usage_allowed": True,
+                },
+            }
+        )
+
+    def api_period_usage_runtime():
+        payload = request.get_json(silent=True) if request.method != "GET" else {}
+        if not isinstance(payload, dict):
+            payload = {}
+
+        def _pick(name, fallback=""):
+            if request.method == "GET":
+                return request.args.get(name, fallback)
+            return payload.get(name, request.form.get(name, fallback))
+
+        location_name = str(_pick("location", _effective_runtime_location())).strip()
+        from_day = _safe_parse_date(_pick("from_date", ""))
+        to_day = _safe_parse_date(_pick("to_date", ""))
+        include_zero_rows = _usage_parse_bool(_pick("include_zero_rows", False), default=False)
+
+        if not location_name:
+            return jsonify({"success": False, "message": "location is required"}), 400
+        if not from_day or not to_day:
+            return jsonify({"success": False, "message": "from_date and to_date are required (YYYY-MM-DD)"}), 400
+        if from_day > to_day:
+            return jsonify({"success": False, "message": "from_date cannot be after to_date"}), 400
+
+        inventory_by_product = _usage_group_by_product_inventory(location_name)
+        receipts_by_product = _usage_group_by_product_receipts(location_name)
+        products = globals().get("products_list") or []
+        if not isinstance(products, list):
+            products = []
+
+        count_dates = set()
+        for inv_map in inventory_by_product.values():
+            for date_key in inv_map.keys():
+                day = _safe_parse_date(date_key)
+                if day is None:
+                    continue
+                if from_day <= day <= to_day:
+                    count_dates.add(day)
+
+        count_days_sorted = sorted(count_dates)
+        count_dates_found = [d.isoformat() for d in count_days_sorted]
+
+        period_pairs = []
+        for idx in range(len(count_days_sorted) - 1):
+            period_from = count_days_sorted[idx]
+            period_to = count_days_sorted[idx + 1]
+            if period_to <= period_from:
+                continue
+            period_pairs.append((period_from, period_to))
+
+        rows = []
+        product_summary = {}
+
+        for product_index, product in enumerate(products):
+            if not isinstance(product, dict):
+                continue
+            product_num = _canonical_product_number(product.get("Product Number"))
+            if not product_num:
+                continue
+
+            inv_map = inventory_by_product.get(product_num, {})
+            receipt_map = receipts_by_product.get(product_num, {})
+            product_rows = []
+
+            for period_from, period_to in period_pairs:
+                open_qty, _, _ = _usage_snapshot_value(inv_map, period_from, "backward")
+                end_qty, _, _ = _usage_snapshot_value(inv_map, period_to, "forward")
+
+                orders_received = 0.0
+                cursor = period_from
+                while cursor < period_to:
+                    orders_received += _usage_to_float(receipt_map.get(cursor.isoformat()), 0.0)
+                    cursor += timedelta(days=1)
+
+                raw_usage = open_qty + orders_received - end_qty
+                usage = raw_usage
+                days_in_period = max(1, (period_to - period_from).days)
+                daily_rate = usage / float(days_in_period)
+                discrepancy_flag = raw_usage < -0.001
+
+                if (not include_zero_rows) and abs(raw_usage) < 1e-9 and abs(orders_received) < 1e-9 and abs(open_qty) < 1e-9 and abs(end_qty) < 1e-9:
+                    continue
+
+                row = {
+                    "product_order_index": product_index,
+                    "product_number": product_num,
+                    "description": str(product.get("Product Description") or ""),
+                    "brand": str(product.get("Product Brand") or ""),
+                    "package_size": str(product.get("Product Package Size") or ""),
+                    "group": str(product.get("Group Name") or ""),
+                    "member_product_numbers": [product_num],
+                    "rolled_up_sub_count": 0,
+                    "period_from": period_from.isoformat(),
+                    "period_to": period_to.isoformat(),
+                    "days_in_period": int(days_in_period),
+                    "beginning_inventory": round(open_qty, 2),
+                    "orders_received": round(orders_received, 2),
+                    "ending_inventory": round(end_qty, 2),
+                    "raw_usage": round(raw_usage, 2),
+                    "usage": round(usage, 2),
+                    "daily_rate": round(daily_rate, 4),
+                    "avg_daily_rate": round(daily_rate, 4),
+                    "discrepancy_flag": bool(discrepancy_flag),
+                    "discrepancy_note": "Negative usage detected" if discrepancy_flag else "",
+                    "calculation_mode": "count_to_count",
+                }
+                rows.append(row)
+                product_rows.append(row)
+
+            if product_rows:
+                product_summary[product_num] = {
+                    "periods": len(product_rows),
+                    "total_usage": round(sum(_usage_to_float(r.get("usage"), 0.0) for r in product_rows), 2),
+                    "avg_daily_rate": round(sum(_usage_to_float(r.get("daily_rate"), 0.0) for r in product_rows) / len(product_rows), 4),
+                }
+
+        rows.sort(key=lambda r: (str(r.get("period_from") or ""), int(r.get("product_order_index") or 0)))
+        periods_payload = [
+            {
+                "period_from": p_from.isoformat(),
+                "period_to": p_to.isoformat(),
+                "days_in_period": max(1, (p_to - p_from).days),
+            }
+            for p_from, p_to in period_pairs
+        ]
+
+        return jsonify(
+            {
+                "success": True,
+                "location": location_name,
+                "from_date": from_day.isoformat(),
+                "to_date": to_day.isoformat(),
+                "count_dates_found": count_dates_found,
+                "periods": periods_payload,
+                "total_periods": len(period_pairs),
+                "rows": rows,
+                "total_rows": len(rows),
+                "product_summary": product_summary,
+                "usage_model": {
+                    "week_start": "Sunday",
+                    "formula": "opening_inventory + receipts - next_day_closing_inventory",
+                    "receipts_source": "invoice_import_log",
+                    "negative_usage_allowed": True,
+                },
+            }
+        )
+
+    installed_product_activity = False
+    installed_weekly_usage = False
+    installed_period_usage_get = False
+    installed_period_usage_post = False
+    for rule in flask_app.url_map.iter_rules():
+        if rule.rule == "/api/reports/product-activity" and "GET" in rule.methods:
+            flask_app.view_functions[rule.endpoint] = api_product_activity_usage_runtime
+            installed_product_activity = True
+        if rule.rule == "/api/reports/weekly-usage" and "GET" in rule.methods:
+            flask_app.view_functions[rule.endpoint] = api_weekly_usage_runtime
+            installed_weekly_usage = True
+        if rule.rule == "/api/reports/period-usage":
+            if "GET" in rule.methods or "POST" in rule.methods:
+                flask_app.view_functions[rule.endpoint] = api_period_usage_runtime
+            if "GET" in rule.methods:
+                installed_period_usage_get = True
+            if "POST" in rule.methods:
+                installed_period_usage_post = True
+
+    if not installed_product_activity:
+        flask_app.add_url_rule(
+            "/api/reports/product-activity",
+            endpoint="ic3_product_activity_usage_runtime",
+            view_func=api_product_activity_usage_runtime,
+            methods=["GET"],
+        )
+
+    if not installed_weekly_usage:
+        flask_app.add_url_rule(
+            "/api/reports/weekly-usage",
+            endpoint="ic3_weekly_usage_runtime",
+            view_func=api_weekly_usage_runtime,
+            methods=["GET"],
+        )
+
+    missing_period_methods = []
+    if not installed_period_usage_get:
+        missing_period_methods.append("GET")
+    if not installed_period_usage_post:
+        missing_period_methods.append("POST")
+
+    if missing_period_methods:
+        flask_app.add_url_rule(
+            "/api/reports/period-usage",
+            endpoint="ic3_period_usage_runtime_" + "_".join(missing_period_methods).lower(),
+            view_func=api_period_usage_runtime,
+            methods=missing_period_methods,
+        )
+
+
 def _runtime_location_names() -> list[str]:
     names: set[str] = set()
 
@@ -3476,6 +4733,35 @@ def _install_productmix_sync_api_patch() -> None:
             pass
 
 
+def _install_usage_reports_patch() -> None:
+    try:
+        from flask import Flask
+    except Exception:
+        return
+
+    if getattr(Flask, "_ic3_usage_reports_patch_installed", False):
+        return
+
+    original_init = Flask.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        try:
+            _register_usage_reports_endpoints(self)
+        except Exception:
+            pass
+
+    Flask.__init__ = patched_init
+    Flask._ic3_usage_reports_patch_installed = True
+
+    existing_app = globals().get("app")
+    if existing_app is not None:
+        try:
+            _register_usage_reports_endpoints(existing_app)
+        except Exception:
+            pass
+
+
 def _register_compat_inventory_endpoints(flask_app) -> None:
     if flask_app is None:
         return
@@ -3536,6 +4822,21 @@ def _register_compat_inventory_endpoints(flask_app) -> None:
                 }
             )
 
+    if "/api/shared/inventory-default-groups" not in existing_rules:
+        @flask_app.route("/api/shared/inventory-default-groups", methods=["GET"])
+        def api_inventory_default_groups_runtime():
+            # Compatibility endpoint used by portal shell patches. Returning
+            # a stable empty payload avoids noisy 404s when no shared default
+            # groups are configured.
+            return jsonify(
+                {
+                    "ok": False,
+                    "groups": [],
+                    "default_group_id": "",
+                    "message": "No shared inventory default groups configured",
+                }
+            )
+
 
 def _install_dexter_location_guard_patch() -> None:
     app = globals().get("app")
@@ -3560,6 +4861,91 @@ def _install_dexter_location_guard_patch() -> None:
         return None
 
     app._ic3_dexter_location_guard_installed = True
+
+
+def _register_invoice_duplicate_guard(flask_app) -> None:
+    if getattr(flask_app, "_ic3_invoice_duplicate_guard_registered", False):
+        return
+
+    try:
+        from flask import jsonify, request
+    except Exception:
+        return
+
+    def _normalize_text(value) -> str:
+        return str(value or "").strip().lower()
+
+    @flask_app.before_request
+    def _prevent_duplicate_invoice_imports():
+        if request.method != "POST":
+            return None
+
+        path = (request.path or "").rstrip("/")
+        if path != "/api/orders/upload-invoice":
+            return None
+
+        location = str(request.form.get("location") or "").strip()
+        delivery_date = str(request.form.get("delivery_date") or "").strip()
+        upload = request.files.get("file")
+        filename = str(upload.filename or "").strip() if upload else ""
+
+        if not location or not delivery_date or not filename:
+            return None
+
+        candidate_key = (
+            _normalize_text(location),
+            str(delivery_date),
+            _normalize_text(Path(filename).name),
+        )
+
+        invoice_import_log_obj = globals().get("invoice_import_log") or []
+        for entry in invoice_import_log_obj:
+            existing_key = (
+                _normalize_text(entry.get("location")),
+                str(entry.get("delivery_date") or "").strip(),
+                _normalize_text(Path(str(entry.get("filename") or "")).name),
+            )
+            if existing_key == candidate_key:
+                return jsonify(
+                    {
+                        "success": False,
+                        "message": "Duplicate blocked: invoice already imported for this location/date/filename.",
+                        "duplicate": True,
+                    }
+                ), 409
+
+        return None
+
+    flask_app._ic3_invoice_duplicate_guard_registered = True
+
+
+def _install_invoice_duplicate_guard_patch() -> None:
+    try:
+        from flask import Flask
+    except Exception:
+        return
+
+    if getattr(Flask, "_ic3_invoice_duplicate_guard_patch_installed", False):
+        return
+
+    original_init = Flask.__init__
+
+    def patched_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        try:
+            _register_invoice_duplicate_guard(self)
+        except Exception:
+            pass
+
+    Flask.__init__ = patched_init
+    Flask._ic3_invoice_duplicate_guard_patch_installed = True
+
+    existing_app = globals().get("app")
+    if existing_app is not None:
+        try:
+            _register_invoice_duplicate_guard(existing_app)
+        except Exception:
+            pass
 
 
 def _install_order_csv_rename_api_patch() -> None:
@@ -3881,6 +5267,8 @@ _install_global_flask_response_patch()
 _install_order_csv_rename_api_patch()
 _install_product_detail_api_patch()
 _install_productmix_sync_api_patch()
+_install_usage_reports_patch()
+_install_invoice_duplicate_guard_patch()
 _force_production_flask_run()
 _original_module_name = globals().get("__name__", "__main__")
 if _original_module_name == "__main__":
@@ -3893,6 +5281,7 @@ _restore_runtime_data_fallbacks()
 _register_compat_inventory_endpoints(globals().get("app"))
 _register_invoice_import_log_endpoint(globals().get("app"))
 _register_productmix_sync_endpoints(globals().get("app"))
+_register_usage_reports_endpoints(globals().get("app"))
 _install_dexter_location_guard_patch()
 _patch_favicon_endpoint()
 _patch_bulk_upload_limit_runtime()
@@ -4093,6 +5482,21 @@ IC3_INVENTORY_OPPORTUNITY_SCRIPT = r"""
                     '<tbody>' + rowsHtml + '</tbody>' +
                 '</table>' +
             '</div>';
+
+            const table = panel.querySelector('table');
+            if (table && table.dataset.ic3OrderLock !== '1') {
+                table.dataset.ic3OrderLock = '1';
+                const headerCells = Array.from(table.querySelectorAll('thead th'));
+                headerCells.forEach(function (th) {
+                    th.style.cursor = 'default';
+                    th.style.userSelect = 'none';
+                    th.setAttribute('aria-sort', 'none');
+                    th.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }, true);
+                });
+            }
     }
 
     function processForecastPayload(payload) {
@@ -4290,7 +5694,7 @@ def _install_dexter_ui_patch() -> None:
         '</script>'
         + IC3_INVENTORY_OPPORTUNITY_SCRIPT +
         '<script src="/dexter-ui/theme.js" defer></script>'
-        '<div class="dx-version-badge" aria-hidden="true">Dexter · IC3 · v0.9</div>'
+        '<div class="dx-version-badge" aria-hidden="true">2026 Dexter Assist v0.9</div>'
     )
 
     marker = "__dexter_ui_installed"
