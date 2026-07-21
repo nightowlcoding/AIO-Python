@@ -594,8 +594,8 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
 OVERRIDE_SCRIPT = r"""
 <script>
 (function () {
-    if (window.__ic3InvoiceOverrideInstalled) return;
-    window.__ic3InvoiceOverrideInstalled = true;
+    if (window.__ic3InvoiceOverrideInstalledV2) return;
+    window.__ic3InvoiceOverrideInstalledV2 = true;
 
     const LOCAL_API_ORIGINS = [
         'http://localhost:5003',
@@ -742,11 +742,23 @@ OVERRIDE_SCRIPT = r"""
 
     function buildInvoiceRowKey(row, fallbackIndex) {
         const cells = Array.from(row.querySelectorAll('td'));
-        const importId = cells[0] ? String(cells[0].innerText || '').trim() : '';
-        const timestamp = cells[1] ? String(cells[1].innerText || '').trim() : '';
-        const filename = cells[2] ? String(cells[2].innerText || '').trim() : '';
-        const deliveryDate = cells[3] ? String(cells[3].innerText || '').trim() : '';
+        const hasSelectCell = !!(cells[0] && cells[0].querySelector('.ic3-import-checkbox'));
+        const base = hasSelectCell ? 1 : 0;
+        const importId = cells[base] ? String(cells[base].innerText || '').trim() : '';
+        const timestamp = cells[base + 1] ? String(cells[base + 1].innerText || '').trim() : '';
+        const filename = cells[base + 2] ? String(cells[base + 2].innerText || '').trim() : '';
+        const deliveryDate = cells[base + 3] ? String(cells[base + 3].innerText || '').trim() : '';
         return [importId, timestamp, filename, deliveryDate, String(fallbackIndex || 0)].join('||');
+    }
+
+    function readInvoiceImportIdFromRow(row) {
+        const cells = Array.from(row.querySelectorAll('td'));
+        if (!cells.length) {
+            return '';
+        }
+        const hasSelectCell = !!cells[0].querySelector('.ic3-import-checkbox');
+        const index = hasSelectCell ? 1 : 0;
+        return cells[index] ? String(cells[index].innerText || '').trim() : '';
     }
 
     function sortInvoiceHistoryTableRows(table) {
@@ -916,8 +928,7 @@ OVERRIDE_SCRIPT = r"""
                 headRow.insertBefore(th, headRow.firstElementChild);
 
                 bodyRows.forEach((row) => {
-                    const firstCell = row.querySelector('td');
-                    const importId = firstCell ? (firstCell.innerText || '').trim() : '';
+                    const importId = readInvoiceImportIdFromRow(row);
                     const rowKey = buildInvoiceRowKey(row, row.rowIndex);
                     row.dataset.importId = importId;
                     row.dataset.rowKey = rowKey;
@@ -927,17 +938,44 @@ OVERRIDE_SCRIPT = r"""
                     td.style.textAlign = 'center';
 
                     const checked = rowKey && state.selectedInvoiceRowKeys.has(rowKey) ? ' checked' : '';
-                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '" data-row-key="' + escapeHtml(rowKey) + '"' + checked + '>';
+                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '" data-row-key="' + escapeHtml(rowKey) + '" data-ic3-wired="1"' + checked + '>';
                     row.insertBefore(td, row.firstElementChild);
                 });
 
                 table.dataset.ic3InvoiceBulkPatched = '1';
+            } else {
+                bodyRows.forEach((row) => {
+                    const importId = readInvoiceImportIdFromRow(row);
+                    const rowKey = buildInvoiceRowKey(row, row.rowIndex);
+                    row.dataset.importId = importId;
+                    row.dataset.rowKey = rowKey;
+
+                    const existingCheckbox = row.querySelector('.ic3-import-checkbox');
+                    if (!existingCheckbox) {
+                        return;
+                    }
+
+                    const replacement = existingCheckbox.cloneNode(false);
+                    replacement.className = 'ic3-import-checkbox';
+                    replacement.dataset.importId = importId;
+                    replacement.dataset.rowKey = rowKey;
+                    replacement.dataset.ic3Wired = '1';
+                    if (rowKey && state.selectedInvoiceRowKeys.has(rowKey)) {
+                        replacement.checked = true;
+                    }
+                    existingCheckbox.replaceWith(replacement);
+                });
             }
 
             let panel = table.previousElementSibling;
+            if (panel && panel.classList && panel.classList.contains('ic3-invoice-bulk-tools') && panel.dataset.ic3PanelVersion !== '2') {
+                panel.remove();
+                panel = null;
+            }
             if (!(panel && panel.classList && panel.classList.contains('ic3-invoice-bulk-tools'))) {
                 panel = document.createElement('div');
                 panel.className = 'ic3-invoice-bulk-tools';
+                panel.dataset.ic3PanelVersion = '2';
                 panel.style.display = 'flex';
                 panel.style.alignItems = 'center';
                 panel.style.gap = '8px';
@@ -969,8 +1007,19 @@ OVERRIDE_SCRIPT = r"""
                 panel.querySelector('.ic3-delete-selected-btn').addEventListener('click', function () { bulkDeleteInvoiceImports(table); });
             }
 
-            const headerCheckbox = table.querySelector('thead .ic3-import-select-all');
-            if (headerCheckbox && !headerCheckbox.dataset.ic3Wired) {
+            let headerCheckbox = table.querySelector('thead .ic3-import-select-all');
+            if (headerCheckbox) {
+                const replacement = headerCheckbox.cloneNode(false);
+                replacement.className = 'ic3-import-select-all';
+                replacement.title = 'Select all';
+                replacement.checked = headerCheckbox.checked;
+                replacement.indeterminate = headerCheckbox.indeterminate;
+                replacement.dataset.ic3Wired = '1';
+                headerCheckbox.replaceWith(replacement);
+                headerCheckbox = replacement;
+            }
+
+            if (headerCheckbox && !headerCheckbox.dataset.ic3V2Wired) {
                 headerCheckbox.addEventListener('change', function () {
                     const all = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
                     all.forEach((cb) => {
@@ -986,11 +1035,12 @@ OVERRIDE_SCRIPT = r"""
                     updateInvoiceSelectionUi(table);
                 });
                 headerCheckbox.dataset.ic3Wired = '1';
+                headerCheckbox.dataset.ic3V2Wired = '1';
             }
 
             const rowCheckboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
             rowCheckboxes.forEach((checkbox) => {
-                if (!checkbox.dataset.ic3Wired) {
+                if (!checkbox.dataset.ic3V2Wired) {
                     checkbox.addEventListener('change', function () {
                         const rowKey = checkbox.dataset.rowKey;
                         if (rowKey) {
@@ -1003,6 +1053,7 @@ OVERRIDE_SCRIPT = r"""
                         updateInvoiceSelectionUi(table);
                     });
                     checkbox.dataset.ic3Wired = '1';
+                    checkbox.dataset.ic3V2Wired = '1';
                 }
 
                 if (checkbox.dataset.rowKey && state.selectedInvoiceRowKeys.has(checkbox.dataset.rowKey)) {
@@ -3154,7 +3205,7 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         updated,
         flags=re.DOTALL,
     )
-    if "__ic3InvoiceOverrideInstalled" not in updated and "</body>" in updated:
+    if "__ic3InvoiceOverrideInstalledV2" not in updated and "</body>" in updated:
         updated = updated.replace("</body>", OVERRIDE_SCRIPT + "\n</body>", 1)
 
     if "__ic3ProductDetailInstalled" not in updated and "</body>" in updated:
