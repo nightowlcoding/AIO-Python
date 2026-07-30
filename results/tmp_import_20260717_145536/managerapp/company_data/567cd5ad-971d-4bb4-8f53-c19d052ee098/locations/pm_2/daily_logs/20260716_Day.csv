@@ -1,0 +1,51 @@
+Date,2026-07-16
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Michaela Mireles,Day,Dining,66.31,23,43.31,163.18,86.93,0,0,0,9.25,14.45,0,247.36,0
+Alexa Garcia,Day,Dining,17.81,37.72,-19.91,164.08,123.67,0,0,0,6.75,0,0,240.66,0
+Blaine Roberson,Day,Bar,49.66,10,39.66,83.71,94.8,0,0,0,6.25,9.95,0,187.17,0
+Austin Barnes,Day,Dining,101.21,59,42.21,314.18,128.8,0,0,0,8.95,2,0,437.25,0
+Hailey Nunn,Night,Dining,8.54,0,8.54,140.21,14.93,0,0,0,14.2,0,0,137.03,0
+Isabel García,Night,Dining,56.87,15.4,41.47,61.77,37,0,0,0,7.9,10.95,0,110.68,0
+Kaitlyn Esfahani,Night,Dining,182.41,79.47,102.94,500.75,296.7,0,0,0,108.4,89.65,0,633.84,0
+Alexa Garcia,Night,Dining,135.33,78,57.33,254.19,371.26,73.42,0,0,108.5,16.9,0,573.26,0
+Alyssa Rodriguez,Day,Dining,70.66,65,5.66,182.28,329.62,0,0,0,0,0,0,478.1,0
+Emileigh Salinas,Night,Bar,56.09,65.92,-9.83,325.16,89.27,0,0,0,98.6,29,0,246.19,0
+Selena Gomez,Night,Bar,48.53,90.04,-41.51,356.33,191.08,0,0,0,135.05,60.3,0,272.07,24.94
+Bryan Garcia,Night,Bar,38.81,48,-9.19,118.78,20.4,17.84,0,0,60.75,55.85,0,19.98,36.86
+Selena Cuellar,Night,Dining,0,58.17,-58.17,241.42,46.31,76,36.82,0,6.25,25,0,285.08,0
+Bailee Pena,Night,Dining,188.46,40.6,147.86,221.71,34.41,0,0,0,34.6,12.5,0,326.08,0
+
+Cash Drawer Count
+Pennies,53
+Nickels,4
+Dimes,43
+Quarters,14
+Rolled Coins,26.00
+Ones,104
+Fives,8
+Tens,8
+Twenties,7
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,398.53
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+end_night,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-17T04:55:35.148Z
+
+Cash Deductions
+toilet paper,Wal Mart,16.75
+"lime, red cabbage",Wal Mart,24.13
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+,,,0
+
+Deposit Summary
+Cash Adjustments,40.879999999999995
+Cash in Drawer,398.53
+DEPOSIT AMOUNT,309.49

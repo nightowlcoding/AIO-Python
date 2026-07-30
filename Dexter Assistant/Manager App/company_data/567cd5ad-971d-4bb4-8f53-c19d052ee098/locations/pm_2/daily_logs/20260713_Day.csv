@@ -1,0 +1,52 @@
+Date,2026-07-13
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Kassidy Pena,Night,Dining,38.41,38.91,-0.5,220.77,55.94,0,0,0,6.75,0,0,248.39,0
+Clarissa Cantu,Day,Dining,82.39,59.46,22.93,256.5,317.79,0,0,0,10.75,0,0,540.96,0
+Brycen Driver,Day,Dining,0,16.49,-16.49,105.59,0,0,0,0,0,0,0,82.32,0
+Isabel García,Day,Dining,0,46.83,-46.83,88.9,163.92,0,0,0,0,0,0,190.32,0
+Selena Gomez,Day,Bar,146.17,70,76.17,277.84,242.03,0,38.42,0,28.75,52.9,0,504.5,0
+Pablo Ochoa,Night,Dining,45.21,7,38.21,25.2,75.73,58.65,0,0,0,0,0,182.72,0
+Alyssa Rodriguez,Night,Dining,33.53,23,10.53,123.47,70.27,70.41,0,0,0,9.95,0,243.85,0
+Alexa Garcia,Day,Dining,59.57,171.6,-112.03,569.47,278.39,152.28,0,0,6.28,37.5,0,776.6,21.48
+Emileigh Salinas,Night,Bar,33.23,2,31.23,32.26,0,0,0,0,32.95,0,0,25.69,34.16
+Indira Garcia,Night,Bar,178.69,88,90.69,384.61,287.57,0,39.03,0,57.2,136.07,0,547.59,3.95
+Gianna Cantu,Night,Bar,0,28.2,-28.2,161.92,103.87,0,39.92,0,0,9.95,0,246.43,0
+Madison Zamora,Night,Dining,72.1,22.13,49.97,83.5,178.78,0,0,0,0,0,0,288.47,0
+J’Elle Longoria,Night,Dining,34.62,42.11,-7.49,244.97,207.51,0,0,0,0,0,0,411.12,0
+
+Cash Drawer Count
+Pennies,68
+Nickels,8
+Dimes,52
+Quarters,15
+Rolled Coins,36
+Ones,84
+Fives,10
+Tens,6
+Twenties,8
+Fifties,0
+Hundreds,0
+Drawer Total,400.03
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,68,8,52,15,84,10,6,8,0,0,36,400.03,2026-07-14T04:20:44.228Z
+end_day,68,8,52,15,84,10,6,8,0,0,36,400.03,2026-07-14T04:21:53.737Z
+start_night,68,8,52,15,84,10,6,8,0,0,36,400.03,2026-07-14T04:21:52.891Z
+end_night,68,8,53,13,12,3,2,5,4,0,26,382.63,2026-07-14T04:10:33.391Z
+
+Cash Deductions
+Gas ,Kwik ,120.0
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+,,,0
+
+Deposit Summary
+Cash Adjustments,120.0
+Cash in Drawer,400.03
+DEPOSIT AMOUNT,-11.81

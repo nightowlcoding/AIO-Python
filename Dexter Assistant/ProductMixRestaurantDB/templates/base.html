@@ -43,12 +43,7 @@
   {% set hide_top_nav_items = active_endpoint in compact_nav_endpoints and not show_full_nav %}
   <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
     <div class="container-fluid">
-      <a class="navbar-brand d-flex align-items-center" href="{{ url_for('home') }}">
-         <img src="{{ branding_logo_url }}"
-           alt="{{ branding_company_name or 'Dexter Assistant' }}"
-             style="height:32px;width:auto;margin-right:10px;">
-         <span class="d-none d-md-inline">{{ branding_company_name or 'Product Mix' }}</span>
-      </a>
+      <span class="navbar-brand d-flex align-items-center" aria-hidden="true"></span>
       {% if active_endpoint in compact_nav_endpoints %}
         {% if hide_top_nav_items %}
         <a class="btn btn-sm btn-outline-light ms-auto" href="{{ request.path }}?fullnav=1">Show Full Menu</a>
@@ -62,13 +57,10 @@
       </button>
       <div class="collapse navbar-collapse" id="mainNav">
         <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-          <li class="nav-item"><a class="nav-link {% if active_endpoint == 'home' %}active{% endif %}" href="{{ url_for('home') }}">Home</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">Product Mix</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint in ['reports_page', 'reports_production_page', 'reports_categories_page', 'reports_weekly_usage_page', 'reports_analytics_page', 'map_item_category_page'] %}active{% endif %}" href="{{ url_for('reports_page') }}">Reports</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint == 'reports_analytics_page' %}active{% endif %}" href="{{ url_for('reports_analytics_page') }}">Analytics</a></li>
           <li class="nav-item"><a class="nav-link {% if active_endpoint in ['production_list_page', 'create_master_item', 'create_production_item', 'load_production_item_template', 'delete_production_item'] %}active{% endif %}" href="{{ url_for('production_list_page') }}">Production List</a></li>
-          <li class="nav-item"><a class="nav-link {% if active_endpoint in ['restaurant_setup', 'select_restaurant', 'select_restaurant_post'] %}active{% endif %}" href="{{ url_for('restaurant_setup') }}">Restaurant Setup</a></li>
-          <li class="nav-item"><a class="nav-link {% if active_endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">Admin</a></li>
         </ul>
 
         {% if current_user.is_authenticated and location_switch_options %}
@@ -77,24 +69,13 @@
           <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
           <select class="form-select form-select-sm top-select" name="restaurant_id" onchange="this.form.submit()">
             {% for option in location_switch_options %}
-            <option value="{{ option.id }}" {% if location_switch_active_id and location_switch_active_id == option.id %}selected{% endif %}>{{ option.name }}{% if option.location %} - {{ option.location }}{% endif %}</option>
+            <option value="{{ option.id }}" {% if location_switch_active_id and location_switch_active_id == option.id %}selected{% endif %}>{{ option.location or option.name }}</option>
             {% endfor %}
           </select>
         </form>
         {% endif %}
 
         <ul class="navbar-nav mb-2 mb-lg-0">
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Theme" aria-label="Theme">
-              <i class="bi bi-palette"></i>
-            </a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><h6 class="dropdown-header">Appearance</h6></li>
-              <li><button type="button" class="dropdown-item" data-dx-theme-value="light"><i class="bi bi-sun me-2"></i>Light</button></li>
-              <li><button type="button" class="dropdown-item" data-dx-theme-value="dark"><i class="bi bi-moon-stars me-2"></i>Dark</button></li>
-              <li><button type="button" class="dropdown-item" data-dx-theme-value="auto"><i class="bi bi-circle-half me-2"></i>Follow OS</button></li>
-            </ul>
-          </li>
           {% if current_user.is_authenticated %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -112,9 +93,6 @@
               </li>
             </ul>
           </li>
-          {% else %}
-          <li class="nav-item"><a class="nav-link {% if active_endpoint == 'login' %}active{% endif %}" href="{{ url_for('login') }}">Login</a></li>
-          <li class="nav-item"><a class="nav-link {% if active_endpoint == 'register' %}active{% endif %}" href="{{ url_for('register') }}">Register</a></li>
           {% endif %}
         </ul>
       </div>
@@ -122,7 +100,7 @@
     </div>
   </nav>
 
-  <main class="container-fluid app-shell mt-4 px-3 px-lg-4 pb-4">
+  <main class="container-fluid app-shell mt-2 px-3 px-lg-4 pb-4">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
@@ -137,7 +115,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  <div class="dx-version-badge" aria-hidden="true">Dexter · PM-DB · v0.9</div>
+  <div class="dx-version-badge" aria-hidden="true">2026 Dexter Assist v0.9</div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='dexter-ui/theme.js') }}"></script>

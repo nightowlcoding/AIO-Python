@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-    <title>{{ app_title }} - Dexter Ops</title>
+    <title>{{ (current_location_name if app_key == 'ic3' and current_location_name else app_title) }} - Dexter Ops</title>
     <style>
         :root {
             --accent:#ea580c;
@@ -39,7 +39,14 @@
             background: #ffffff;
             box-shadow: 0 1px 4px rgba(15,23,42,0.06);
         }
-        .brand { font-size: 16px; font-weight: 800; color: #0f172a; }
+        .brand {
+            font-size: 16px;
+            font-weight: 800;
+            color: #0f172a;
+            cursor: default;
+            user-select: text;
+            pointer-events: none;
+        }
         .brand-wrap { display: flex; align-items: center; gap: 9px; }
         .brand-logo { width: 144px; height: 144px; object-fit: contain; border-radius: 12px; background: #fff; border: 1px solid var(--edge); padding: 6px; }
         .nav { display: flex; gap: 7px; flex-wrap: wrap; }
@@ -112,42 +119,6 @@
         .nav .primary:hover { background: #c2410c; }
         .nav .secondary { background: var(--accent2); color: #fff; border-color: #0c5b55; }
         .nav button:disabled { opacity: 0.55; cursor: not-allowed; }
-        .scope-mini-bar {
-            display: flex;
-            gap: 6px;
-            padding: 6px 12px;
-            border-bottom: 1px solid #e5e7eb;
-            background: #f8fafc;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        .scope-mini-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            min-width: 0;
-            max-width: 46vw;
-            padding: 4px 7px;
-            border-radius: 999px;
-            border: 1px solid #cbd5e1;
-            background: #ffffff;
-            font-size: 11px;
-            font-weight: 700;
-            color: #334155;
-            white-space: nowrap;
-        }
-        .scope-mini-chip .k {
-            color: #64748b;
-            font-weight: 700;
-            flex: 0 0 auto;
-        }
-        .scope-mini-chip .v {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            min-width: 0;
-        }
-        .scope-mini-chip-combined { display: none; max-width: 96vw; }
         .switch-banner {
             margin: 10px 12px 0;
             padding: 10px 12px;
@@ -195,33 +166,27 @@
             .nav { gap: 4px; }
             .brand-logo { width: 144px; height: 144px; }
             .nav a, .nav button { padding: 5px 8px; }
-            .scope-mini-chip { max-width: 45vw; font-size: 10px; }
         }
-        @media (max-width: 480px) {
-            .scope-mini-bar { padding: 5px 8px; }
-            .scope-mini-chip { display: none; }
-            .scope-mini-chip-combined { display: inline-flex; }
-        }
+        {% if app_key in ['managerapp', 'productmix'] %}
+        .dx-version-badge { display: none !important; }
+        {% endif %}
     </style>
 </head>
 <body>
     <div class="topbar" id="topbar">
         <div class="brand-wrap">
             <img class="brand-logo" src="/branding/company-logo" alt="Company logo" />
-            <div class="brand">{{ app_title }}</div>
+            <div class="brand" id="brandTitle">{{ current_location_name if app_key == 'ic3' and current_location_name else app_title }}</div>
         </div>
         <div class="nav">
+            {% if app_key != 'productmix' %}
             <a class="nav-action nav-action-home" href="/portal" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
+            {% endif %}
             <a class="nav-action nav-action-admin" href="/admin"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
             {% if show_shell_nav %}
             <button class="nav-action nav-action-back" type="button" onclick="goBack()"><span class="mini-ico">B</span><span class="nav-label">Back</span><span class="nav-short">BK</span></button>
             {% endif %}
         </div>
-    </div>
-    <div class="scope-mini-bar" aria-label="Active scope">
-        <div class="scope-mini-chip"><span class="k">Co</span><span class="v">{{ selected_company_name or 'Not selected' }}</span></div>
-        <div class="scope-mini-chip"><span class="k">Loc</span><span class="v">{{ current_location_name or 'Not selected' }}</span></div>
-        <div class="scope-mini-chip scope-mini-chip-combined"><span class="k">Scope</span><span class="v">{{ selected_company_name or 'Not selected' }} - {{ current_location_name or 'Not selected' }}</span></div>
     </div>
     {% if switch_notice %}
     <div class="switch-banner">{{ switch_notice }}</div>
@@ -270,10 +235,8 @@
             var frame = document.getElementById('appFrame');
             if (!frame) return;
             var tb = document.getElementById('topbar');
-            var scopeBar = document.querySelector('.scope-mini-bar');
             var switchBanner = document.querySelector('.switch-banner');
             var used = (tb ? tb.offsetHeight : 0) +
-                (scopeBar ? scopeBar.offsetHeight : 0) +
                 (switchBanner ? switchBanner.offsetHeight : 0);
             var vh = window.innerHeight - used;
             var isMobile = window.innerWidth <= 820;
@@ -324,6 +287,1332 @@
                 return true; // Cross-origin access should not be treated as failure.
             }
         }
+        function removeEmbeddedVersionBadges() {
+            var frame = document.getElementById('appFrame');
+            if (!frame) return;
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+                var badges = Array.prototype.slice.call(doc.querySelectorAll('.dx-version-badge'));
+                badges.forEach(function (badge) {
+                    if (badge && badge.parentNode) {
+                        badge.parentNode.removeChild(badge);
+                    }
+                });
+            } catch (e) {
+                // Ignore cross-origin access failures.
+            }
+        }
+        function dedupeHostVersionBadge() {
+            var appKey = "{{ app_key }}";
+            if (appKey !== 'managerapp' && appKey !== 'productmix') return;
+
+            var frame = document.getElementById('appFrame');
+            if (!frame) return;
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+                var appHasOwnFooter = !!doc.querySelector('footer, .footer, [role="contentinfo"], .dx-version-badge');
+                if (!appHasOwnFooter) return;
+
+                var hostBadge = document.querySelector('.dx-version-badge');
+                if (hostBadge && hostBadge.parentNode) {
+                    hostBadge.parentNode.removeChild(hostBadge);
+                }
+            } catch (e) {
+                // Ignore cross-origin access failures.
+            }
+        }
+        function syncBrandTitleFromProductMix() {
+            if ("{{ app_key }}" !== "productmix") return;
+            var frame = document.getElementById('appFrame');
+            var brand = document.getElementById('brandTitle') || document.querySelector('.topbar .brand');
+            if (!frame || !brand) return;
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+
+                var label = "";
+                var locationSelect = doc.querySelector('select[name="restaurant_id"]');
+                if (locationSelect && locationSelect.options && locationSelect.selectedIndex >= 0) {
+                    label = (locationSelect.options[locationSelect.selectedIndex].textContent || "").trim();
+                }
+                if (!label) {
+                    var groupedRow = doc.querySelector('#recentUploadsTable tbody tr.table-light td');
+                    if (groupedRow) {
+                        var groupedText = (groupedRow.textContent || "").replace(/\s+/g, ' ').trim();
+                        label = groupedText
+                            .replace(/^[^A-Za-z0-9]+/, "")
+                            .replace(/(.*?)\s*\d+\s*uploads?$/i, "$1")
+                            .trim();
+                    }
+                }
+                if (label.indexOf(' - ') !== -1) {
+                    var labelParts = label.split(' - ');
+                    label = (labelParts[labelParts.length - 1] || label).trim();
+                }
+                if (/^big\s*house\s*burgers$/i.test(label)) {
+                    label = '';
+                }
+                if (label) {
+                    brand.textContent = label;
+                }
+            } catch (e) {
+                // Ignore cross-origin access failures.
+            }
+        }
+        function syncBrandTitleFromIc3() {
+            if ("{{ app_key }}" !== "ic3") return;
+            var frame = document.getElementById('appFrame');
+            var brand = document.getElementById('brandTitle') || document.querySelector('.topbar .brand');
+            if (!frame || !brand) return;
+
+            var fallback = "{{ current_location_name|default('', true) }}";
+            fallback = String(fallback || '').trim();
+
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+
+                var selected = doc.querySelector('input[type="radio"][name="location"]:checked');
+                var label = selected ? String(selected.value || '').trim() : '';
+                var shortValue = selected ? String(selected.value || '').trim() : '';
+                if (shortValue) {
+                    var matchingOptions = Array.prototype.slice.call(doc.querySelectorAll('select option')).filter(function (opt) {
+                        return String(opt.value || '').trim().toLowerCase() === shortValue.toLowerCase();
+                    });
+                    if (matchingOptions.length) {
+                        matchingOptions.sort(function (a, b) {
+                            var aText = String(a.textContent || '').trim();
+                            var bText = String(b.textContent || '').trim();
+                            var aScore = (aText.indexOf(' - ') !== -1 ? 1000 : 0) + aText.length;
+                            var bScore = (bText.indexOf(' - ') !== -1 ? 1000 : 0) + bText.length;
+                            return bScore - aScore;
+                        });
+                        var candidate = String(matchingOptions[0].textContent || '').trim();
+                        if (candidate) {
+                            label = candidate;
+                        }
+                    }
+                }
+                if (!label && selected && selected.id) {
+                    var labelEl = doc.querySelector('label[for="' + selected.id.replace(/"/g, '\\\"') + '"]');
+                    if (labelEl) {
+                        label = String(labelEl.textContent || '').trim();
+                    }
+                }
+                if (!label) {
+                    var anyRadio = doc.querySelector('input[type="radio"][name="location"]');
+                    if (anyRadio) {
+                        label = String(anyRadio.value || '').trim();
+                    }
+                }
+                if (!label) {
+                    label = fallback;
+                }
+                if (label) {
+                    brand.textContent = label;
+                    document.title = label + ' - Dexter Ops';
+                }
+            } catch (e) {
+                if (fallback) {
+                    brand.textContent = fallback;
+                    document.title = fallback + ' - Dexter Ops';
+                }
+            }
+        }
+        function syncIc3LocationSelection() {
+            if ("{{ app_key }}" !== "ic3") return;
+            var preferred = "{{ current_location_name|default('', true) }}";
+            preferred = String(preferred || '').trim();
+            if (!preferred) return;
+            var preferredLower = preferred.toLowerCase();
+            var trailingPart = '';
+            if (preferred.indexOf(' - ') !== -1) {
+                trailingPart = preferred.split(' - ').pop().trim().toLowerCase();
+            }
+
+            var frame = document.getElementById('appFrame');
+            if (!frame) return;
+
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+
+                var radios = Array.prototype.slice.call(doc.querySelectorAll('input[name="location"][type="radio"]'));
+                if (!radios.length) return;
+
+                var target = null;
+                for (var i = 0; i < radios.length; i++) {
+                    var value = String(radios[i].value || '').trim().toLowerCase();
+                    if (!value) continue;
+                    if (
+                        value === preferredLower ||
+                        (trailingPart && value === trailingPart) ||
+                        preferredLower.indexOf(value) !== -1 ||
+                        value.indexOf(preferredLower) !== -1
+                    ) {
+                        target = radios[i];
+                        break;
+                    }
+                }
+                if (!target) return;
+
+                for (var j = 0; j < radios.length; j++) {
+                    var radio = radios[j];
+                    var wrapper = radio.closest('.location-option');
+                    if (radio === target) {
+                        if (wrapper) {
+                            wrapper.style.display = '';
+                        }
+                        radio.checked = true;
+                    } else if (wrapper) {
+                        wrapper.style.display = 'none';
+                    }
+                }
+
+                try {
+                    target.dispatchEvent(new Event('change', { bubbles: true }));
+                } catch (e) {
+                    var evt = doc.createEvent('Event');
+                    evt.initEvent('change', true, true);
+                    target.dispatchEvent(evt);
+                }
+                try {
+                    if (frame.contentWindow && typeof frame.contentWindow.setLocation === 'function') {
+                        frame.contentWindow.setLocation(preferred);
+                    }
+                } catch (e) {
+                    // Ignore optional integration failures.
+                }
+                syncBrandTitleFromIc3();
+            } catch (e) {
+                // Ignore cross-origin access failures.
+            }
+        }
+        function cleanupIc3Controls() {
+            if ("{{ app_key }}" !== "ic3") return;
+            var frame = document.getElementById('appFrame');
+            if (!frame) return;
+
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+
+                // Keep edit toggle available, but default it to OFF.
+                var viewMode = doc.getElementById('viewMode');
+                if (viewMode && viewMode.dataset.dexterDefaultApplied !== '1') {
+                    viewMode.dataset.dexterDefaultApplied = '1';
+                    var hasCategorized = Array.prototype.slice.call(viewMode.options || []).some(function (opt) {
+                        return String(opt.value || '').trim().toLowerCase() === 'categorized';
+                    });
+                    if (hasCategorized && String(viewMode.value || '').trim().toLowerCase() !== 'categorized') {
+                        viewMode.value = 'categorized';
+                        try {
+                            viewMode.dispatchEvent(new Event('change', { bubbles: true }));
+                        } catch (e) {
+                            var vmEvt = doc.createEvent('Event');
+                            vmEvt.initEvent('change', true, true);
+                            viewMode.dispatchEvent(vmEvt);
+                        }
+                    }
+                }
+
+                var editToggle = doc.getElementById('showEditButtons');
+                if (editToggle && editToggle.checked) {
+                    editToggle.checked = false;
+                    try {
+                        editToggle.dispatchEvent(new Event('change', { bubbles: true }));
+                    } catch (e) {
+                        var evt = doc.createEvent('Event');
+                        evt.initEvent('change', true, true);
+                        editToggle.dispatchEvent(evt);
+                    }
+                }
+
+            } catch (e) {
+                // Ignore cross-origin access failures.
+            }
+        }
+        function moveIc3LoadPrintToBottom() {
+            if ("{{ app_key }}" !== "ic3") return;
+            var frame = document.getElementById('appFrame');
+            if (!frame) return;
+
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+
+                var categories = doc.getElementById('categoriesContainer');
+                var cards = doc.getElementById('ic3MobileCards');
+                var anchor = cards && cards.parentNode ? cards : categories;
+                if (!anchor || !anchor.parentNode) return;
+
+                var host = doc.getElementById('dexterIc3BottomActions');
+                if (!host) {
+                    host = doc.createElement('div');
+                    host.id = 'dexterIc3BottomActions';
+                    host.style.display = 'flex';
+                    host.style.flexWrap = 'wrap';
+                    host.style.gap = '8px';
+                    host.style.margin = '12px 0 8px 0';
+                    anchor.parentNode.insertBefore(host, anchor.nextSibling);
+                }
+
+                var buttons = Array.prototype.slice.call(doc.querySelectorAll('button'));
+                var movedCount = 0;
+                for (var i = 0; i < buttons.length; i++) {
+                    var button = buttons[i];
+                    var label = String(button.textContent || '').trim().toLowerCase();
+                    if (!label) continue;
+                    if (label.indexOf('load inventory') === -1 && label !== 'print' && label.indexOf('print') === -1) {
+                        continue;
+                    }
+                    if (button.closest('#dexterIc3BottomActions')) {
+                        continue;
+                    }
+                    host.appendChild(button);
+                    movedCount += 1;
+                }
+
+                if (movedCount > 0) {
+                    host.dataset.moved = '1';
+                }
+            } catch (e) {
+                // Ignore cross-origin access failures.
+            }
+        }
+        function installIc3SubmenuModalPatch() {
+            if ("{{ app_key }}" !== "ic3") return;
+            var frame = document.getElementById('appFrame');
+            if (!frame) return;
+
+            function ensureInventoryGroupsOverlay() {
+                var existing = document.getElementById('dexterInventoryGroupsOverlay');
+                if (existing) return existing;
+
+                var overlay = document.createElement('div');
+                overlay.id = 'dexterInventoryGroupsOverlay';
+                overlay.style.position = 'fixed';
+                overlay.style.inset = '0';
+                overlay.style.background = 'rgba(15, 23, 42, 0.52)';
+                overlay.style.display = 'none';
+                overlay.style.zIndex = '3000';
+                overlay.style.padding = '16px';
+
+                var shell = document.createElement('div');
+                shell.style.background = '#ffffff';
+                shell.style.borderRadius = '12px';
+                shell.style.width = '100%';
+                shell.style.height = '100%';
+                shell.style.display = 'flex';
+                shell.style.flexDirection = 'column';
+                shell.style.boxShadow = '0 18px 48px rgba(2, 6, 23, 0.28)';
+
+                var topBar = document.createElement('div');
+                topBar.style.display = 'flex';
+                topBar.style.alignItems = 'center';
+                topBar.style.justifyContent = 'space-between';
+                topBar.style.padding = '10px 12px';
+                topBar.style.borderBottom = '1px solid #e2e8f0';
+
+                var title = document.createElement('strong');
+                title.textContent = 'Inventory Groups';
+
+                var closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.textContent = 'Close';
+                closeBtn.style.border = '1px solid #cbd5e1';
+                closeBtn.style.background = '#fff';
+                closeBtn.style.borderRadius = '8px';
+                closeBtn.style.padding = '6px 10px';
+                closeBtn.style.cursor = 'pointer';
+
+                var pane = document.createElement('iframe');
+                pane.id = 'dexterInventoryGroupsFrame';
+                pane.src = '/app/managerapp/inventory-groups?embedded_overlay=1&t=' + Date.now();
+                pane.style.width = '100%';
+                pane.style.height = '100%';
+                pane.style.border = '0';
+                pane.style.flex = '1';
+
+                closeBtn.addEventListener('click', function () {
+                    overlay.style.display = 'none';
+                });
+
+                overlay.addEventListener('click', function (event) {
+                    if (event.target === overlay) {
+                        overlay.style.display = 'none';
+                    }
+                });
+
+                topBar.appendChild(title);
+                topBar.appendChild(closeBtn);
+                shell.appendChild(topBar);
+                shell.appendChild(pane);
+                overlay.appendChild(shell);
+                document.body.appendChild(overlay);
+                return overlay;
+            }
+
+            try {
+                var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+                if (!doc) return;
+                if (!frame.contentWindow || !frame.contentWindow.fetch) return;
+
+                function stripCaseCountHelpPanel() {
+                    var productsTab = doc.getElementById('products');
+                    if (!productsTab) return;
+
+                    var headings = Array.prototype.slice.call(productsTab.querySelectorAll('h4, h3'));
+                    headings.forEach(function (heading) {
+                        var headingText = String(heading.textContent || '').replace(/\s+/g, ' ').trim();
+                        if (headingText.indexOf('Case Count Feature') === -1) return;
+                        var panel = heading.closest('div');
+                        if (panel && panel.parentNode) {
+                            panel.parentNode.removeChild(panel);
+                        }
+                    });
+                }
+
+                stripCaseCountHelpPanel();
+                if (!doc.body.dataset.dexterCaseCountPanelBound) {
+                    doc.body.dataset.dexterCaseCountPanelBound = '1';
+                    if (frame.contentWindow.MutationObserver) {
+                        var productsRoot = doc.getElementById('products') || doc.body;
+                        var casePanelObserver = new frame.contentWindow.MutationObserver(function () {
+                            stripCaseCountHelpPanel();
+                        });
+                        casePanelObserver.observe(productsRoot, { childList: true, subtree: true });
+                    }
+                }
+
+                // Manager App is now the source-of-truth for inventory subgroup defaults.
+                // Apply defaults in IC3 and skip in-page subgroup authoring.
+                var manageButton = doc.getElementById('ic3ManageSubmenus');
+                if (manageButton) {
+                    manageButton.textContent = 'Manage Groups';
+                    manageButton.onclick = null;
+                    if (manageButton.dataset.dexterGroupsBound !== '1') {
+                        manageButton.dataset.dexterGroupsBound = '1';
+                        manageButton.addEventListener('click', function (event) {
+                        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+                        var overlay = ensureInventoryGroupsOverlay();
+                        var pane = document.getElementById('dexterInventoryGroupsFrame');
+                        if (pane) {
+                            var fallbackUrl = '/app/managerapp/inventory-groups?embedded_overlay=1&t=' + Date.now();
+                            var activeLocation = '';
+                            try {
+                                var checkedLocation = doc.querySelector('input[type="radio"][name="location"]:checked');
+                                if (checkedLocation) {
+                                    activeLocation = String(checkedLocation.value || checkedLocation.id || '').trim();
+                                }
+                            } catch (_) {
+                                activeLocation = '';
+                            }
+                            if (activeLocation) {
+                                pane.src = '/app/managerapp/inventory-groups?scope=location&location_name=' + encodeURIComponent(activeLocation) + '&embedded_overlay=1&t=' + Date.now();
+                            } else {
+                                pane.src = fallbackUrl;
+                            }
+                        }
+                        overlay.style.display = 'block';
+                        });
+                    }
+                }
+
+                var noteHost = doc.getElementById('dexterIc3DefaultGroupNotice');
+                if (!noteHost) {
+                    noteHost = doc.createElement('div');
+                    noteHost.id = 'dexterIc3DefaultGroupNotice';
+                    noteHost.style.margin = '8px 0';
+                    noteHost.style.padding = '8px 10px';
+                    noteHost.style.border = '1px solid #dbe4f0';
+                    noteHost.style.borderRadius = '8px';
+                    noteHost.style.background = '#f8fafc';
+                    noteHost.style.fontSize = '12px';
+                    var controls = doc.getElementById('ic3SubmenuControls') || doc.querySelector('.inventory-controls-panel');
+                    if (controls && controls.parentNode) {
+                        controls.parentNode.insertBefore(noteHost, controls.nextSibling);
+                    }
+                }
+
+                if (!doc.getElementById('dexterIc3InventoryListStyle')) {
+                    var listStyle = doc.createElement('style');
+                    listStyle.id = 'dexterIc3InventoryListStyle';
+                    listStyle.textContent = [
+                        '.dexter-inventory-list-control { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }',
+                        '.dexter-inventory-list-control label { font-size: 12px; font-weight: 700; color: #334155; margin: 0; white-space: nowrap; }',
+                        '.dexter-inventory-list-control select { min-width: 210px; min-height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; background: #fff; color: #0f172a; font-size: 13px; }',
+                        '.dexter-inventory-list-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }',
+                        '.dexter-inventory-list-actions .btn { min-height: 34px; padding: 6px 10px; font-size: 12px; }',
+                        '@media (max-width: 820px) { .dexter-inventory-list-control { display: grid; width: 100%; margin: 6px 0 0 0; } .dexter-inventory-list-control select { width: 100%; min-width: 0; } }'
+                    ].join('\n');
+                    (doc.head || doc.documentElement).appendChild(listStyle);
+                }
+
+                function safeText(value) {
+                    return String(value || '').replace(/\s+/g, ' ').trim();
+                }
+
+                function collectInventoryProductOrder() {
+                    var rows = Array.prototype.slice.call(doc.querySelectorAll('#categoriesContainer tbody tr'));
+                    var ids = [];
+                    var seen = {};
+                    rows.forEach(function (row) {
+                        var qtyInput = row.querySelector('input.quantity-input');
+                        if (!qtyInput) return;
+                        var productId = safeText((qtyInput.id || '').replace(/^qty_/, ''));
+                        if (!productId || seen[productId]) return;
+                        seen[productId] = true;
+                        ids.push(productId);
+                    });
+                    return ids;
+                }
+
+                function collectManageProductsOrder() {
+                    var rows = Array.prototype.slice.call(doc.querySelectorAll('#productManagementTableBody tr'));
+                    var ids = [];
+                    var seen = {};
+                    rows.forEach(function (row) {
+                        var link = row.querySelector('a.ic3-product-link[data-product-number]');
+                        var productId = safeText(link ? link.getAttribute('data-product-number') : '');
+                        if (!productId && row.cells && row.cells[3]) {
+                            productId = safeText(row.cells[3].innerText || row.cells[3].textContent || '');
+                        }
+                        if (!productId || seen[productId]) return;
+                        seen[productId] = true;
+                        ids.push(productId);
+                    });
+                    return ids;
+                }
+
+                function mergeCatchAllOrder(previousOrder, currentOrder) {
+                    var prev = Array.isArray(previousOrder) ? previousOrder : [];
+                    var current = Array.isArray(currentOrder) ? currentOrder : [];
+                    if (!prev.length) return current.slice();
+
+                    var currentSet = {};
+                    current.forEach(function (id) { currentSet[id] = true; });
+
+                    var merged = [];
+                    var mergedSet = {};
+                    prev.forEach(function (id) {
+                        if (!currentSet[id] || mergedSet[id]) return;
+                        merged.push(id);
+                        mergedSet[id] = true;
+                    });
+                    current.forEach(function (id) {
+                        if (!id || mergedSet[id]) return;
+                        merged.push(id);
+                        mergedSet[id] = true;
+                    });
+                    return merged;
+                }
+
+                var inventoryListState = frame.contentWindow.__dexterInventoryListState || {
+                    lists: [],
+                    selectedListId: 'catch_all',
+                    catchAllItemKeys: [],
+                    selectorIds: ['dexterIc3InventoryListInventory', 'dexterIc3InventoryListProducts'],
+                    catchAllSyncTimer: null,
+                    lastCatchAllSyncedSignature: ''
+                };
+                frame.contentWindow.__dexterInventoryListState = inventoryListState;
+
+                frame.contentWindow.fetch('/api/shared/inventory-default-groups')
+                    .then(function (response) { return response.json(); })
+                    .then(function (payload) {
+                        var persistedCatchAll = Array.isArray(payload && payload.catch_all_item_keys)
+                            ? payload.catch_all_item_keys.map(function (id) { return safeText(id); }).filter(Boolean)
+                            : [];
+                        if (persistedCatchAll.length) {
+                            inventoryListState.catchAllItemKeys = mergeCatchAllOrder(persistedCatchAll, inventoryListState.catchAllItemKeys);
+                        }
+
+                        var groups = Array.isArray(payload.groups) ? payload.groups : [];
+                        var catchAllCurrentOrder = collectManageProductsOrder();
+                        if (!catchAllCurrentOrder.length) {
+                            catchAllCurrentOrder = collectInventoryProductOrder();
+                        }
+                        inventoryListState.catchAllItemKeys = mergeCatchAllOrder(inventoryListState.catchAllItemKeys, catchAllCurrentOrder);
+
+                        function queueCatchAllSync() {
+                            var ids = Array.isArray(inventoryListState.catchAllItemKeys) ? inventoryListState.catchAllItemKeys.slice() : [];
+                            if (!ids.length) return;
+                            var signature = ids.join('|');
+                            if (signature === inventoryListState.lastCatchAllSyncedSignature) return;
+                            if (inventoryListState.catchAllSyncTimer) {
+                                frame.contentWindow.clearTimeout(inventoryListState.catchAllSyncTimer);
+                            }
+                            inventoryListState.catchAllSyncTimer = frame.contentWindow.setTimeout(function () {
+                                frame.contentWindow.fetch('/api/shared/inventory-default-groups/catch-all-sync', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ product_ids: ids })
+                                }).then(function (resp) { return resp.json(); }).then(function (syncPayload) {
+                                    if (syncPayload && syncPayload.ok) {
+                                        inventoryListState.lastCatchAllSyncedSignature = signature;
+                                    }
+                                }).catch(function () {
+                                    // Keep UI responsive when sync is unavailable.
+                                });
+                            }, 450);
+                        }
+
+                        var catchAllList = {
+                            id: 'catch_all',
+                            name: 'Catch All',
+                            item_keys: inventoryListState.catchAllItemKeys.slice()
+                        };
+
+                        var lists = [catchAllList];
+                        var seenListIds = { catch_all: true };
+                        groups.forEach(function (group) {
+                            if (!group || typeof group !== 'object') return;
+                            var groupId = safeText(group.id || '');
+                            if (!groupId || seenListIds[groupId]) return;
+                            seenListIds[groupId] = true;
+                            lists.push({
+                                id: groupId,
+                                name: safeText(group.name || groupId) || groupId,
+                                item_keys: Array.isArray(group.item_keys) ? group.item_keys.map(function (key) { return safeText(key); }).filter(Boolean) : []
+                            });
+                        });
+
+                        inventoryListState.lists = lists;
+
+                        function findListById(listId) {
+                            var key = safeText(listId || '');
+                            for (var i = 0; i < inventoryListState.lists.length; i++) {
+                                if (String(inventoryListState.lists[i].id || '') === key) {
+                                    return inventoryListState.lists[i];
+                                }
+                            }
+                            return null;
+                        }
+
+                        function applyActiveInventoryList() {
+                            var active = findListById(inventoryListState.selectedListId) || findListById('catch_all');
+                            var allowed = {};
+                            if (active && active.id !== 'catch_all' && Array.isArray(active.item_keys)) {
+                                active.item_keys.forEach(function (itemKey) {
+                                    if (!itemKey) return;
+                                    allowed[itemKey] = true;
+                                });
+                            }
+
+                            var inventoryRows = Array.prototype.slice.call(doc.querySelectorAll('#categoriesContainer tbody tr'));
+                            var visibleInventoryCount = 0;
+                            inventoryRows.forEach(function (row) {
+                                var qtyInput = row.querySelector('input.quantity-input');
+                                if (!qtyInput) return;
+                                var productId = safeText((qtyInput.id || '').replace(/^qty_/, ''));
+                                var show = !active || active.id === 'catch_all' ? true : !!allowed[productId];
+                                row.style.display = show ? '' : 'none';
+                                if (show) visibleInventoryCount += 1;
+                            });
+
+                            var manageRows = Array.prototype.slice.call(doc.querySelectorAll('#productManagementTableBody tr'));
+                            var visibleManageCount = 0;
+                            manageRows.forEach(function (row) {
+                                var link = row.querySelector('a.ic3-product-link[data-product-number]');
+                                var productId = safeText(link ? link.getAttribute('data-product-number') : '');
+                                if (!productId && row.cells && row.cells[3]) {
+                                    productId = safeText(row.cells[3].innerText || row.cells[3].textContent || '');
+                                }
+                                var show = !active || active.id === 'catch_all' ? true : !!allowed[productId];
+                                row.style.display = show ? '' : 'none';
+                                if (show) visibleManageCount += 1;
+                            });
+
+                            if (noteHost) {
+                                if (!active || active.id === 'catch_all') {
+                                    noteHost.innerHTML = 'Inventory List: <strong>Catch All</strong> (' + visibleInventoryCount + ' inventory items, ' + visibleManageCount + ' manage rows)';
+                                } else {
+                                    noteHost.innerHTML = 'Inventory List: <strong>' + String(active.name || 'Selected List') + '</strong> (' + visibleInventoryCount + ' inventory items, ' + visibleManageCount + ' manage rows)';
+                                }
+                            }
+
+                            frame.contentWindow.__dexterApplyDefaultInventoryGroup = applyActiveInventoryList;
+                        }
+
+                        function renderSelectors() {
+                            var controls = doc.getElementById('ic3SubmenuControls') || doc.querySelector('.inventory-controls-panel');
+                            if (controls && !doc.getElementById('dexterIc3InventoryListInventoryWrap')) {
+                                var inventoryWrap = doc.createElement('div');
+                                inventoryWrap.id = 'dexterIc3InventoryListInventoryWrap';
+                                inventoryWrap.className = 'dexter-inventory-list-control';
+                                inventoryWrap.innerHTML = '<label for="dexterIc3InventoryListInventory">Inventory List</label><select id="dexterIc3InventoryListInventory"></select>';
+                                controls.appendChild(inventoryWrap);
+                            }
+
+                            var productsTab = doc.getElementById('products');
+                            var productsSearch = doc.getElementById('productSearchBox');
+                            var productsToolbar = null;
+                            if (productsTab) {
+                                productsToolbar = doc.getElementById('dexterIc3ListToolbar');
+                                if (!productsToolbar) {
+                                    productsToolbar = doc.createElement('div');
+                                    productsToolbar.id = 'dexterIc3ListToolbar';
+                                    productsToolbar.style.display = 'flex';
+                                    productsToolbar.style.alignItems = 'center';
+                                    productsToolbar.style.gap = '8px';
+                                    productsToolbar.style.flexWrap = 'wrap';
+                                    productsToolbar.style.margin = '8px 0 12px 0';
+                                    productsTab.insertBefore(productsToolbar, productsTab.firstChild);
+                                }
+                            }
+
+                            if (productsTab && productsSearch && !doc.getElementById('dexterIc3InventoryListProductsWrap')) {
+                                var productsWrap = doc.createElement('div');
+                                productsWrap.id = 'dexterIc3InventoryListProductsWrap';
+                                productsWrap.className = 'dexter-inventory-list-control';
+                                productsWrap.style.margin = '0';
+                                productsWrap.innerHTML = '<label for="dexterIc3InventoryListProducts">Inventory List</label><select id="dexterIc3InventoryListProducts"></select>';
+                                if (productsToolbar) {
+                                    productsToolbar.appendChild(productsWrap);
+                                } else {
+                                    productsTab.insertBefore(productsWrap, productsTab.firstChild);
+                                }
+                            }
+
+                            if (productsTab && !doc.getElementById('dexterIc3InventoryListActions')) {
+                                var actions = doc.createElement('div');
+                                actions.id = 'dexterIc3InventoryListActions';
+                                actions.className = 'dexter-inventory-list-actions';
+                                actions.style.marginLeft = '0';
+                                actions.innerHTML = [
+                                    '<button type="button" class="btn btn-secondary" id="dexterIc3ListCreate">+ New List</button>',
+                                    '<button type="button" class="btn btn-secondary" id="dexterIc3ListRename">Rename</button>',
+                                    '<button type="button" class="btn btn-danger" id="dexterIc3ListDelete">Delete</button>',
+                                    '<button type="button" class="btn btn-primary" id="dexterIc3ListSaveVisible">Save Visible Items</button>'
+                                ].join('');
+                                if (productsToolbar) {
+                                    productsToolbar.appendChild(actions);
+                                } else {
+                                    productsTab.insertBefore(actions, productsTab.firstChild);
+                                }
+                            }
+
+                            var selectorOptions = inventoryListState.lists.map(function (listItem) {
+                                var id = String(listItem.id || '');
+                                var label = String(listItem.name || id || 'Inventory List');
+                                var escapedLabel = label.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                                var escapedId = id.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                                return '<option value="' + escapedId + '">' + escapedLabel + '</option>';
+                            }).join('');
+
+                            var localStorageKey = 'dexter_ic3_inventory_list_' + String((payload && payload.company_scope && payload.company_scope.id) || 'company') + '_' + String((payload && payload.location_scope && payload.location_scope.id) || 'location');
+                            var preferred = '';
+                            try {
+                                preferred = String(frame.contentWindow.sessionStorage.getItem(localStorageKey) || '').trim();
+                            } catch (_) {
+                                preferred = '';
+                            }
+                            var defaultId = safeText((payload && payload.default_group_id) || '');
+                            var serverActiveId = safeText((payload && payload.active_list_id) || '');
+                            var availableIds = {};
+                            inventoryListState.lists.forEach(function (listItem) { availableIds[String(listItem.id || '')] = true; });
+                            inventoryListState.selectedListId = availableIds[serverActiveId]
+                                ? serverActiveId
+                                : (availableIds[preferred] ? preferred : (availableIds[defaultId] ? defaultId : 'catch_all'));
+
+                            inventoryListState.selectorIds.forEach(function (selectorId) {
+                                var selector = doc.getElementById(selectorId);
+                                if (!selector) return;
+                                selector.innerHTML = selectorOptions;
+                                selector.value = inventoryListState.selectedListId;
+                                if (selector.dataset.dexterBound === '1') return;
+                                selector.dataset.dexterBound = '1';
+                                selector.addEventListener('change', function () {
+                                    inventoryListState.selectedListId = safeText(selector.value || 'catch_all') || 'catch_all';
+                                    inventoryListState.selectorIds.forEach(function (syncId) {
+                                        var syncSelect = doc.getElementById(syncId);
+                                        if (syncSelect && syncSelect !== selector) {
+                                            syncSelect.value = inventoryListState.selectedListId;
+                                        }
+                                    });
+                                    try {
+                                        frame.contentWindow.sessionStorage.setItem(localStorageKey, inventoryListState.selectedListId);
+                                    } catch (_) {}
+                                    frame.contentWindow.fetch('/api/shared/inventory-default-groups/active-list?list_id=' + encodeURIComponent(inventoryListState.selectedListId)).catch(function () {
+                                        // Keep UI responsive even if persistence fails.
+                                    });
+                                    applyActiveInventoryList();
+                                });
+                            });
+
+                            function selectedList() {
+                                return safeText(inventoryListState.selectedListId || 'catch_all') || 'catch_all';
+                            }
+
+                            function requireNonCatchAll() {
+                                var listId = selectedList();
+                                if (listId === 'catch_all') {
+                                    frame.contentWindow.alert('Catch All is system-managed. Select or create another list for this action.');
+                                    return '';
+                                }
+                                return listId;
+                            }
+
+                            var createBtn = doc.getElementById('dexterIc3ListCreate');
+                            if (createBtn && createBtn.dataset.dexterBound !== '1') {
+                                createBtn.dataset.dexterBound = '1';
+                                createBtn.addEventListener('click', function () {
+                                    var name = frame.contentWindow.prompt('New list name:');
+                                    name = safeText(name);
+                                    if (!name) return;
+                                    frame.contentWindow.fetch('/api/shared/inventory-default-groups/list-create', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ name: name })
+                                    }).then(function (resp) { return resp.json(); }).then(function (createPayload) {
+                                        if (!createPayload || !createPayload.ok) {
+                                            frame.contentWindow.alert((createPayload && createPayload.message) || 'Unable to create list.');
+                                            return;
+                                        }
+                                        frame.contentWindow.location.reload();
+                                    }).catch(function () {
+                                        frame.contentWindow.alert('Unable to create list right now.');
+                                    });
+                                });
+                            }
+
+                            var renameBtn = doc.getElementById('dexterIc3ListRename');
+                            if (renameBtn && renameBtn.dataset.dexterBound !== '1') {
+                                renameBtn.dataset.dexterBound = '1';
+                                renameBtn.addEventListener('click', function () {
+                                    var listId = requireNonCatchAll();
+                                    if (!listId) return;
+                                    var current = findListById(listId);
+                                    var name = frame.contentWindow.prompt('Rename list to:', current ? safeText(current.name || '') : '');
+                                    name = safeText(name);
+                                    if (!name) return;
+                                    frame.contentWindow.fetch('/api/shared/inventory-default-groups/list-rename', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ list_id: listId, name: name })
+                                    }).then(function (resp) { return resp.json(); }).then(function (renamePayload) {
+                                        if (!renamePayload || !renamePayload.ok) {
+                                            frame.contentWindow.alert((renamePayload && renamePayload.message) || 'Unable to rename list.');
+                                            return;
+                                        }
+                                        frame.contentWindow.location.reload();
+                                    }).catch(function () {
+                                        frame.contentWindow.alert('Unable to rename list right now.');
+                                    });
+                                });
+                            }
+
+                            var deleteBtn = doc.getElementById('dexterIc3ListDelete');
+                            if (deleteBtn && deleteBtn.dataset.dexterBound !== '1') {
+                                deleteBtn.dataset.dexterBound = '1';
+                                deleteBtn.addEventListener('click', function () {
+                                    var listId = requireNonCatchAll();
+                                    if (!listId) return;
+                                    var current = findListById(listId);
+                                    var label = current ? safeText(current.name || listId) : listId;
+                                    if (!frame.contentWindow.confirm('Delete list "' + label + '"?')) return;
+                                    frame.contentWindow.fetch('/api/shared/inventory-default-groups/list-delete', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ list_id: listId })
+                                    }).then(function (resp) { return resp.json(); }).then(function (deletePayload) {
+                                        if (!deletePayload || !deletePayload.ok) {
+                                            frame.contentWindow.alert((deletePayload && deletePayload.message) || 'Unable to delete list.');
+                                            return;
+                                        }
+                                        frame.contentWindow.location.reload();
+                                    }).catch(function () {
+                                        frame.contentWindow.alert('Unable to delete list right now.');
+                                    });
+                                });
+                            }
+
+                            var saveVisibleBtn = doc.getElementById('dexterIc3ListSaveVisible');
+                            if (saveVisibleBtn && saveVisibleBtn.dataset.dexterBound !== '1') {
+                                saveVisibleBtn.dataset.dexterBound = '1';
+                                saveVisibleBtn.addEventListener('click', function () {
+                                    var listId = requireNonCatchAll();
+                                    if (!listId) return;
+                                    var visibleRows = Array.prototype.slice.call(doc.querySelectorAll('#productManagementTableBody tr')).filter(function (row) {
+                                        return row.style.display !== 'none';
+                                    });
+                                    var ids = visibleRows.map(function (row) {
+                                        var link = row.querySelector('a.ic3-product-link[data-product-number]');
+                                        var productId = safeText(link ? link.getAttribute('data-product-number') : '');
+                                        if (!productId && row.cells && row.cells[3]) {
+                                            productId = safeText(row.cells[3].innerText || row.cells[3].textContent || '');
+                                        }
+                                        return productId;
+                                    }).filter(Boolean);
+                                    frame.contentWindow.fetch('/api/shared/inventory-default-groups/list-items', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ list_id: listId, item_keys: ids })
+                                    }).then(function (resp) { return resp.json(); }).then(function (savePayload) {
+                                        if (!savePayload || !savePayload.ok) {
+                                            frame.contentWindow.alert((savePayload && savePayload.message) || 'Unable to save list items.');
+                                            return;
+                                        }
+                                        frame.contentWindow.alert('Saved ' + String(savePayload.count || 0) + ' visible products to this list.');
+                                        frame.contentWindow.location.reload();
+                                    }).catch(function () {
+                                        frame.contentWindow.alert('Unable to save list items right now.');
+                                    });
+                                });
+                            }
+                        }
+
+                        renderSelectors();
+                        applyActiveInventoryList();
+                        queueCatchAllSync();
+
+                        if (!doc.body.dataset.dexterDefaultGroupBound) {
+                            doc.body.dataset.dexterDefaultGroupBound = '1';
+                            var refreshIds = ['searchBox', 'sortBy', 'viewMode', 'showEditButtons'];
+                            refreshIds.forEach(function (id) {
+                                var control = doc.getElementById(id);
+                                if (!control) return;
+                                control.addEventListener('input', function () {
+                                    if (typeof frame.contentWindow.__dexterApplyDefaultInventoryGroup === 'function') {
+                                        setTimeout(frame.contentWindow.__dexterApplyDefaultInventoryGroup, 0);
+                                    }
+                                });
+                                control.addEventListener('change', function () {
+                                    if (typeof frame.contentWindow.__dexterApplyDefaultInventoryGroup === 'function') {
+                                        setTimeout(frame.contentWindow.__dexterApplyDefaultInventoryGroup, 0);
+                                    }
+                                });
+                            });
+
+                            var categories = doc.getElementById('categoriesContainer');
+                            if (categories && frame.contentWindow.MutationObserver) {
+                                var observer = new frame.contentWindow.MutationObserver(function () {
+                                    var nextCatchAll = collectManageProductsOrder();
+                                    if (!nextCatchAll.length) {
+                                        nextCatchAll = collectInventoryProductOrder();
+                                    }
+                                    inventoryListState.catchAllItemKeys = mergeCatchAllOrder(inventoryListState.catchAllItemKeys, nextCatchAll);
+                                    if (inventoryListState.lists && inventoryListState.lists.length) {
+                                        inventoryListState.lists[0].item_keys = inventoryListState.catchAllItemKeys.slice();
+                                    }
+                                    queueCatchAllSync();
+                                    if (typeof frame.contentWindow.__dexterApplyDefaultInventoryGroup === 'function') {
+                                        frame.contentWindow.__dexterApplyDefaultInventoryGroup();
+                                    }
+                                });
+                                observer.observe(categories, { childList: true, subtree: true });
+                            }
+
+                            var productBody = doc.getElementById('productManagementTableBody');
+                            if (productBody && frame.contentWindow.MutationObserver) {
+                                var productObserver = new frame.contentWindow.MutationObserver(function () {
+                                    var nextCatchAll = collectManageProductsOrder();
+                                    if (!nextCatchAll.length) {
+                                        nextCatchAll = collectInventoryProductOrder();
+                                    }
+                                    inventoryListState.catchAllItemKeys = mergeCatchAllOrder(inventoryListState.catchAllItemKeys, nextCatchAll);
+                                    if (inventoryListState.lists && inventoryListState.lists.length) {
+                                        inventoryListState.lists[0].item_keys = inventoryListState.catchAllItemKeys.slice();
+                                    }
+                                    queueCatchAllSync();
+                                    if (typeof frame.contentWindow.__dexterApplyDefaultInventoryGroup === 'function') {
+                                        frame.contentWindow.__dexterApplyDefaultInventoryGroup();
+                                    }
+                                });
+                                productObserver.observe(productBody, { childList: true, subtree: true });
+                            }
+                        }
+                    })
+                    .catch(function () {
+                        // Leave IC3 unchanged if shared defaults are unavailable.
+                    });
+
+                return;
+
+                function safeText(value) {
+                    return String(value || '').replace(/\s+/g, ' ').trim();
+                }
+                function escapeHtml(value) {
+                    return String(value || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                }
+
+                var state = frame.contentWindow.__dexterSubmenuModalState || {
+                    submenus: [],
+                    selectedSubmenuId: '__all__'
+                };
+                frame.contentWindow.__dexterSubmenuModalState = state;
+
+                if (!doc.getElementById('dexterIc3SubmenuPatchStyle')) {
+                    var style = doc.createElement('style');
+                    style.id = 'dexterIc3SubmenuPatchStyle';
+                    style.textContent = [
+                        '.ic3-submenu-hidden { display: none !important; }',
+                        '#dexterIc3SubmenuModal { position: fixed; inset: 0; z-index: 99999; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; padding: 12px; }',
+                        '#dexterIc3SubmenuModal .dialog { width: min(860px, 96vw); max-height: 90vh; background: #fff; border-radius: 12px; border: 1px solid #cbd5e1; box-shadow: 0 20px 40px rgba(15,23,42,0.24); padding: 12px; display: grid; gap: 10px; overflow: hidden; }',
+                        '#dexterIc3SubmenuModal .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }',
+                        '#dexterIc3SubmenuModal label { font-size: 0.85rem; color: #334155; display: block; margin-bottom: 4px; font-weight: 700; }',
+                        '#dexterIc3SubmenuModal input, #dexterIc3SubmenuModal select { width: 100%; min-height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; }',
+                        '#dexterIc3SubmenuModal .items { border: 1px solid #dbe4f0; border-radius: 8px; padding: 8px; overflow: auto; max-height: 44vh; background: #f8fafc; }',
+                        '#dexterIc3SubmenuModal .item-row { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; padding: 6px; border-radius: 6px; }',
+                        '#dexterIc3SubmenuModal .item-row:hover { background: #e2e8f0; }',
+                        '#dexterIc3SubmenuModal .meta { font-size: 0.75rem; color: #64748b; }',
+                        '#dexterIc3SubmenuModal .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }'
+                    ].join('\n');
+                    (doc.head || doc.documentElement).appendChild(style);
+                }
+
+                function collectEntries() {
+                    var categories = doc.getElementById('categoriesContainer');
+                    if (!categories) return [];
+                    var rows = Array.prototype.slice.call(categories.querySelectorAll('tbody tr'));
+                    var map = {};
+                    rows.forEach(function (row) {
+                        var qtyInput = row.querySelector('input.quantity-input');
+                        if (!qtyInput) return;
+                        var productId = safeText((qtyInput.id || '').replace(/^qty_/, ''));
+                        if (!productId) return;
+                        var cells = Array.prototype.slice.call(row.cells || []);
+                        var firstBadge = cells[0] ? cells[0].querySelector('span') : null;
+                        var hasListBadge = !!firstBadge;
+                        var itemName = safeText(hasListBadge ? (cells[1] ? cells[1].innerText : '') : (cells[0] ? cells[0].innerText : ''));
+                        var category = safeText(firstBadge ? firstBadge.innerText : (cells[0] ? cells[0].innerText : ''));
+                        map[productId] = {
+                            id: productId,
+                            name: itemName || ('Product ' + productId),
+                            category: category || 'Uncategorized'
+                        };
+                    });
+                    return Object.keys(map).map(function (key) { return map[key]; }).sort(function (a, b) {
+                        return String(a.name || '').localeCompare(String(b.name || ''));
+                    });
+                }
+
+                function findSubmenu(id) {
+                    var key = safeText(id);
+                    if (!key) return null;
+                    for (var i = 0; i < state.submenus.length; i++) {
+                        if (String(state.submenus[i].id || '') === key) return state.submenus[i];
+                    }
+                    return null;
+                }
+
+                function applyFilter() {
+                    var categories = doc.getElementById('categoriesContainer');
+                    if (!categories) return;
+                    var submenu = findSubmenu(state.selectedSubmenuId);
+                    var allowed = {};
+                    if (submenu && Array.isArray(submenu.item_keys)) {
+                        submenu.item_keys.forEach(function (item) { allowed[String(item)] = true; });
+                    }
+                    var rows = Array.prototype.slice.call(categories.querySelectorAll('tbody tr'));
+                    rows.forEach(function (row) {
+                        var qtyInput = row.querySelector('input.quantity-input');
+                        if (!qtyInput) return;
+                        var productId = safeText((qtyInput.id || '').replace(/^qty_/, ''));
+                        var hide = submenu ? !allowed[productId] : false;
+                        row.classList.toggle('ic3-submenu-hidden', !!hide);
+                    });
+                }
+
+                function refreshFilterOptions() {
+                    var filter = doc.getElementById('ic3SubmenuFilter');
+                    if (!filter) return;
+                    var previous = safeText(state.selectedSubmenuId || '__all__');
+                    var options = ['<option value="__all__">All Items</option>'];
+                    state.submenus.forEach(function (submenu) {
+                        var id = safeText(submenu.id || '');
+                        var name = safeText(submenu.name || id);
+                        if (!id) return;
+                        options.push('<option value="' + escapeHtml(id) + '">' + escapeHtml(name) + '</option>');
+                    });
+                    filter.innerHTML = options.join('');
+                    var exists = state.submenus.some(function (item) { return String(item.id || '') === previous; });
+                    state.selectedSubmenuId = exists ? previous : '__all__';
+                    filter.value = state.selectedSubmenuId;
+                    applyFilter();
+                }
+
+                function loadSubmenus() {
+                    return frame.contentWindow.fetch('/api/submenus')
+                        .then(function (response) { return response.json(); })
+                        .then(function (payload) {
+                            state.submenus = Array.isArray(payload && payload.effective) ? payload.effective : [];
+                            refreshFilterOptions();
+                        })
+                        .catch(function () {
+                            state.submenus = [];
+                            refreshFilterOptions();
+                        });
+                }
+
+                function ensureModal() {
+                    var modal = doc.getElementById('dexterIc3SubmenuModal');
+                    if (modal) return modal;
+                    modal = doc.createElement('div');
+                    modal.id = 'dexterIc3SubmenuModal';
+                    modal.innerHTML = [
+                        '<div class="dialog">',
+                        '  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">',
+                        '    <h3 style="margin:0; font-size:1.05rem; color:#0f172a;">Manage Submenus</h3>',
+                        '    <button type="button" class="btn" id="dexterIc3Close">Close</button>',
+                        '  </div>',
+                        '  <div class="grid">',
+                        '    <div><label for="dexterIc3Target">Submenu</label><select id="dexterIc3Target"></select></div>',
+                        '    <div><label for="dexterIc3Scope">Scope</label><select id="dexterIc3Scope"><option value="company">Company Default</option><option value="location">Current Location Override</option></select></div>',
+                        '  </div>',
+                        '  <div class="grid">',
+                        '    <div><label for="dexterIc3Name">Submenu Name</label><input id="dexterIc3Name" type="text" placeholder="e.g. Cooler Core"></div>',
+                        '    <div><label for="dexterIc3Search">Find Items</label><input id="dexterIc3Search" type="text" placeholder="Search by product or category"></div>',
+                        '  </div>',
+                        '  <div class="items" id="dexterIc3Items"></div>',
+                        '  <div class="actions">',
+                        '    <button type="button" class="btn" id="dexterIc3Create">Create</button>',
+                        '    <button type="button" class="btn" id="dexterIc3Rename">Rename</button>',
+                        '    <button type="button" class="btn" id="dexterIc3SaveItems">Save Item Assignments</button>',
+                        '    <button type="button" class="btn" id="dexterIc3Delete">Delete</button>',
+                        '  </div>',
+                        '</div>'
+                    ].join('');
+                    doc.body.appendChild(modal);
+
+                    modal.addEventListener('click', function (event) {
+                        if (event.target === modal) {
+                            modal.style.display = 'none';
+                        }
+                    });
+                    var closeBtn = doc.getElementById('dexterIc3Close');
+                    if (closeBtn) {
+                        closeBtn.addEventListener('click', function () {
+                            modal.style.display = 'none';
+                        });
+                    }
+                    var searchInput = doc.getElementById('dexterIc3Search');
+                    if (searchInput) {
+                        searchInput.addEventListener('input', renderModalItems);
+                    }
+                    var target = doc.getElementById('dexterIc3Target');
+                    if (target) {
+                        target.addEventListener('change', function () {
+                            syncModalForm();
+                            renderModalItems();
+                        });
+                    }
+
+                    var createBtn = doc.getElementById('dexterIc3Create');
+                    if (createBtn) {
+                        createBtn.addEventListener('click', function () {
+                            var name = safeText((doc.getElementById('dexterIc3Name') || {}).value || '');
+                            var scope = safeText((doc.getElementById('dexterIc3Scope') || {}).value || 'company') === 'location' ? 'location' : 'company';
+                            if (!name) {
+                                frame.contentWindow.alert('Please enter a submenu name.');
+                                return;
+                            }
+                            frame.contentWindow.fetch('/api/submenus', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: name, scope: scope })
+                            }).then(function (resp) { return resp.json(); }).then(function (payload) {
+                                if (!payload || !payload.success) {
+                                    frame.contentWindow.alert((payload && payload.message) || 'Create failed.');
+                                    return;
+                                }
+                                state.selectedSubmenuId = String(payload.submenu_id || '__all__');
+                                loadSubmenus().then(refreshModalTarget);
+                            });
+                        });
+                    }
+
+                    var renameBtn = doc.getElementById('dexterIc3Rename');
+                    if (renameBtn) {
+                        renameBtn.addEventListener('click', function () {
+                            var selected = getModalSelectedSubmenu();
+                            if (!selected) {
+                                frame.contentWindow.alert('Select a submenu first.');
+                                return;
+                            }
+                            var name = safeText((doc.getElementById('dexterIc3Name') || {}).value || '');
+                            var scope = safeText((doc.getElementById('dexterIc3Scope') || {}).value || selected.scope) === 'location' ? 'location' : 'company';
+                            if (!name) {
+                                frame.contentWindow.alert('Please enter a submenu name.');
+                                return;
+                            }
+                            frame.contentWindow.fetch('/api/submenus/' + encodeURIComponent(selected.id), {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: name, scope: scope })
+                            }).then(function (resp) { return resp.json(); }).then(function (payload) {
+                                if (!payload || !payload.success) {
+                                    frame.contentWindow.alert((payload && payload.message) || 'Rename failed.');
+                                    return;
+                                }
+                                state.selectedSubmenuId = selected.id;
+                                loadSubmenus().then(refreshModalTarget);
+                            });
+                        });
+                    }
+
+                    var saveBtn = doc.getElementById('dexterIc3SaveItems');
+                    if (saveBtn) {
+                        saveBtn.addEventListener('click', function () {
+                            var selected = getModalSelectedSubmenu();
+                            if (!selected) {
+                                frame.contentWindow.alert('Select a submenu first.');
+                                return;
+                            }
+                            var scope = safeText((doc.getElementById('dexterIc3Scope') || {}).value || selected.scope) === 'location' ? 'location' : 'company';
+                            var checked = Array.prototype.slice.call(doc.querySelectorAll('input[name="dexterIc3ItemKey"]:checked')).map(function (el) {
+                                return safeText(el.value || '');
+                            }).filter(Boolean);
+                            frame.contentWindow.fetch('/api/submenus/' + encodeURIComponent(selected.id) + '/items', {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ scope: scope, item_keys: checked })
+                            }).then(function (resp) { return resp.json(); }).then(function (payload) {
+                                if (!payload || !payload.success) {
+                                    frame.contentWindow.alert((payload && payload.message) || 'Save items failed.');
+                                    return;
+                                }
+                                state.selectedSubmenuId = selected.id;
+                                loadSubmenus().then(refreshModalTarget);
+                            });
+                        });
+                    }
+
+                    var deleteBtn = doc.getElementById('dexterIc3Delete');
+                    if (deleteBtn) {
+                        deleteBtn.addEventListener('click', function () {
+                            var selected = getModalSelectedSubmenu();
+                            if (!selected) {
+                                frame.contentWindow.alert('Select a submenu first.');
+                                return;
+                            }
+                            var scope = safeText((doc.getElementById('dexterIc3Scope') || {}).value || selected.scope) === 'location' ? 'location' : 'company';
+                            if (!frame.contentWindow.confirm('Delete submenu "' + (selected.name || selected.id) + '"?')) {
+                                return;
+                            }
+                            frame.contentWindow.fetch('/api/submenus/' + encodeURIComponent(selected.id) + '?scope=' + encodeURIComponent(scope), {
+                                method: 'DELETE'
+                            }).then(function (resp) { return resp.json(); }).then(function (payload) {
+                                if (!payload || !payload.success) {
+                                    frame.contentWindow.alert((payload && payload.message) || 'Delete failed.');
+                                    return;
+                                }
+                                state.selectedSubmenuId = '__all__';
+                                loadSubmenus().then(refreshModalTarget);
+                            });
+                        });
+                    }
+
+                    return modal;
+                }
+
+                function getModalSelectedSubmenu() {
+                    var target = doc.getElementById('dexterIc3Target');
+                    var id = safeText(target ? target.value : '');
+                    return findSubmenu(id);
+                }
+
+                function syncModalForm() {
+                    var selected = getModalSelectedSubmenu();
+                    var nameInput = doc.getElementById('dexterIc3Name');
+                    var scopeSelect = doc.getElementById('dexterIc3Scope');
+                    if (nameInput) nameInput.value = selected ? safeText(selected.name || '') : '';
+                    if (scopeSelect) scopeSelect.value = selected && safeText(selected.scope || '') === 'location' ? 'location' : 'company';
+                }
+
+                function renderModalItems() {
+                    var root = doc.getElementById('dexterIc3Items');
+                    if (!root) return;
+                    var selected = getModalSelectedSubmenu();
+                    var searchText = safeText((doc.getElementById('dexterIc3Search') || {}).value || '').toLowerCase();
+                    var assigned = {};
+                    if (selected && Array.isArray(selected.item_keys)) {
+                        selected.item_keys.forEach(function (key) { assigned[String(key)] = true; });
+                    }
+                    var entries = collectEntries().filter(function (entry) {
+                        if (!searchText) return true;
+                        var hay = (entry.id + ' ' + entry.name + ' ' + entry.category).toLowerCase();
+                        return hay.indexOf(searchText) !== -1;
+                    });
+                    if (!entries.length) {
+                        root.innerHTML = '<div class="meta">No products match the current search.</div>';
+                        return;
+                    }
+                    root.innerHTML = entries.map(function (entry) {
+                        var checked = assigned[entry.id] ? ' checked' : '';
+                        return [
+                            '<label class="item-row">',
+                            '  <input type="checkbox" name="dexterIc3ItemKey" value="' + escapeHtml(entry.id) + '"' + checked + '>',
+                            '  <span>',
+                            '    <span style="display:block; font-weight:700; color:#0f172a;">' + escapeHtml(entry.name) + '</span>',
+                            '    <span class="meta">ID ' + escapeHtml(entry.id) + ' | ' + escapeHtml(entry.category) + '</span>',
+                            '  </span>',
+                            '</label>'
+                        ].join('');
+                    }).join('');
+                }
+
+                function refreshModalTarget() {
+                    var target = doc.getElementById('dexterIc3Target');
+                    if (!target) return;
+                    var preferred = safeText(state.selectedSubmenuId || '__all__');
+                    var options = ['<option value="">Choose a submenu</option>'];
+                    state.submenus.forEach(function (submenu) {
+                        var id = safeText(submenu.id || '');
+                        var name = safeText(submenu.name || id);
+                        var scope = safeText(submenu.scope || 'company') === 'location' ? 'Location' : 'Company';
+                        if (!id) return;
+                        options.push('<option value="' + escapeHtml(id) + '">' + escapeHtml(name) + ' (' + escapeHtml(scope) + ')</option>');
+                    });
+                    target.innerHTML = options.join('');
+                    var exists = state.submenus.some(function (item) { return String(item.id || '') === preferred; });
+                    target.value = exists ? preferred : '';
+                    syncModalForm();
+                    renderModalItems();
+                }
+
+                function openModal() {
+                    ensureModal();
+                    loadSubmenus().then(function () {
+                        refreshModalTarget();
+                        var modal = doc.getElementById('dexterIc3SubmenuModal');
+                        if (modal) modal.style.display = 'flex';
+                    });
+                }
+
+                var filter = doc.getElementById('ic3SubmenuFilter');
+                if (filter && filter.dataset.dexterPatchBound !== '1') {
+                    filter.dataset.dexterPatchBound = '1';
+                    filter.addEventListener('change', function () {
+                        state.selectedSubmenuId = safeText(filter.value || '__all__') || '__all__';
+                        applyFilter();
+                    });
+                }
+
+                var oldManageButton = doc.getElementById('ic3ManageSubmenus');
+                if (oldManageButton && oldManageButton.dataset.dexterPatchBound !== '1') {
+                    var replacement = oldManageButton.cloneNode(true);
+                    replacement.dataset.dexterPatchBound = '1';
+                    oldManageButton.parentNode.replaceChild(replacement, oldManageButton);
+                    replacement.addEventListener('click', function (event) {
+                        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+                        openModal();
+                    });
+                }
+
+                loadSubmenus();
+            } catch (e) {
+                // Ignore cross-origin access failures.
+            }
+        }
         setFrameHeight();
         window.addEventListener('resize', setFrameHeight);
         // Re-measure after the iframe loads and on a short interval to catch
@@ -348,8 +1637,31 @@
                 frame.addEventListener('load', function() {
                     try { injectMobileCss(frame.contentDocument); } catch (e) {}
                     setFrameHeight();
+                    removeEmbeddedVersionBadges();
+                    dedupeHostVersionBadge();
+                    syncBrandTitleFromProductMix();
+                    syncBrandTitleFromIc3();
+                    syncIc3LocationSelection();
+                    cleanupIc3Controls();
+                    moveIc3LoadPrintToBottom();
+                    installIc3SubmenuModalPatch();
                     setTimeout(setFrameHeight, 300);
                     setTimeout(setFrameHeight, 1000);
+                    setTimeout(removeEmbeddedVersionBadges, 300);
+                    setTimeout(removeEmbeddedVersionBadges, 1200);
+                    setTimeout(dedupeHostVersionBadge, 300);
+                    setTimeout(dedupeHostVersionBadge, 1200);
+                    setTimeout(syncBrandTitleFromProductMix, 300);
+                    setTimeout(syncBrandTitleFromIc3, 300);
+                    setTimeout(syncBrandTitleFromIc3, 1200);
+                    setTimeout(syncIc3LocationSelection, 300);
+                    setTimeout(syncIc3LocationSelection, 1200);
+                    setTimeout(cleanupIc3Controls, 300);
+                    setTimeout(cleanupIc3Controls, 1200);
+                    setTimeout(moveIc3LoadPrintToBottom, 300);
+                    setTimeout(moveIc3LoadPrintToBottom, 1200);
+                    setTimeout(installIc3SubmenuModalPatch, 300);
+                    setTimeout(installIc3SubmenuModalPatch, 1200);
                     if (frameHasMeaningfulContent()) {
                         hideFrameFallback();
                     } else {
@@ -367,6 +1679,10 @@
                             doc.addEventListener('click', function() {
                                 setTimeout(setFrameHeight, 150);
                                 setTimeout(setFrameHeight, 600);
+                                setTimeout(removeEmbeddedVersionBadges, 220);
+                                setTimeout(dedupeHostVersionBadge, 220);
+                                setTimeout(moveIc3LoadPrintToBottom, 220);
+                                setTimeout(installIc3SubmenuModalPatch, 220);
                             }, true);
                         }
                     } catch (e) { /* cross-origin */ }
@@ -378,6 +1694,7 @@
                 }
             }, 3500);
             setInterval(setFrameHeight, 1500);
+            setInterval(syncBrandTitleFromIc3, 1500);
         })();
     </script>
 </body>

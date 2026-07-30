@@ -1,0 +1,45 @@
+Date,2026-07-01
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Madison Zamora,Day,Dining,17.05,27.41,-10.36,141.44,39.01,0,0,0,11.9,0,0,145.21,0
+Alyssa Rodriguez,Day,Dining,17.31,31.6,-14.29,209.2,301.4,0,0,0,12,0,0,446.47,0
+Clarissa Cantu,Day,Dining,80.99,33.6,47.39,119.42,70.04,0,14.65,0,0,43.8,0,188.56,0
+Alexa Garcia,Day,Dining,2.41,9,-6.59,166.77,98.42,0,0,0,0,27,0,211.92,0
+Michaela Mireles,Day,Bar,118.79,86.25,32.54,421.65,334.4,43.1,0,0,205.4,6.75,0,556.24,24.99
+Kassidy Pena,Night,Dining,0,13.34,-13.34,47.04,20.93,0,0,0,0,0,0,50.47,0
+Selena Cuellar,Night,Dining,51.4,4,47.4,50.41,0,0,0,0,0,19.85,0,70.51,0
+Dominique Zamora,Night,Dining,46.93,0,46.93,0,0,0,0,0,0,0,0,43.36,0
+
+Cash Drawer Count
+Pennies,61
+Nickels,7
+Dimes,52
+Quarters,10
+Rolled Coins,6.00
+Ones,76
+Fives,1
+Tens,5
+Twenties,10
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,345.66
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+end_day,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-01T23:09:31.043Z
+end_night,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-01T23:09:30.398Z
+
+Cash Deductions
+Air Freshener ,Walmart,10.0
+ ,,0
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,10.0
+Cash in Drawer,345.66
+DEPOSIT AMOUNT,119.68

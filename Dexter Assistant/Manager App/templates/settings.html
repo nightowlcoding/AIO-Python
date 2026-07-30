@@ -52,7 +52,7 @@
                                    value="{{ archive_retention_days }}">
                             <div class="form-text">Archived employees older than this many days will be permanently deleted automatically. Use 30 for the default cleanup window.</div>
                         </div>
-                        
+
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle"></i>
                             <small>Company information will be saved and displayed across the system.</small>
@@ -72,6 +72,9 @@
                     <h5 class="mb-0">Quick Actions</h5>
                 </div>
                 <div class="card-body">
+                    <a href="{{ url_for('inventory_groups') }}" class="btn btn-outline-success w-100 mb-2">
+                        <i class="bi bi-grid"></i> Inventory Groups
+                    </a>
                     <a href="{{ url_for('manage_users') }}" class="btn btn-outline-primary w-100 mb-2">
                         <i class="bi bi-people"></i> Manage Users
                     </a>
@@ -86,4 +89,5 @@
         </div>
     </div>
 </div>
+
 {% endblock %}

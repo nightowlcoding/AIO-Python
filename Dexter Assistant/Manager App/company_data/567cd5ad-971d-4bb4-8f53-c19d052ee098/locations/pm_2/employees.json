@@ -1,0 +1,355 @@
+{
+  "employees": [
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Hailey",
+      "id": 1782275965348,
+      "jobTitle": "",
+      "lastName": "Nun",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Bailee",
+      "id": 1782275965349,
+      "jobTitle": "",
+      "lastName": "Pena",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Austin",
+      "id": 1782275965350,
+      "jobTitle": "",
+      "lastName": "Barnes",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Isabella",
+      "id": 1782275965351,
+      "jobTitle": "",
+      "lastName": "Salina\u2019s",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Alyssa",
+      "id": 1782275965352,
+      "jobTitle": "",
+      "lastName": "Rodriguez",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Isabella",
+      "id": 1782275965353,
+      "jobTitle": "",
+      "lastName": "Salinas",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Isabel",
+      "id": 1782275965354,
+      "jobTitle": "",
+      "lastName": "Garc\u00eda",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Kass",
+      "id": 1782275965355,
+      "jobTitle": "",
+      "lastName": "Pena",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Madison",
+      "id": 1782275965356,
+      "jobTitle": "",
+      "lastName": "Zamora",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Taylor",
+      "id": 1782275965357,
+      "jobTitle": "",
+      "lastName": "McCarthy",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Kiara",
+      "id": 1782275965358,
+      "jobTitle": "",
+      "lastName": "McCoy",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Emileigh",
+      "id": 1782275965359,
+      "jobTitle": "",
+      "lastName": "Salinas",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-06-23",
+      "firstName": "Indira",
+      "id": 1782275965360,
+      "jobTitle": "",
+      "lastName": "Garcia",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-07-01",
+      "firstName": "Clarissa",
+      "id": 1782946955020,
+      "jobTitle": "",
+      "lastName": "Cantu",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-07-01",
+      "firstName": "Alexa",
+      "id": 1782946955021,
+      "jobTitle": "",
+      "lastName": "Garcia",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-07-01",
+      "firstName": "Michaela",
+      "id": 1782946955022,
+      "jobTitle": "",
+      "lastName": "Mireles",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-07-01",
+      "firstName": "Kassidy",
+      "id": 1782946955023,
+      "jobTitle": "",
+      "lastName": "Pena",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-07-01",
+      "firstName": "Selena",
+      "id": 1782946955024,
+      "jobTitle": "",
+      "lastName": "Cuellar",
+      "middleName": ""
+    },
+    {
+      "dateOfHire": "2026-07-01",
+      "firstName": "Dominique",
+      "id": 1782946955025,
+      "jobTitle": "",
+      "lastName": "Zamora",
+      "middleName": ""
+    },
+    {
+      "id": 1782950016614.1023,
+      "firstName": "David",
+      "lastName": "Barraza",
+      "jobTitle": "BAR",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.4849,
+      "firstName": "Kaylee",
+      "lastName": "Jones",
+      "jobTitle": "BAR",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.622,
+      "firstName": "Selena",
+      "lastName": "Gomez",
+      "jobTitle": "Bar Manager; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.7864,
+      "firstName": "Gianna",
+      "lastName": "Cantu",
+      "jobTitle": "BAR; Bar back; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.2256,
+      "firstName": "Alexa Rae",
+      "lastName": "Garcia",
+      "jobTitle": "BAR; Bar back; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.4092,
+      "firstName": "Isabel",
+      "lastName": "Garcia",
+      "jobTitle": "BAR; Cater; Customer Service Liaison; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.8586,
+      "firstName": "Felicity",
+      "lastName": "Alaniz",
+      "jobTitle": "BAR; Cater; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.1233,
+      "firstName": "Blaine",
+      "lastName": "Roberson",
+      "jobTitle": "BAR; HOST; MANAGER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.5352,
+      "firstName": "Marissa",
+      "lastName": "Alvarez",
+      "jobTitle": "BAR; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.3176,
+      "firstName": "Victoria",
+      "lastName": "Cavazos",
+      "jobTitle": "BAR; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.404,
+      "firstName": "Bryan",
+      "lastName": "Garcia",
+      "jobTitle": "BAR; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.459,
+      "firstName": "Lariah",
+      "lastName": "Saenz",
+      "jobTitle": "BAR; HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.0684,
+      "firstName": "Jeremiah",
+      "lastName": "Wilhelms",
+      "jobTitle": "BAR; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.7976,
+      "firstName": "Sergio",
+      "lastName": "Benavente",
+      "jobTitle": "Busser",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.1855,
+      "firstName": "Arnold",
+      "lastName": "Ramirez",
+      "jobTitle": "General Manager",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.9595,
+      "firstName": "Abran",
+      "lastName": "Rosalez",
+      "jobTitle": "General Manager",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.115,
+      "firstName": "Noel",
+      "lastName": "Rodriguez",
+      "jobTitle": "HOST",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.1482,
+      "firstName": "Nevaeh",
+      "lastName": "Sherrell",
+      "jobTitle": "HOST",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.3982,
+      "firstName": "Brycen",
+      "lastName": "Driver",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.4985,
+      "firstName": "Kaitlyn",
+      "lastName": "Esfahani",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.4302,
+      "firstName": "Joseph",
+      "lastName": "Guerrero",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.36,
+      "firstName": "Juleus",
+      "lastName": "Jones",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.4885,
+      "firstName": "J'Elle",
+      "lastName": "Longoria",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.2896,
+      "firstName": "Hailey",
+      "lastName": "Nunn",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.742,
+      "firstName": "Pablo",
+      "lastName": "Ochoa",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1782950016614.6362,
+      "firstName": "Alexandra",
+      "lastName": "Perez",
+      "jobTitle": "HOST; SERVER",
+      "dateOfHire": "2026-07-01"
+    },
+    {
+      "id": 1784002194670,
+      "firstName": "J\u2019Elle",
+      "middleName": "",
+      "lastName": "Longoria",
+      "dateOfHire": "2026-07-13",
+      "jobTitle": ""
+    },
+    {
+      "id": 1784167852350,
+      "firstName": "Alexa",
+      "middleName": "Rae",
+      "lastName": "Garcia",
+      "dateOfHire": "2026-07-15",
+      "jobTitle": ""
+    }
+  ],
+  "removedEmployees": []
+}

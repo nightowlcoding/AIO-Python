@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "Bailee",
+    "lastName": "Pena",
+    "dateOfHire": "2026-05-23",
+    "id": 1779570063858.5652,
+    "locationId": "pm_1"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

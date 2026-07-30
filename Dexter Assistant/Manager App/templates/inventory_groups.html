@@ -1,0 +1,1465 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Groups - Manager App{% endblock %}
+
+{% block extra_css %}
+<style>
+#operationsMenuToggle,
+#backButton {
+    display: none !important;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4"><i class="bi bi-grid"></i> Inventory Groups</h1>
+
+    <div class="row">
+        <div class="col-lg-9">
+            <div class="card mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Group Structure</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">Manage default inventory groups from a dedicated page. Drag groups to reorder and drag product chips between groups. You can keep company-wide defaults and optional location overrides.</p>
+
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                            <strong>Saved Lists</strong>
+                            <small class="text-muted">The first saved list is treated as the company default.</small>
+                        </div>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="form-label">Saved List</label>
+                                <select class="form-select" id="inventorySavedListSelect"></select>
+                            </div>
+                            <div class="col-md-7 d-flex flex-wrap gap-2">
+                                <button class="btn btn-outline-primary" type="button" id="inventoryLoadSavedListBtn">Load Selected</button>
+                                <button class="btn btn-outline-success" type="button" id="inventorySaveNewListBtn">Save Current as New</button>
+                                <button class="btn btn-outline-secondary" type="button" id="inventoryRenameSavedListBtn">Rename Selected</button>
+                                <button class="btn btn-outline-warning" type="button" id="inventorySetDefaultListBtn">Set as Company Default</button>
+                                <button class="btn btn-outline-danger" type="button" id="inventoryDeleteSavedListBtn">Delete Selected</button>
+                            </div>
+                        </div>
+                        <div class="small text-muted mt-2 mb-1">Drag to reorder saved lists. The first list is the company default.</div>
+                        <div id="inventorySavedListBoard" class="inventory-saved-list-board"></div>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('inventory_groups') }}">
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label">Edit Scope</label>
+                                <select class="form-select" id="inventoryScopeMode">
+                                    <option value="company">Company Defaults</option>
+                                    <option value="location">Location Override</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Location (for override)</label>
+                                <select class="form-select" id="inventoryScopeLocation">
+                                    <option value="">Choose Location</option>
+                                    {% for row in locations %}
+                                    <option value="{{ row.id }}" {% if selected_location_id == row.id %}selected{% endif %}>{{ row.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Default Group for Scope</label>
+                                <select class="form-select" id="inventoryDefaultGroupSelect"></select>
+                            </div>
+                        </div>
+
+                        <div id="inventoryGroupsBoard" class="inventory-groups-board mb-2"></div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-5">
+                                <input type="text" class="form-control" id="inventoryGroupName" placeholder="Group name (e.g. Cooler Core)">
+                            </div>
+                            <div class="col-md-5">
+                                <input type="text" class="form-control" id="inventoryGroupItems" placeholder="Product numbers comma-separated">
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button class="btn btn-outline-primary" type="button" id="inventoryGroupSaveBtn">Add / Update</button>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <button class="btn btn-outline-success" type="button" id="inventoryBuildFromCategoriesBtn">
+                                <i class="bi bi-arrow-repeat"></i> Build Groups From IC3 Categories
+                            </button>
+                            <small class="text-muted ms-2">Uses current IC3 product category names as group names, then preloads product IDs.</small>
+                        </div>
+
+                        <div class="border rounded p-3 mb-3 bg-light">
+                            <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                                <button class="btn btn-outline-dark" type="button" id="inventoryGenerateFirstListBtn">
+                                    <i class="bi bi-table"></i> Generate First Inventory List
+                                </button>
+                                <button class="btn btn-outline-primary" type="button" id="inventoryDownloadFirstListCsvBtn" disabled>
+                                    <i class="bi bi-download"></i> Download CSV
+                                </button>
+                                <small class="text-muted" id="inventoryListSummary">No list generated yet.</small>
+                            </div>
+                            <div class="table-responsive" id="inventoryFirstListTableWrap"></div>
+                        </div>
+
+                        <input type="hidden" name="inventory_default_groups_json" id="inventoryDefaultGroupsJson">
+                        <input type="hidden" name="inventory_group_saved_lists_json" id="inventoryGroupSavedListsJson">
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Group Structure
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.inventory-groups-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.inventory-group-card {
+    border: 1px solid #d9dee3;
+    border-radius: 12px;
+    padding: 10px;
+    background: #fff;
+}
+
+.inventory-group-card.drag-over {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+
+.inventory-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.inventory-group-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.inventory-group-subtitle {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.inventory-group-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.inventory-chip-list {
+    min-height: 44px;
+    border: 1px dashed #cdd3d9;
+    border-radius: 10px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.inventory-chip-list.drag-over {
+    border-color: #0d6efd;
+    background: rgba(13, 110, 253, 0.04);
+}
+
+.inventory-chip {
+    display: block;
+    border: 1px solid #c7ced6;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    padding: 6px 8px;
+    background: #f8f9fa;
+    cursor: grab;
+    user-select: none;
+}
+
+.inventory-item-line1 {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.inventory-item-name {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: #1f2937;
+}
+
+.inventory-item-key {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #475569;
+}
+
+.inventory-item-line2 {
+    margin-top: 2px;
+    color: #64748b;
+    font-size: 0.74rem;
+}
+
+.inventory-card-add {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.inventory-card-add input {
+    font-size: 0.82rem;
+}
+
+.inventory-nickname-wrap {
+    display: flex;
+    gap: 4px;
+    min-width: 220px;
+}
+
+.inventory-nickname-input {
+    min-width: 140px;
+}
+
+.inventory-saved-list-board {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 8px;
+    background: #fff;
+}
+
+.inventory-saved-list-item {
+    border: 1px solid #d9dee3;
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    background: #f8fafc;
+    cursor: grab;
+}
+
+.inventory-saved-list-item.active {
+    border-color: #0d6efd;
+    background: #eff6ff;
+}
+
+.inventory-saved-list-item.drag-over {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+}
+
+.inventory-saved-list-meta {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.inventory-text-prompt-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(15, 23, 42, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+}
+
+.inventory-text-prompt-dialog {
+    width: min(520px, 96vw);
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.24);
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+}
+
+.inventory-text-prompt-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+</style>
+
+<script>
+(function () {
+    const initialConfig = {{ (inventory_default_groups or {})|tojson|safe }};
+    const initialSavedLists = {{ (inventory_group_saved_lists or [])|tojson|safe }};
+    const cleanedInitialSavedLists = Array.isArray(initialSavedLists)
+        ? initialSavedLists.filter(function (entry) {
+            const name = String((entry && entry.name) || '').trim().toLowerCase();
+            return name.indexOf('e2e') === -1;
+        })
+        : [];
+    const urlParams = new URLSearchParams(window.location.search || '');
+    const requestedScope = (urlParams.get('scope') || '').trim().toLowerCase();
+    const requestedLocationId = (urlParams.get('location_id') || '').trim();
+    const requestedLocationName = (urlParams.get('location_name') || '').trim().toLowerCase();
+    const state = {
+        config: {
+            company: Array.isArray(initialConfig.company) ? initialConfig.company : [],
+            location_overrides: initialConfig.location_overrides && typeof initialConfig.location_overrides === 'object' ? initialConfig.location_overrides : {},
+            default_group_by_location: initialConfig.default_group_by_location && typeof initialConfig.default_group_by_location === 'object' ? initialConfig.default_group_by_location : {},
+        },
+        savedLists: cleanedInitialSavedLists,
+        editingId: null,
+        dragGroupId: null,
+        dragProductKey: '',
+        dragProductSourceGroupId: '',
+        firstInventoryListRows: [],
+        productNicknames: {},
+        nicknameApiBase: '',
+        productCatalogByNumber: {},
+        dragSavedListId: '',
+    };
+
+    const scopeModeEl = document.getElementById('inventoryScopeMode');
+    const scopeLocationEl = document.getElementById('inventoryScopeLocation');
+    const groupsBoardEl = document.getElementById('inventoryGroupsBoard');
+    const groupNameEl = document.getElementById('inventoryGroupName');
+    const groupItemsEl = document.getElementById('inventoryGroupItems');
+    const defaultGroupEl = document.getElementById('inventoryDefaultGroupSelect');
+    const hiddenJsonEl = document.getElementById('inventoryDefaultGroupsJson');
+    const hiddenSavedListsEl = document.getElementById('inventoryGroupSavedListsJson');
+    const savedListSelectEl = document.getElementById('inventorySavedListSelect');
+    const savedListBoardEl = document.getElementById('inventorySavedListBoard');
+    const loadSavedListBtn = document.getElementById('inventoryLoadSavedListBtn');
+    const saveNewListBtn = document.getElementById('inventorySaveNewListBtn');
+    const renameSavedListBtn = document.getElementById('inventoryRenameSavedListBtn');
+    const setDefaultListBtn = document.getElementById('inventorySetDefaultListBtn');
+    const deleteSavedListBtn = document.getElementById('inventoryDeleteSavedListBtn');
+    const saveBtn = document.getElementById('inventoryGroupSaveBtn');
+    const buildFromCategoriesBtn = document.getElementById('inventoryBuildFromCategoriesBtn');
+    const generateFirstListBtn = document.getElementById('inventoryGenerateFirstListBtn');
+    const downloadFirstListCsvBtn = document.getElementById('inventoryDownloadFirstListCsvBtn');
+    const inventoryListSummaryEl = document.getElementById('inventoryListSummary');
+    const inventoryFirstListTableWrapEl = document.getElementById('inventoryFirstListTableWrap');
+
+    const FIRST_LIST_COLUMNS = [
+        'Group Name',
+        'Product #',
+        'Product Name',
+        'Nickname',
+        'Company',
+        'Quantity',
+        'Pack Size',
+        'Brand',
+        'Case Count Type',
+        'Source Category',
+        'Scope',
+        'Location',
+        'Generated At'
+    ];
+
+    if (requestedScope === 'location') {
+        scopeModeEl.value = 'location';
+    }
+    if (requestedLocationId) {
+        scopeLocationEl.value = requestedLocationId;
+    }
+    if (!requestedLocationId && requestedLocationName) {
+        const options = Array.from(scopeLocationEl.options || []);
+        const matched = options.find(function (opt) {
+            return String(opt.textContent || '').trim().toLowerCase().indexOf(requestedLocationName) !== -1;
+        });
+        if (matched && matched.value) {
+            scopeLocationEl.value = matched.value;
+        }
+    }
+
+    function currentRows() {
+        if (scopeModeEl.value === 'location') {
+            const key = (scopeLocationEl.value || '').trim();
+            if (!key) return [];
+            return Array.isArray(state.config.location_overrides[key]) ? state.config.location_overrides[key] : [];
+        }
+        return state.config.company;
+    }
+
+    function setCurrentRows(rows) {
+        if (scopeModeEl.value === 'location') {
+            const key = (scopeLocationEl.value || '').trim();
+            if (!key) return;
+            state.config.location_overrides[key] = rows;
+            persistSelectedSavedListConfig();
+            return;
+        }
+        state.config.company = rows;
+        persistSelectedSavedListConfig();
+    }
+
+    function updateHiddenField() {
+        hiddenJsonEl.value = JSON.stringify(state.config);
+        hiddenSavedListsEl.value = JSON.stringify(state.savedLists || []);
+    }
+
+    function cloneConfig(config) {
+        const source = config && typeof config === 'object' ? config : {
+            company: [],
+            location_overrides: {},
+            default_group_by_location: {},
+        };
+        try {
+            return JSON.parse(JSON.stringify(source));
+        } catch (_err) {
+            return {
+                company: Array.isArray(source.company) ? source.company.slice() : [],
+                location_overrides: source.location_overrides && typeof source.location_overrides === 'object' ? source.location_overrides : {},
+                default_group_by_location: source.default_group_by_location && typeof source.default_group_by_location === 'object' ? source.default_group_by_location : {},
+            };
+        }
+    }
+
+    function currentConfigSnapshot() {
+        return cloneConfig(state.config);
+    }
+
+    function selectedSavedListId() {
+        return safeText(savedListSelectEl && savedListSelectEl.value);
+    }
+
+    function findSavedListById(listId) {
+        const id = safeText(listId);
+        if (!id) return null;
+        for (let i = 0; i < (state.savedLists || []).length; i += 1) {
+            const row = state.savedLists[i];
+            if (safeText(row && row.id) === id) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    function persistSelectedSavedListConfig() {
+        const selected = findSavedListById(selectedSavedListId());
+        if (!selected) return;
+        selected.config = currentConfigSnapshot();
+    }
+
+    function inferStarterListName(config) {
+        const cfg = config && typeof config === 'object' ? config : {};
+        const companyRows = Array.isArray(cfg.company) ? cfg.company : [];
+        if (companyRows.length > 0) {
+            const firstName = safeText(companyRows[0] && companyRows[0].name);
+            if (firstName) return 'Company Default - ' + firstName;
+        }
+        return 'Company Default List';
+    }
+
+    function ensureStarterSavedList(name, sourceConfig) {
+        if (Array.isArray(state.savedLists) && state.savedLists.length > 0) {
+            return null;
+        }
+        const configToUse = cloneConfig(sourceConfig && typeof sourceConfig === 'object' ? sourceConfig : state.config);
+        const starterId = 'saved_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+        state.savedLists = [{
+            id: starterId,
+            name: safeText(name || inferStarterListName(configToUse)) || 'Company Default List',
+            config: configToUse,
+        }];
+        return starterId;
+    }
+
+    function renderSavedListOptions() {
+        if (!savedListSelectEl) return;
+        const previous = selectedSavedListId();
+        if (!Array.isArray(state.savedLists) || !state.savedLists.length) {
+            savedListSelectEl.innerHTML = '<option value="">No saved lists yet</option>';
+            savedListSelectEl.value = '';
+            renderSavedListBoard();
+            return;
+        }
+
+        const options = state.savedLists.map(function (entry, index) {
+            const id = safeText(entry && entry.id);
+            const name = safeText(entry && entry.name) || ('Saved List ' + (index + 1));
+            const label = (index === 0 ? '[Default] ' : '') + name;
+            return '<option value="' + escapeHtml(id) + '">' + escapeHtml(label) + '</option>';
+        });
+        savedListSelectEl.innerHTML = options.join('');
+        const exists = (state.savedLists || []).some(function (entry) {
+            return safeText(entry && entry.id) === previous;
+        });
+        savedListSelectEl.value = exists ? previous : safeText((state.savedLists[0] || {}).id);
+        renderSavedListBoard();
+    }
+
+    function moveSavedList(sourceId, targetId) {
+        const source = safeText(sourceId);
+        const target = safeText(targetId);
+        if (!source || !target || source === target) return;
+        const rows = (state.savedLists || []).slice();
+        const sourceIdx = rows.findIndex(function (entry) { return safeText(entry && entry.id) === source; });
+        const targetIdx = rows.findIndex(function (entry) { return safeText(entry && entry.id) === target; });
+        if (sourceIdx < 0 || targetIdx < 0) return;
+        const moved = rows.splice(sourceIdx, 1)[0];
+        rows.splice(targetIdx, 0, moved);
+        state.savedLists = rows;
+        renderSavedListOptions();
+        if (savedListSelectEl) savedListSelectEl.value = source;
+        updateHiddenField();
+    }
+
+    function renderSavedListBoard() {
+        if (!savedListBoardEl) return;
+        if (!Array.isArray(state.savedLists) || !state.savedLists.length) {
+            savedListBoardEl.innerHTML = '<div class="small text-muted">No saved lists yet.</div>';
+            return;
+        }
+
+        const activeId = selectedSavedListId();
+        savedListBoardEl.innerHTML = state.savedLists.map(function (entry, index) {
+            const id = safeText(entry && entry.id);
+            const name = safeText(entry && entry.name) || ('Saved List ' + (index + 1));
+            const isActive = id === activeId;
+            const meta = (index === 0 ? 'Company Default' : 'Saved List #' + (index + 1));
+            return [
+                '<div class="inventory-saved-list-item' + (isActive ? ' active' : '') + '" draggable="true" data-saved-list-id="' + escapeHtml(id) + '">',
+                '  <div>',
+                '    <div><strong>' + escapeHtml(name) + '</strong></div>',
+                '    <div class="inventory-saved-list-meta">' + escapeHtml(meta) + '</div>',
+                '  </div>',
+                '  <span class="inventory-saved-list-meta">Drag</span>',
+                '</div>'
+            ].join('');
+        }).join('');
+
+        savedListBoardEl.querySelectorAll('.inventory-saved-list-item').forEach(function (itemEl) {
+            itemEl.addEventListener('click', function () {
+                const id = safeText(itemEl.getAttribute('data-saved-list-id'));
+                if (savedListSelectEl && id) {
+                    savedListSelectEl.value = id;
+                    renderSavedListBoard();
+                }
+            });
+            itemEl.addEventListener('dragstart', function () {
+                state.dragSavedListId = safeText(itemEl.getAttribute('data-saved-list-id'));
+            });
+            itemEl.addEventListener('dragover', function (event) {
+                event.preventDefault();
+                itemEl.classList.add('drag-over');
+            });
+            itemEl.addEventListener('dragleave', function () {
+                itemEl.classList.remove('drag-over');
+            });
+            itemEl.addEventListener('drop', function (event) {
+                event.preventDefault();
+                itemEl.classList.remove('drag-over');
+                const targetId = safeText(itemEl.getAttribute('data-saved-list-id'));
+                moveSavedList(state.dragSavedListId, targetId);
+                state.dragSavedListId = '';
+            });
+            itemEl.addEventListener('dragend', function () {
+                state.dragSavedListId = '';
+                savedListBoardEl.querySelectorAll('.inventory-saved-list-item').forEach(function (el) {
+                    el.classList.remove('drag-over');
+                });
+            });
+        });
+    }
+
+    function renderDefaultGroupSelect() {
+        const rows = currentRows();
+        const key = scopeModeEl.value === 'location' ? ((scopeLocationEl.value || '').trim() || '*') : '*';
+        const selected = (state.config.default_group_by_location || {})[key] || '';
+        const options = ['<option value="">No Default Group</option>'];
+        rows.forEach((row) => {
+            options.push('<option value="' + row.id + '">' + row.name + '</option>');
+        });
+        defaultGroupEl.innerHTML = options.join('');
+        defaultGroupEl.value = selected;
+    }
+
+    function resetEditor() {
+        state.editingId = null;
+        groupNameEl.value = '';
+        groupItemsEl.value = '';
+    }
+
+    function parseItems(text) {
+        return (text || '').split(',').map((part) => part.trim()).filter(Boolean);
+    }
+
+    function toGroupId(name, usedSet) {
+        const base = 'grp_cat_' + String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        let id = base || ('grp_' + Date.now().toString(36));
+        let i = 2;
+        while (usedSet.has(id)) {
+            id = base + '_' + i;
+            i += 1;
+        }
+        usedSet.add(id);
+        return id;
+    }
+
+    function safeText(value) {
+        return String(value == null ? '' : value).trim();
+    }
+
+    function escapeHtml(value) {
+        return safeText(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function askForText(title, initialValue, placeholder) {
+        return new Promise(function (resolve) {
+            let overlay = document.getElementById('inventoryTextPromptOverlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'inventoryTextPromptOverlay';
+                overlay.className = 'inventory-text-prompt-overlay';
+                overlay.innerHTML = [
+                    '<div class="inventory-text-prompt-dialog" role="dialog" aria-modal="true" aria-label="Text input">',
+                    '  <h5 id="inventoryTextPromptTitle" style="margin:0;">Enter value</h5>',
+                    '  <input id="inventoryTextPromptInput" class="form-control" type="text">',
+                    '  <div class="inventory-text-prompt-actions">',
+                    '    <button type="button" class="btn btn-outline-secondary" id="inventoryTextPromptCancel">Cancel</button>',
+                    '    <button type="button" class="btn btn-primary" id="inventoryTextPromptOk">OK</button>',
+                    '  </div>',
+                    '</div>'
+                ].join('');
+                document.body.appendChild(overlay);
+            }
+
+            const titleEl = document.getElementById('inventoryTextPromptTitle');
+            const inputEl = document.getElementById('inventoryTextPromptInput');
+            const cancelEl = document.getElementById('inventoryTextPromptCancel');
+            const okEl = document.getElementById('inventoryTextPromptOk');
+
+            titleEl.textContent = safeText(title) || 'Enter value';
+            inputEl.value = safeText(initialValue || '');
+            inputEl.placeholder = safeText(placeholder || '');
+
+            let finished = false;
+            function finish(value) {
+                if (finished) return;
+                finished = true;
+                overlay.style.display = 'none';
+                resolve(value);
+            }
+
+            cancelEl.onclick = function () { finish(null); };
+            okEl.onclick = function () { finish(inputEl.value); };
+            overlay.onclick = function (event) {
+                if (event.target === overlay) finish(null);
+            };
+            inputEl.onkeydown = function (event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    finish(inputEl.value);
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    finish(null);
+                }
+            };
+
+            overlay.style.display = 'flex';
+            setTimeout(function () {
+                inputEl.focus();
+                inputEl.select();
+            }, 0);
+        });
+    }
+
+    function csvEscape(value) {
+        const text = safeText(value);
+        if (text.indexOf(',') !== -1 || text.indexOf('"') !== -1 || text.indexOf('\n') !== -1) {
+            return '"' + text.replace(/"/g, '""') + '"';
+        }
+        return text;
+    }
+
+    function currentScopeLabel() {
+        return scopeModeEl.value === 'location' ? 'Location Override' : 'Company Defaults';
+    }
+
+    function currentLocationLabel() {
+        if (scopeModeEl.value !== 'location') return 'All Locations';
+        const selected = scopeLocationEl.options[scopeLocationEl.selectedIndex];
+        return selected ? safeText(selected.textContent) : '';
+    }
+
+    function loadIc3Products() {
+        const endpoints = ['/api/products', '/app/ic3/api/products'];
+
+        function tryNext(index) {
+            if (index >= endpoints.length) {
+                return Promise.reject(new Error('No IC3 product endpoint responded with data.'));
+            }
+            const url = endpoints[index] + '?t=' + Date.now();
+            return fetch(url, { credentials: 'same-origin' })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(function (payload) {
+                    const rows = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.products) ? payload.products : []);
+                    if (rows.length) {
+                        const byNumber = {};
+                        rows.forEach(function (row) {
+                            const productNumber = safeText(row && row['Product Number']);
+                            if (!productNumber || byNumber[productNumber]) return;
+                            byNumber[productNumber] = row;
+                        });
+                        state.productCatalogByNumber = byNumber;
+                        return rows;
+                    }
+                    throw new Error('Empty products payload');
+                })
+                .catch(function () {
+                    return tryNext(index + 1);
+                });
+        }
+
+        return tryNext(0);
+    }
+
+    function loadProductNicknames() {
+        const endpoints = [
+            { url: '/api/products/nicknames', base: '' },
+            { url: '/app/ic3/api/products/nicknames', base: '/app/ic3' },
+        ];
+
+        function tryNext(index) {
+            if (index >= endpoints.length) {
+                state.productNicknames = {};
+                state.nicknameApiBase = '';
+                return Promise.resolve(state.productNicknames);
+            }
+            const target = endpoints[index];
+            return fetch(target.url + '?t=' + Date.now(), { credentials: 'same-origin' })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(function (payload) {
+                    const map = (payload && payload.nicknames && typeof payload.nicknames === 'object') ? payload.nicknames : {};
+                    state.productNicknames = map;
+                    state.nicknameApiBase = target.base;
+                    return state.productNicknames;
+                })
+                .catch(function () {
+                    return tryNext(index + 1);
+                });
+        }
+
+        return tryNext(0);
+    }
+
+    function saveProductNickname(productNumber, nickname) {
+        const productKey = safeText(productNumber);
+        if (!productKey) {
+            return Promise.reject(new Error('Missing product number.'));
+        }
+
+        const endpoints = [];
+        if (state.nicknameApiBase === '/app/ic3') {
+            endpoints.push('/app/ic3/api/products/update-nickname', '/api/products/update-nickname');
+        } else {
+            endpoints.push('/api/products/update-nickname', '/app/ic3/api/products/update-nickname');
+        }
+
+        function tryNext(index) {
+            if (index >= endpoints.length) {
+                return Promise.reject(new Error('Could not save nickname.'));
+            }
+            return fetch(endpoints[index], {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_number: productKey, nickname: safeText(nickname) })
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(function (payload) {
+                    if (payload && payload.success) {
+                        state.productNicknames[productKey] = safeText(nickname);
+                        return payload;
+                    }
+                    throw new Error((payload && payload.message) || 'Nickname save failed');
+                })
+                .catch(function () {
+                    return tryNext(index + 1);
+                });
+        }
+
+        return tryNext(0);
+    }
+
+    function renderFirstInventoryList(rows) {
+        if (!Array.isArray(rows) || !rows.length) {
+            inventoryFirstListTableWrapEl.innerHTML = '<div class="small text-muted">No rows available for this scope.</div>';
+            inventoryListSummaryEl.textContent = 'No rows generated.';
+            downloadFirstListCsvBtn.disabled = true;
+            return;
+        }
+
+        const header = FIRST_LIST_COLUMNS.map(function (column) {
+            return '<th class="small text-nowrap">' + escapeHtml(column) + '</th>';
+        }).join('');
+
+        const body = rows.slice(0, 250).map(function (row) {
+            const cells = FIRST_LIST_COLUMNS.map(function (column) {
+                if (column === 'Nickname') {
+                    const productNumber = safeText(row['Product #']);
+                    const nickname = safeText(row[column]);
+                    return [
+                        '<td class="small">',
+                        '  <div class="inventory-nickname-wrap" data-product-number="' + escapeHtml(productNumber) + '">',
+                        '    <input type="text" class="form-control form-control-sm inventory-nickname-input" data-product-number="' + escapeHtml(productNumber) + '" value="' + escapeHtml(nickname) + '" placeholder="Nickname">',
+                        '    <button type="button" class="btn btn-sm btn-outline-secondary inventory-save-nickname-btn" data-product-number="' + escapeHtml(productNumber) + '">Save</button>',
+                        '  </div>',
+                        '</td>'
+                    ].join('');
+                }
+                return '<td class="small text-nowrap">' + escapeHtml(row[column]) + '</td>';
+            }).join('');
+            return '<tr>' + cells + '</tr>';
+        }).join('');
+
+        inventoryFirstListTableWrapEl.innerHTML = [
+            '<table class="table table-sm table-striped align-middle">',
+            '  <thead><tr>' + header + '</tr></thead>',
+            '  <tbody>' + body + '</tbody>',
+            '</table>'
+        ].join('');
+
+        const shown = Math.min(rows.length, 250);
+        inventoryListSummaryEl.textContent = 'Generated ' + rows.length + ' rows. Showing ' + shown + ' preview rows. Nicknames can be edited inline.';
+        downloadFirstListCsvBtn.disabled = false;
+    }
+
+    function downloadRowsAsCsv(rows) {
+        if (!Array.isArray(rows) || !rows.length) {
+            window.alert('Generate the first inventory list before downloading CSV.');
+            return;
+        }
+        const header = FIRST_LIST_COLUMNS.map(csvEscape).join(',');
+        const lines = rows.map(function (row) {
+            return FIRST_LIST_COLUMNS.map(function (column) {
+                return csvEscape(row[column]);
+            }).join(',');
+        });
+        const csvText = [header].concat(lines).join('\n');
+        const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+        link.href = url;
+        link.download = 'dexter-first-inventory-list-' + stamp + '.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    function buildFirstInventoryRows(products) {
+        const productRows = Array.isArray(products) ? products : [];
+        const productByNumber = {};
+        productRows.forEach(function (product) {
+            const number = safeText(product && product['Product Number']);
+            if (!number || productByNumber[number]) return;
+            productByNumber[number] = product;
+        });
+
+        const groups = currentRows();
+        const locationLabel = currentLocationLabel();
+        const scopeLabel = currentScopeLabel();
+        const generatedAt = new Date().toISOString();
+        const companyName = safeText({{ (company.name or '')|tojson|safe }});
+        const output = [];
+
+        if (groups.length) {
+            groups.forEach(function (group) {
+                const groupName = safeText(group && group.name) || 'Uncategorized';
+                const keys = Array.isArray(group && group.item_keys) ? group.item_keys : [];
+                keys.forEach(function (rawKey) {
+                    const key = safeText(rawKey);
+                    if (!key) return;
+                    const match = productByNumber[key] || {};
+                    output.push({
+                        'Group Name': groupName,
+                        'Product #': key,
+                        'Product Name': safeText(match['Product Description']),
+                        'Nickname': safeText(state.productNicknames[key]),
+                        'Company': companyName,
+                        'Quantity': '0',
+                        'Pack Size': safeText(match['Product Package Size']),
+                        'Brand': safeText(match['Product Brand']),
+                        'Case Count Type': safeText(match['Case Count Type']),
+                        'Source Category': safeText(match['Group Name']) || groupName,
+                        'Scope': scopeLabel,
+                        'Location': locationLabel,
+                        'Generated At': generatedAt
+                    });
+                });
+            });
+            return output;
+        }
+
+        productRows.forEach(function (product) {
+            const productNumber = safeText(product && product['Product Number']);
+            if (!productNumber) return;
+            const sourceCategory = safeText(product && product['Group Name']) || 'Uncategorized';
+            output.push({
+                'Group Name': sourceCategory,
+                'Product #': productNumber,
+                'Product Name': safeText(product && product['Product Description']),
+                'Nickname': safeText(state.productNicknames[productNumber]),
+                'Company': companyName,
+                'Quantity': '0',
+                'Pack Size': safeText(product && product['Product Package Size']),
+                'Brand': safeText(product && product['Product Brand']),
+                'Case Count Type': safeText(product && product['Case Count Type']),
+                'Source Category': sourceCategory,
+                'Scope': scopeLabel,
+                'Location': locationLabel,
+                'Generated At': generatedAt
+            });
+        });
+        return output;
+    }
+
+    function buildGroupsFromProductRows(rows) {
+        const productRows = Array.isArray(rows) ? rows : [];
+        const groupsByName = {};
+        const groupOrder = [];
+
+        productRows.forEach(function (row) {
+            const groupName = safeText(row && row['Group Name']) || 'Uncategorized';
+            const productId = safeText(row && row['Product Number']);
+            if (!groupsByName[groupName]) {
+                groupsByName[groupName] = [];
+                groupOrder.push(groupName);
+            }
+            if (productId && groupsByName[groupName].indexOf(productId) === -1) {
+                groupsByName[groupName].push(productId);
+            }
+        });
+
+        const assignedSubIndex = groupOrder.findIndex(function (name) {
+            return String(name).trim().toUpperCase() === 'ASSIGNED SUB';
+        });
+        if (assignedSubIndex >= 0) {
+            const assigned = groupOrder.splice(assignedSubIndex, 1)[0];
+            groupOrder.push(assigned);
+        }
+
+        const usedIds = new Set();
+        return groupOrder.map(function (name) {
+            return {
+                id: toGroupId(name, usedIds),
+                name: name,
+                item_keys: groupsByName[name] || []
+            };
+        });
+    }
+
+    function syncCompanyDefaultsFromProducts(rows) {
+        const built = buildGroupsFromProductRows(rows);
+        state.config.company = built;
+
+        const companyDefaultKey = '*';
+        const currentDefault = (state.config.default_group_by_location || {})[companyDefaultKey] || '';
+        if (!built.some(function (g) { return g.id === currentDefault; })) {
+            delete state.config.default_group_by_location[companyDefaultKey];
+        }
+    }
+
+    function moveGroup(sourceId, targetId) {
+        if (!sourceId || !targetId || sourceId === targetId) return;
+        const rows = currentRows().slice();
+        const sourceIdx = rows.findIndex((row) => row.id === sourceId);
+        const targetIdx = rows.findIndex((row) => row.id === targetId);
+        if (sourceIdx < 0 || targetIdx < 0) return;
+        const moved = rows.splice(sourceIdx, 1)[0];
+        rows.splice(targetIdx, 0, moved);
+        setCurrentRows(rows);
+        renderBoard();
+    }
+
+    function moveProduct(sourceGroupId, productKey, targetGroupId) {
+        const key = (productKey || '').trim();
+        if (!sourceGroupId || !targetGroupId || !key) return;
+        const rows = currentRows().slice();
+        const sourceIdx = rows.findIndex((row) => row.id === sourceGroupId);
+        const targetIdx = rows.findIndex((row) => row.id === targetGroupId);
+        if (sourceIdx < 0 || targetIdx < 0) return;
+
+        const sourceItems = Array.isArray(rows[sourceIdx].item_keys) ? rows[sourceIdx].item_keys.slice() : [];
+        const targetItems = Array.isArray(rows[targetIdx].item_keys) ? rows[targetIdx].item_keys.slice() : [];
+        const nextSource = sourceItems.filter((item) => String(item) !== key);
+        if (!targetItems.includes(key)) {
+            targetItems.push(key);
+        }
+
+        rows[sourceIdx] = { id: rows[sourceIdx].id, name: rows[sourceIdx].name, item_keys: nextSource };
+        rows[targetIdx] = { id: rows[targetIdx].id, name: rows[targetIdx].name, item_keys: targetItems };
+        setCurrentRows(rows);
+        renderBoard();
+    }
+
+    function addProductToGroup(groupId, rawProductKey) {
+        const key = String(rawProductKey || '').trim();
+        if (!groupId || !key) return;
+        const rows = currentRows().slice();
+        const idx = rows.findIndex((row) => row.id === groupId);
+        if (idx < 0) return;
+        const items = Array.isArray(rows[idx].item_keys) ? rows[idx].item_keys.slice() : [];
+        if (!items.includes(key)) {
+            items.push(key);
+        }
+        rows[idx] = { id: rows[idx].id, name: rows[idx].name, item_keys: items };
+        setCurrentRows(rows);
+        renderBoard();
+    }
+
+    function renderBoard() {
+        const rows = currentRows();
+        if (!rows.length) {
+            groupsBoardEl.innerHTML = '<div class="text-muted small">No groups configured for this scope.</div>';
+            renderDefaultGroupSelect();
+            updateHiddenField();
+            return;
+        }
+
+        groupsBoardEl.innerHTML = rows.map((row) => {
+            const chips = (Array.isArray(row.item_keys) ? row.item_keys : []).map((key) => {
+                const productKey = String(key || '').trim();
+                const match = state.productCatalogByNumber[productKey] || {};
+                const productName = safeText(match['Product Description']) || 'Product';
+                const brand = safeText(match['Product Brand']);
+                const pack = safeText(match['Product Package Size']);
+                const nickname = safeText(state.productNicknames[productKey]);
+                const metaParts = [];
+                if (brand) metaParts.push(brand);
+                if (pack) metaParts.push(pack);
+                if (nickname) metaParts.push('Nickname: ' + nickname);
+                return [
+                    '<div class="inventory-chip" draggable="true" data-group-id="' + row.id + '" data-product-key="' + escapeHtml(productKey) + '">',
+                    '  <div class="inventory-item-line1">',
+                    '    <span class="inventory-item-name">' + escapeHtml(productName) + '</span>',
+                    '    <span class="inventory-item-key">#' + escapeHtml(productKey) + '</span>',
+                    '  </div>',
+                    '  <div class="inventory-item-line2">' + escapeHtml(metaParts.join(' | ')) + '</div>',
+                    '</div>'
+                ].join('');
+            }).join('');
+            return [
+                '<div class="inventory-group-card" draggable="true" data-group-id="' + row.id + '">',
+                '  <div class="inventory-group-header">',
+                '    <div>',
+                '      <div class="inventory-group-title">' + row.name + '</div>',
+                '      <div class="inventory-group-subtitle">' + (Array.isArray(row.item_keys) ? row.item_keys.length : 0) + ' products</div>',
+                '    </div>',
+                '    <div class="inventory-group-actions">',
+                '      <button type="button" class="btn btn-sm btn-outline-secondary inventory-edit" data-id="' + row.id + '">Rename</button>',
+                '      <button type="button" class="btn btn-sm btn-outline-danger inventory-delete" data-id="' + row.id + '">Delete</button>',
+                '    </div>',
+                '  </div>',
+                '  <div class="inventory-chip-list" data-drop-group-id="' + row.id + '">' + chips + '</div>',
+                '  <div class="inventory-card-add">',
+                '    <input class="form-control form-control-sm inventory-add-product-input" data-group-id="' + row.id + '" placeholder="Add product #">',
+                '    <button type="button" class="btn btn-sm btn-outline-primary inventory-add-product-btn" data-group-id="' + row.id + '">Add</button>',
+                '  </div>',
+                '</div>'
+            ].join('');
+        }).join('');
+
+        groupsBoardEl.querySelectorAll('.inventory-group-card').forEach(function (cardEl) {
+            cardEl.addEventListener('dragstart', function () {
+                state.dragGroupId = cardEl.getAttribute('data-group-id') || '';
+            });
+            cardEl.addEventListener('dragover', function (event) {
+                event.preventDefault();
+                cardEl.classList.add('drag-over');
+            });
+            cardEl.addEventListener('dragleave', function () {
+                cardEl.classList.remove('drag-over');
+            });
+            cardEl.addEventListener('drop', function (event) {
+                event.preventDefault();
+                cardEl.classList.remove('drag-over');
+                const targetGroupId = cardEl.getAttribute('data-group-id') || '';
+                if (state.dragProductKey && state.dragProductSourceGroupId) {
+                    moveProduct(state.dragProductSourceGroupId, state.dragProductKey, targetGroupId);
+                } else {
+                    moveGroup(state.dragGroupId, targetGroupId);
+                }
+                state.dragGroupId = null;
+                state.dragProductKey = '';
+                state.dragProductSourceGroupId = '';
+            });
+        });
+
+        groupsBoardEl.querySelectorAll('.inventory-chip-list').forEach(function (dropEl) {
+            dropEl.addEventListener('dragover', function (event) {
+                event.preventDefault();
+                dropEl.classList.add('drag-over');
+            });
+            dropEl.addEventListener('dragleave', function () {
+                dropEl.classList.remove('drag-over');
+            });
+            dropEl.addEventListener('drop', function (event) {
+                event.preventDefault();
+                dropEl.classList.remove('drag-over');
+                const targetGroupId = dropEl.getAttribute('data-drop-group-id') || '';
+                if (state.dragProductKey && state.dragProductSourceGroupId) {
+                    moveProduct(state.dragProductSourceGroupId, state.dragProductKey, targetGroupId);
+                }
+                state.dragProductKey = '';
+                state.dragProductSourceGroupId = '';
+            });
+        });
+
+        groupsBoardEl.querySelectorAll('.inventory-chip').forEach(function (chipEl) {
+            chipEl.addEventListener('dragstart', function () {
+                state.dragProductKey = chipEl.getAttribute('data-product-key') || '';
+                state.dragProductSourceGroupId = chipEl.getAttribute('data-group-id') || '';
+            });
+        });
+
+        renderDefaultGroupSelect();
+        renderSavedListOptions();
+        updateHiddenField();
+    }
+
+    if (loadSavedListBtn) {
+        loadSavedListBtn.addEventListener('click', function () {
+            const selected = findSavedListById(selectedSavedListId());
+            if (!selected) {
+                window.alert('Choose a saved list to load.');
+                return;
+            }
+            state.config = cloneConfig(selected.config);
+            resetEditor();
+            renderBoard();
+        });
+    }
+
+    if (saveNewListBtn) {
+        saveNewListBtn.addEventListener('click', function () {
+            askForText('Name for this saved list', '', 'e.g. Morning Core').then(function (rawValue) {
+                const name = safeText(rawValue);
+                if (!name) return;
+                const id = 'saved_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+                state.savedLists.push({
+                    id: id,
+                    name: name,
+                    config: currentConfigSnapshot(),
+                });
+                renderSavedListOptions();
+                savedListSelectEl.value = id;
+                updateHiddenField();
+            });
+        });
+    }
+
+    if (renameSavedListBtn) {
+        renameSavedListBtn.addEventListener('click', function () {
+            const selected = findSavedListById(selectedSavedListId());
+            if (!selected) {
+                window.alert('Choose a saved list to rename.');
+                return;
+            }
+            askForText('Rename saved list', safeText(selected.name), 'Saved list name').then(function (rawValue) {
+                const nextName = safeText(rawValue);
+                if (!nextName) return;
+                selected.name = nextName;
+                renderSavedListOptions();
+                if (savedListSelectEl) savedListSelectEl.value = safeText(selected.id);
+                updateHiddenField();
+            });
+        });
+    }
+
+    if (setDefaultListBtn) {
+        setDefaultListBtn.addEventListener('click', function () {
+            const selectedId = selectedSavedListId();
+            const idx = (state.savedLists || []).findIndex(function (entry) {
+                return safeText(entry && entry.id) === selectedId;
+            });
+            if (idx < 0) {
+                window.alert('Choose a saved list first.');
+                return;
+            }
+            if (idx > 0) {
+                const selected = state.savedLists.splice(idx, 1)[0];
+                state.savedLists.unshift(selected);
+            }
+            const defaultList = state.savedLists[0];
+            state.config = cloneConfig(defaultList.config);
+            renderBoard();
+            savedListSelectEl.value = safeText(defaultList.id);
+            updateHiddenField();
+        });
+    }
+
+    if (deleteSavedListBtn) {
+        deleteSavedListBtn.addEventListener('click', function () {
+            const selectedId = selectedSavedListId();
+            const idx = (state.savedLists || []).findIndex(function (entry) {
+                return safeText(entry && entry.id) === selectedId;
+            });
+            if (idx < 0) {
+                window.alert('Choose a saved list to delete.');
+                return;
+            }
+            const target = state.savedLists[idx];
+            if (!window.confirm('Delete saved list "' + safeText(target && target.name) + '"?')) {
+                return;
+            }
+            state.savedLists.splice(idx, 1);
+            renderSavedListOptions();
+            updateHiddenField();
+        });
+    }
+
+    saveBtn.addEventListener('click', function () {
+        if (scopeModeEl.value === 'location' && !(scopeLocationEl.value || '').trim()) {
+            window.alert('Choose a location for location override scope.');
+            return;
+        }
+
+        const name = (groupNameEl.value || '').trim();
+        if (!name) {
+            window.alert('Group name is required.');
+            return;
+        }
+
+        const items = parseItems(groupItemsEl.value);
+        const rows = currentRows().slice();
+        if (state.editingId) {
+            const idx = rows.findIndex((row) => row.id === state.editingId);
+            if (idx >= 0) {
+                rows[idx] = { id: rows[idx].id, name: name, item_keys: items };
+            }
+        } else {
+            const id = 'grp_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+            rows.push({ id: id, name: name, item_keys: items });
+        }
+
+        setCurrentRows(rows);
+        resetEditor();
+        renderBoard();
+    });
+
+    buildFromCategoriesBtn.addEventListener('click', function () {
+        if (scopeModeEl.value === 'location' && !(scopeLocationEl.value || '').trim()) {
+            window.alert('Choose a location first for location override scope.');
+            return;
+        }
+        if (!window.confirm('Replace current scope groups with IC3 categories and product lists?')) {
+            return;
+        }
+
+        loadIc3Products()
+            .then(function (rows) {
+                const built = buildGroupsFromProductRows(rows);
+
+                setCurrentRows(built);
+                const key = scopeModeEl.value === 'location' ? ((scopeLocationEl.value || '').trim() || '*') : '*';
+                const currentDefault = (state.config.default_group_by_location || {})[key] || '';
+                if (!built.some(function (g) { return g.id === currentDefault; })) {
+                    delete state.config.default_group_by_location[key];
+                }
+                renderBoard();
+            })
+            .catch(function () {
+                window.alert('Could not load IC3 products to build category groups.');
+            });
+    });
+
+    generateFirstListBtn.addEventListener('click', function () {
+        if (scopeModeEl.value === 'location' && !(scopeLocationEl.value || '').trim()) {
+            window.alert('Choose a location first for location override scope.');
+            return;
+        }
+
+        Promise.all([loadIc3Products(), loadProductNicknames()])
+            .then(function (results) {
+                const products = results[0] || [];
+                const firstRows = buildFirstInventoryRows(products);
+                state.firstInventoryListRows = firstRows;
+                renderFirstInventoryList(firstRows);
+            })
+            .catch(function () {
+                window.alert('Could not load IC3 products to generate the first inventory list.');
+            });
+    });
+
+    downloadFirstListCsvBtn.addEventListener('click', function () {
+        downloadRowsAsCsv(state.firstInventoryListRows || []);
+    });
+
+    inventoryFirstListTableWrapEl.addEventListener('click', function (event) {
+        const saveBtn = event.target.closest('.inventory-save-nickname-btn');
+        if (!saveBtn) return;
+        const productNumber = safeText(saveBtn.getAttribute('data-product-number'));
+        const inputEl = inventoryFirstListTableWrapEl.querySelector('.inventory-nickname-input[data-product-number="' + productNumber + '"]');
+        const nickname = inputEl ? safeText(inputEl.value) : '';
+        saveProductNickname(productNumber, nickname)
+            .then(function () {
+                (state.firstInventoryListRows || []).forEach(function (row) {
+                    if (safeText(row['Product #']) === productNumber) {
+                        row['Nickname'] = nickname;
+                    }
+                });
+                inventoryListSummaryEl.textContent = 'Nickname saved for product #' + productNumber + '.';
+            })
+            .catch(function () {
+                window.alert('Could not save nickname for product #' + productNumber + '.');
+            });
+    });
+
+    inventoryFirstListTableWrapEl.addEventListener('keydown', function (event) {
+        const inputEl = event.target.closest('.inventory-nickname-input');
+        if (!inputEl) return;
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        const productNumber = safeText(inputEl.getAttribute('data-product-number'));
+        const saveBtn = inventoryFirstListTableWrapEl.querySelector('.inventory-save-nickname-btn[data-product-number="' + productNumber + '"]');
+        if (saveBtn) {
+            saveBtn.click();
+        }
+    });
+
+    groupsBoardEl.addEventListener('click', function (event) {
+        const editBtn = event.target.closest('.inventory-edit');
+        const deleteBtn = event.target.closest('.inventory-delete');
+        const addProductBtn = event.target.closest('.inventory-add-product-btn');
+        const rows = currentRows().slice();
+
+        if (editBtn) {
+            const targetId = editBtn.getAttribute('data-id');
+            const row = rows.find((item) => item.id === targetId);
+            if (!row) return;
+            askForText('Rename group', row.name || '', 'Group name').then(function (rawValue) {
+                const nextName = safeText(rawValue);
+                if (!nextName) return;
+                const idx = rows.findIndex((item) => item.id === targetId);
+                if (idx < 0) return;
+                rows[idx] = { id: rows[idx].id, name: nextName, item_keys: Array.isArray(rows[idx].item_keys) ? rows[idx].item_keys : [] };
+                setCurrentRows(rows);
+                renderBoard();
+            });
+            return;
+        }
+
+        if (addProductBtn) {
+            const targetId = addProductBtn.getAttribute('data-group-id') || '';
+            const inputEl = groupsBoardEl.querySelector('.inventory-add-product-input[data-group-id="' + targetId + '"]');
+            const rawKey = inputEl ? inputEl.value : '';
+            addProductToGroup(targetId, rawKey);
+            if (inputEl) inputEl.value = '';
+            return;
+        }
+
+        if (deleteBtn) {
+            const targetId = deleteBtn.getAttribute('data-id');
+            const nextRows = rows.filter((item) => item.id !== targetId);
+            setCurrentRows(nextRows);
+            const key = scopeModeEl.value === 'location' ? ((scopeLocationEl.value || '').trim() || '*') : '*';
+            if ((state.config.default_group_by_location || {})[key] === targetId) {
+                delete state.config.default_group_by_location[key];
+            }
+            if (state.editingId === targetId) {
+                resetEditor();
+            }
+            renderBoard();
+        }
+    });
+
+    defaultGroupEl.addEventListener('change', function () {
+        const key = scopeModeEl.value === 'location' ? ((scopeLocationEl.value || '').trim() || '*') : '*';
+        const value = (defaultGroupEl.value || '').trim();
+        if (!value) {
+            delete state.config.default_group_by_location[key];
+        } else {
+            state.config.default_group_by_location[key] = value;
+        }
+        persistSelectedSavedListConfig();
+        updateHiddenField();
+    });
+
+    function onScopeChange() {
+        resetEditor();
+        renderBoard();
+    }
+
+    if (savedListSelectEl) {
+        savedListSelectEl.addEventListener('change', function () {
+            const selected = findSavedListById(selectedSavedListId());
+            if (selected && selected.config && typeof selected.config === 'object') {
+                state.config = cloneConfig(selected.config);
+                resetEditor();
+                renderBoard();
+                return;
+            }
+            renderSavedListBoard();
+        });
+    }
+
+    scopeModeEl.addEventListener('change', onScopeChange);
+    scopeLocationEl.addEventListener('change', onScopeChange);
+
+    ensureStarterSavedList(inferStarterListName(state.config), state.config);
+    renderSavedListOptions();
+    if (savedListSelectEl) {
+        const initialSelected = findSavedListById(selectedSavedListId());
+        if (initialSelected && initialSelected.config && typeof initialSelected.config === 'object') {
+            state.config = cloneConfig(initialSelected.config);
+        }
+    }
+    renderBoard();
+    loadIc3Products().then(function (rows) {
+        const hasSavedLists = Array.isArray(state.savedLists) && state.savedLists.length > 0;
+        const hasCompanyConfig = Array.isArray(state.config.company) && state.config.company.length > 0;
+        if (!hasSavedLists && !hasCompanyConfig) {
+            syncCompanyDefaultsFromProducts(rows);
+            const starterId = ensureStarterSavedList('Company Default List', state.config);
+            renderSavedListOptions();
+            if (savedListSelectEl && starterId) {
+                savedListSelectEl.value = starterId;
+            }
+        }
+        renderBoard();
+    }).catch(function () {
+        // Keep group editor usable even if catalog metadata isn't available.
+    });
+    loadProductNicknames().then(function () {
+        renderBoard();
+    }).catch(function () {
+        // Keep group editor usable even if nicknames aren't available.
+    });
+})();
+</script>
+{% endblock %}

@@ -49,44 +49,7 @@
     </div>
   </div>
 
-  <div class="col-12 col-xl-7">
-    <div class="card h-100">
-      <div class="card-header"><i class="bi bi-info-circle me-2"></i>Active Location</div>
-      <div class="card-body">
-        {% if restaurant %}
-        <div class="row g-3">
-          <div class="col-sm-6">
-            <div class="section-eyebrow">Restaurant</div>
-            <div class="fw-semibold">{{ restaurant.name }}</div>
-          </div>
-          <div class="col-sm-6">
-            <div class="section-eyebrow">Location</div>
-            <div class="fw-semibold">{{ restaurant.location or '—' }}</div>
-          </div>
-          {% if restaurant.city or restaurant.state %}
-          <div class="col-sm-6">
-            <div class="section-eyebrow">City / State</div>
-            <div class="fw-semibold">{{ restaurant.city or '' }}{% if restaurant.city and restaurant.state %}, {% endif %}{{ restaurant.state or '' }}</div>
-          </div>
-          {% endif %}
-          {% if restaurant.phone %}
-          <div class="col-sm-6">
-            <div class="section-eyebrow">Phone</div>
-            <div class="fw-semibold">{{ restaurant.phone }}</div>
-          </div>
-          {% endif %}
-        </div>
-        {% else %}
-        <div class="text-muted">
-          <i class="bi bi-exclamation-circle me-1"></i>No active location selected.
-          <a href="{{ url_for('restaurant_setup') }}" class="ms-1">Set one up</a>.
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-12 col-xl-5">
+  <div class="col-12">
     <div class="card h-100">
       <div class="card-header"><i class="bi bi-lightning-charge me-2"></i>Quick Actions</div>
       <div class="card-body d-flex flex-column gap-2">
@@ -95,9 +58,6 @@
         </a>
         <a class="btn btn-outline-secondary text-start" href="{{ url_for('production_list_page') }}">
           <i class="bi bi-list-check me-2"></i>Manage Production List
-        </a>
-        <a class="btn btn-outline-secondary text-start" href="{{ url_for('restaurant_setup') }}">
-          <i class="bi bi-gear me-2"></i>Restaurant Setup
         </a>
         {% if current_user.is_authenticated and current_user.is_admin %}
         <a class="btn btn-outline-secondary text-start" href="{{ url_for('admin_dashboard') }}">
@@ -114,16 +74,17 @@
         <span><i class="bi bi-clock-history me-2"></i>Uploaded Product Mix Files</span>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('reports_page') }}">View Full History</a>
       </div>
+      <div class="card-body border-bottom py-2">
+        <div class="small text-muted">Showing the 10 most recent uploads. Use View Full History for the full list.</div>
+      </div>
       <div class="card-body p-0">
         <div class="table-responsive">
           <table class="table table-hover mb-0 align-middle" id="recentUploadsTable" data-grouped-by-location="1">
             <thead>
               <tr>
                 <th>ID</th>
-                <th>File</th>
                 <th>Location</th>
-                <th>Report Start</th>
-                <th>Report End</th>
+                <th>Reported Date</th>
                 <th>Uploaded At</th>
                 <th class="text-end">Action</th>
               </tr>
@@ -131,7 +92,7 @@
             <tbody>
               {% for group in recent_upload_groups or [] %}
               <tr class="table-light">
-                <td colspan="7" class="fw-semibold">
+                <td colspan="5" class="fw-semibold">
                   <i class="bi bi-geo-alt me-1"></i>{{ group.location_label }}
                   <span class="badge text-bg-secondary ms-2">{{ group.uploads | length }} uploads</span>
                 </td>
@@ -139,12 +100,10 @@
               {% for upload in group.uploads %}
               <tr>
                 <td>{{ upload.id }}</td>
-                <td class="text-break">{{ upload.filename }}</td>
                 <td>
                   {{ upload.restaurant_name }}{% if upload.restaurant_location %} - {{ upload.restaurant_location }}{% endif %}
                 </td>
                 <td data-sort-key="report_start" data-sort-value="{{ upload.report_start_date or '' }}">{{ upload.report_start_date or '—' }}</td>
-                <td>{{ upload.report_end_date or '—' }}</td>
                 <td data-sort-key="uploaded_at" data-sort-value="{{ upload.uploaded_at or '' }}">{{ upload.uploaded_at or '—' }}</td>
                 <td class="text-end">
                   <form method="post" action="{{ url_for('delete_upload_page', upload_id=upload.id) }}" class="d-inline" onsubmit="return confirm('Delete this upload and its linked records? This cannot be undone.');">
@@ -160,7 +119,7 @@
               {% endfor %}
               {% if not recent_upload_groups %}
               <tr>
-                <td colspan="7" class="text-center text-muted py-4">No Product Mix uploads found yet.</td>
+                <td colspan="5" class="text-center text-muted py-4">No Product Mix uploads found yet.</td>
               </tr>
               {% endif %}
             </tbody>

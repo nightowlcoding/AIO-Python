@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "James",
+    "lastName": "Yeomans",
+    "dateOfHire": "2026-05-23",
+    "id": 1779570915349.9739,
+    "locationId": "pm_2"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "employeeInfo": {
+    "firstName": "Shelbie",
+    "middleName": "",
+    "lastName": "Ramos",
+    "dateOfHire": "2026-07-01",
+    "id": 1782949891661.9597,
+    "locationId": "pm_1",
+    "jobTitle": "Bartender; Server; Training",
+    "email": "",
+    "phone": ""
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  },
+  "documents": {
+    "legal": {
+      "i9": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "w2": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "alcoholServingPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "foodHandlersPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "additionalPermits": []
+    },
+    "medicalCallIns": [],
+    "essentialPaperwork": []
+  }
+}

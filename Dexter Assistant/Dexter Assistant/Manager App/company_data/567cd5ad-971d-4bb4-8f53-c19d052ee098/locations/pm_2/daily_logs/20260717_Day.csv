@@ -1,0 +1,44 @@
+Date,2026-07-17
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Selena Cuellar,Day,Dining,0,0,0,0,0,0,0,0,0,0,0,0,0
+Michaela Mireles,Day,Dining,0,0,0,0,0,0,0,0,0,0,0,0,0
+Isabel Garcia,Day,Dining,0,0,0,0,0,0,0,0,0,0,0,0,0
+Clarissa Cantu,Day,Dining,0,0,0,0,0,0,0,0,0,0,0,0,0
+Alexa Garcia,Day,Dining,0,0,0,0,0,0,0,0,0,0,0,0,0
+Indira Garcia,Day,Bar,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+Cash Drawer Count
+Pennies,53
+Nickels,0.0
+Dimes,43
+Quarters,14
+Rolled Coins,26.00
+Ones,104
+Fives,8
+Tens,8
+Twenties,0.0
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,258.33
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-17T15:33:49.405Z
+
+Cash Deductions
+"cedar broo, cedar sweep",lowes,81.10
+"microfiber, t27 cut",harbor freight,31.36
+"mini an, fast aba",lowes,14.01
+gas,murphys,40.00
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,166.47
+Cash in Drawer,258.33
+DEPOSIT AMOUNT,-166.47

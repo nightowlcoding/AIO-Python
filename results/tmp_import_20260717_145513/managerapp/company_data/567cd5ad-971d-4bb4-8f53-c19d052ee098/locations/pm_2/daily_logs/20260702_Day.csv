@@ -1,0 +1,46 @@
+Date,2026-07-02
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Kassidy Pena,Night,Dining,0,15.08,-15.08,64.55,50.33,0,42.83,0,0,0,0,131.76,0
+Selena Cuellar,Night,Dining,47.31,9,38.31,0,156.9,0,0,0,6.75,0,0,173.57,0
+Noel Rodriguez,Night,Dining,0,0,0,39.33,69.23,0,0,0,0,0,0,100.28,0
+Hailey Nunn,Night,Dining,0,23.34,-23.34,190.94,40.34,0,0,0,0,0,0,192.1,0
+Madison Zamora,Night,Dining,0,8,-8,16.22,0,0,64.46,0,6.25,0,0,60.91,0
+Bryan Garcia,Night,Bar,36.73,30,6.73,248.61,76.67,0,0,0,52.85,151.45,0,102.45,0
+Selena Gomez,Night,Bar,92.26,7,85.26,59.67,8.76,0,0,0,48.2,4,0,89.78,0
+Kaylee Jones,Night,Bar,0,5,-5,109.82,0,0,0,0,39.3,0,0,57.54,0
+Emileigh Salinas,Night,Bar,0,55.07,-55.07,31.1,216.71,110,0,0,15.2,85.1,0,179.41,0
+
+Cash Drawer Count
+Pennies,11.0
+Nickels,7.0
+Dimes,51.0
+Quarters,12.0
+Rolled Coins,6.0
+Ones,76.0
+Fives,1.0
+Tens,5.0
+Twenties,10.0
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,345.56
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-02T22:05:19.229Z
+
+Cash Deductions
+Negative deposit 07/01,Bhb,63.49
+Toner,Walmart,106.28
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+,,,0
+
+Deposit Summary
+Cash Adjustments,169.77
+Cash in Drawer,345.56
+DEPOSIT AMOUNT,-145.96

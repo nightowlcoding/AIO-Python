@@ -1,0 +1,47 @@
+Date,2026-07-05
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Jailyn Carabajal,Day,Dining,144.42,136.81,7.61,725.93,409.18,0,60.13,0,46.9,26.85,0,1037.5,0
+Madison Hernandez,Day,To Go,23.59,4,19.59,17.31,45.52,0,0,0,0,0,0,76.15,0
+April Salinas,Day,Bar,109.31,153.77,-44.46,629.11,206.13,62.63,0,0,229,184.15,0,375.41,13.99
+Alexis Bratten,Day,Dining,243.41,105.87,137.54,451.65,379.99,0,0,0,10.75,8.95,0,875.65,0
+Kimora Adair,Night,Dining,107.27,11.98,95.29,124.58,86.25,0,0,0,0,0,0,282.84,0
+Milo Saenz,Day,Dining,157.87,163.4,-5.53,555.13,392.07,119.55,0,0,28.9,29.85,0,921.58,0
+Saleigh Ramos,Night,Dining,131.28,47.48,83.8,190.28,165.77,24.57,0,0,24,9.95,0,395.09,0
+Rebecca Otero,Night,Dining,238.9,66.7,172.2,582.18,181.49,0,76.31,0,88.3,15.9,0,830.92,0
+Alyssa Vinton,Night,Dining,122.3,91.88,30.42,424.05,160.05,0,78.87,0,42.95,32.85,0,564.85,0
+Alysha Ramirez,Night,Dining,86.28,127.1,-40.82,458.66,429.88,0,0,0,421.85,39.3,0,322.26,0
+
+Cash Drawer Count
+Pennies,114.0
+Nickels,1.0
+Dimes,38.0
+Quarters,30.0
+Rolled Coins,7.0
+Ones,37.0
+Fives,26.0
+Tens,7.0
+Twenties,7.0
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,396.49
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-05T15:58:52.221Z
+end_night,114,1,38,30,42,22,11,6,0,0,7,401.49,2026-07-06T04:05:35.174Z
+
+Cash Deductions
+"Corn,torts,Parmesan,mint,apple juice,printing paper",HEB,124.78
+Fuel David,HEB,32.53
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,157.31
+Cash in Drawer,396.49
+DEPOSIT AMOUNT,298.33

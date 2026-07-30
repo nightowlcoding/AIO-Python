@@ -1,0 +1,43 @@
+Date,2026-07-09
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Jailyn Carabajal,Day,Dining,70.73,116.58,-45.85,539.57,549.93,0,0,0,7.9,0,0,956.17,0
+Breanna Ramos,Day,Dining,106.89,102.21,4.68,270.86,419.1,146.03,0,0,35.6,0,0,740.96,19.07
+Destiny Pena,Day,Bar,65.87,91.75,-25.88,417.63,391.51,0,0,0,175.55,137.4,0,410.71,0
+Madison Hernandez,Night,Dining,222.49,49.73,172.76,278.98,302.24,0,65.32,0,53.75,25,0,678.16,0
+Milo Saenz,Night,Dining,17.31,127.27,-109.96,560.35,397.24,0,0,0,155.15,19.9,0,608.05,14.49
+Saleigh Ramos,Night,Dining,33.47,105.81,-72.34,285.6,428.92,74.99,0,0,14.2,0,0,648.34,0
+Alexis Bratten,Night,Bar,74.13,118.44,-44.31,412.58,164.57,0,0,0,264.9,84,0,143.35,0
+Shelbie Ramos,Night,Bar,227.64,31.05,196.59,214.16,114.69,0,0,0,231.9,118.55,0,135.16,0
+
+Cash Drawer Count
+Pennies,0.0
+Nickels,0.0
+Dimes,0.0
+Quarters,0.0
+Rolled Coins,0.0
+Ones,0.0
+Fives,0.0
+Tens,0.0
+Twenties,0.0
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,0.00
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+
+Cash Deductions
+tortillas,HEB,20.75
+can drinks & oj,Walmart,46.19
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,66.94
+Cash in Drawer,0.00
+DEPOSIT AMOUNT,8.75

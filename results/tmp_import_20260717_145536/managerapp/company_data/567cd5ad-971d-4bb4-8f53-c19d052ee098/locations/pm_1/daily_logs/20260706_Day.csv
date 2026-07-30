@@ -1,0 +1,43 @@
+Date,2026-07-06
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Breanna Ramos,Day,Dining,176.53,104.9,71.63,464.7,351.5,0,0,0,28.25,0,0,791.83,0
+Maria Cortez,Day,Dining,244.76,103.03,141.73,429.96,520.83,0,0,0,29.5,13.5,0,966.22,0
+Destiny Pena,Day,Dining,114.91,104.14,10.77,358.9,191.07,0,0,0,89.5,99.45,0,329.03,0
+Milo Saenz,Night,Dining,42.95,61.76,-18.81,291.89,159.11,0,45.97,0,18.75,7.95,0,415.01,0
+Madison Hernandez,Night,Dining,8.11,33.79,-25.68,211.62,294.51,0,0,0,14.5,22.2,0,407.15,0
+Regeana Rochester,Night,Dining,164.81,56.02,108.79,289.28,192.97,0,0,0,26.7,0,0,519.3,0
+Jailyn Carabajal,Night,Dining,39.76,43.93,-4.17,197.59,66.57,0,0,0,113.65,57.15,0,69.41,13
+
+Cash Drawer Count
+Pennies,105.0
+Nickels,39.0
+Dimes,37.0
+Quarters,20.0
+Rolled Coins,5.0
+Ones,64
+Fives,13
+Tens,6
+Twenties,10
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,405.70
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-06T18:18:09.323Z
+end_night,105,39,37,20,78,22,9,5,0,0,5,394.7,2026-07-07T03:29:31.482Z
+
+Cash Deductions
+Produce,HEB,32.15
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,32.15
+Cash in Drawer,405.70
+DEPOSIT AMOUNT,252.11

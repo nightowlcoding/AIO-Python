@@ -52,7 +52,7 @@
           <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
           <select class="form-select form-select-sm top-select" name="restaurant_id" onchange="this.form.submit()">
             {% for option in location_switch_options %}
-            <option value="{{ option.id }}" {% if location_switch_active_id and location_switch_active_id == option.id %}selected{% endif %}>{{ option.name }}{% if option.location %} - {{ option.location }}{% endif %}</option>
+            <option value="{{ option.id }}" {% if location_switch_active_id and location_switch_active_id == option.id %}selected{% endif %}>{{ option.location or option.name }}</option>
             {% endfor %}
           </select>
         </form>

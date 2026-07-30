@@ -1,0 +1,59 @@
+{
+  "front_door": {
+    "host": "0.0.0.0",
+    "port": 5080,
+    "auto_open_browser": true,
+    "open_path": "/portal/managerapp",
+    "session_hours": 8,
+    "registration_open": false
+  },
+  "mail": {
+    "enabled": true,
+    "smtp_host": "smtp.office365.com",
+    "smtp_port": 587,
+    "smtp_username": "admin@dexterassist.com",
+    "from_email": "admin@dexterassist.com",
+    "from_name": "Dexter Assist",
+    "reply_to": "admin@dexterassist.com",
+    "use_starttls": true,
+    "use_ssl": false,
+    "public_base_url": "https://dexterassist.com",
+    "username_env": "DEXTER_SMTP_USERNAME",
+    "password_env": "DEXTER_SMTP_PASSWORD"
+  },
+  "apps": {
+    "productmix": {
+      "display_name": "ProductMixRestaurantDB",
+      "cwd": "ProductMixRestaurantDB",
+      "entrypoint": "app.py",
+      "base_url": "http://127.0.0.1:5050",
+      "auto_port": true,
+      "health_path": "/health",
+      "env": {
+        "PM_DEBUG": "0",
+        "PM_OPEN_BROWSER": "0"
+      }
+    },
+    "ic3": {
+      "display_name": "Inventory Control 3",
+      "cwd": "Inventory Control 3",
+      "entrypoint": "app.py",
+      "base_url": "http://127.0.0.1:5003",
+      "auto_port": true,
+      "health_path": "/",
+      "env": {
+        "IC3_FORCE_PROD": "1",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    "managerapp": {
+      "display_name": "Daily Log",
+      "cwd": "Manager App",
+      "entrypoint": "manager_app.py",
+      "base_url": "http://127.0.0.1:8000",
+      "auto_port": true,
+      "health_path": "/",
+      "env": {}
+    }
+  }
+}

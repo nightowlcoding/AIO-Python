@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "Brycen",
+    "lastName": "Driver",
+    "dateOfHire": "2026-05-23",
+    "id": 1779570915348.9233,
+    "locationId": "pm_2"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

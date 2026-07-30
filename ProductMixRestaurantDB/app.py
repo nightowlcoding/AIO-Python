@@ -5689,6 +5689,34 @@ def _append_redirect_message(next_url, key, message):
     return redirect(urlunsplit(rebuilt))
 
 
+def _safe_location_switch_next_url(next_url, fallback_url):
+    fallback = str(fallback_url or "").strip() or url_for("restaurant_setup")
+    candidate = str(next_url or "").strip()
+    if not candidate:
+        return fallback
+
+    split = urlsplit(candidate)
+    if split.scheme or split.netloc:
+        same_host = False
+        if has_request_context() and split.netloc:
+            same_host = split.netloc.lower() == str(request.host or "").lower()
+        if not same_host:
+            return fallback
+        split = split._replace(scheme="", netloc="")
+
+    path = split.path or "/"
+    if not path.startswith("/"):
+        path = f"/{path}"
+
+    # Prevent iframe navigation from escaping ProductMix app-proxy scope.
+    if path == "/portal" or path.startswith("/portal/"):
+        return fallback
+    if path.startswith("/app/") and not path.startswith("/app/productmix/"):
+        return fallback
+
+    return urlunsplit(("", "", path, split.query, split.fragment))
+
+
 def _get_production_list_next_url(restaurant=None):
     next_url = (request.form.get("next") or "").strip()
     if next_url:
@@ -6702,7 +6730,10 @@ def select_restaurant_post():
         return redirect(url_for("restaurant_setup", error="Restaurant+not+found"))
 
     switch_error = _switch_active_restaurant_or_error(int(restaurant_id_raw))
-    next_url = request.form.get("next") or request.referrer or url_for("restaurant_setup")
+    next_url = _safe_location_switch_next_url(
+        request.form.get("next") or request.referrer,
+        url_for("restaurant_setup"),
+    )
     if switch_error:
         separator = "&" if "?" in next_url else "?"
         return redirect(f"{next_url}{separator}error={switch_error}")
@@ -6715,7 +6746,10 @@ def select_restaurant_post():
 @login_required
 @limiter.limit("30 per minute")
 def select_next_restaurant():
-    next_url = request.form.get("next") or request.referrer or url_for("home")
+    next_url = _safe_location_switch_next_url(
+        request.form.get("next") or request.referrer,
+        url_for("home"),
+    )
     next_restaurant_id = _get_next_restaurant_id(_current_restaurant_id())
     separator = "&" if "?" in next_url else "?"
 

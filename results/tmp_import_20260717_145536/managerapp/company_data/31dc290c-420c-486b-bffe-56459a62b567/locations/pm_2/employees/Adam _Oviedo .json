@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "Adam ",
+    "lastName": "Oviedo ",
+    "dateOfHire": "2026-05-23",
+    "id": 1779569806289.0396,
+    "locationId": "pm_2"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

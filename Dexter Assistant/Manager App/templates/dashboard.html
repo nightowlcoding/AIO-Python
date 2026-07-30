@@ -13,35 +13,30 @@
         </div>
     </div>
 
-    <!-- KPI Tiles -->
-    <div class="row g-3 mb-4" id="kpiRow">
-        <div class="col-6 col-md-3">
-            <div class="dx-kpi dx-kpi--accent" id="kpiSales">
+    <!-- KPI & Quick Navigation Row -->
+    <div class="row g-3 mb-4" id="kpiRow" style="align-items: stretch;">
+        <!-- Yesterday's Sales -->
+        <div class="col-md-3">
+            <div class="dx-kpi" id="kpiYesterdaySales" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+                <div class="dx-kpi__label"><i class="bi bi-calendar me-1"></i>Yesterday's Sales</div>
+                <div class="dx-kpi__value" id="kpiYesterdaySalesVal">$0.00</div>
+                <div class="dx-kpi__delta dx-kpi__delta--flat" id="kpiYesterdayDelta">&nbsp;</div>
+            </div>
+        </div>
+        <!-- Today's Sales -->
+        <div class="col-md-3">
+            <div class="dx-kpi dx-kpi--accent" id="kpiSales" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
                 <div class="dx-kpi__label"><i class="bi bi-currency-dollar me-1"></i>Today's Sales</div>
                 <div class="dx-kpi__value" id="kpiSalesVal">${{ "%.2f"|format(today_sales) }}</div>
                 <div class="dx-kpi__delta dx-kpi__delta--flat" id="kpiSalesDelta">&nbsp;</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="dx-kpi" id="kpiEmp">
-                <div class="dx-kpi__label"><i class="bi bi-people me-1"></i>Active Employees</div>
-                <div class="dx-kpi__value">{{ user_count }}</div>
-                <div class="dx-kpi__delta dx-kpi__delta--flat">&nbsp;</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="dx-kpi" id="kpiCash">
-                <div class="dx-kpi__label"><i class="bi bi-cash-stack me-1"></i>Cash on Hand</div>
-                <div class="dx-kpi__value" id="kpiCashVal">${{ "%.2f"|format(cash_on_hand) }}</div>
-                <div class="dx-kpi__delta dx-kpi__delta--flat" id="kpiCashDelta">&nbsp;</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="dx-kpi" id="kpiDeposit">
-                <div class="dx-kpi__label"><i class="bi bi-bank me-1"></i>Today's Deposit</div>
-                <div class="dx-kpi__value" id="kpiDepositVal">—</div>
-                <div class="dx-kpi__delta dx-kpi__delta--flat" id="kpiDepositDelta">&nbsp;</div>
-            </div>
+        <!-- Daily Log (2x width) -->
+        <div class="col-md-6">
+            <a href="{{ url_for('daily_log') }}" class="btn btn-outline-primary w-100" style="height: 100%; padding: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; border-radius: 0.375rem; text-decoration: none;">
+                <i class="bi bi-calendar-check" style="font-size: 2.5rem; margin-bottom: 0.5rem;"></i>
+                <span style="font-size: 1.1rem; font-weight: 600;">Daily Log</span>
+            </a>
         </div>
     </div>
 
@@ -83,13 +78,13 @@
                             </a>
                         </div>
                         <div class="col-md-3">
-                            <a href="{{ url_for('employees') }}" class="btn btn-outline-info w-100 py-3">
+                            <a href="{{ url_for('employees') }}{% if selected_location_id %}?location_id={{ selected_location_id }}{% endif %}" class="btn btn-outline-info w-100 py-3">
                                 <i class="bi bi-people d-block mb-2" style="font-size: 2rem;"></i>
                                 Manage Employees
                             </a>
                         </div>
                         <div class="col-md-3">
-                            <a href="{{ url_for('reports') }}" class="btn btn-outline-warning w-100 py-3">
+                            <a href="{{ url_for('reports') }}{% if selected_location_id %}?location_id={{ selected_location_id }}{% endif %}" class="btn btn-outline-warning w-100 py-3">
                                 <i class="bi bi-graph-up d-block mb-2" style="font-size: 2rem;"></i>
                                 View Reports
                             </a>
@@ -100,86 +95,7 @@
         </div>
     </div>
     
-    <!-- Recent Activity -->
-    <div class="row">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-activity"></i> Recent Activity</h5>
-                    <a href="{{ url_for('audit_log') }}" class="btn btn-sm btn-outline-primary">View All</a>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Time</th>
-                                    <th>User</th>
-                                    <th>Action</th>
-                                    <th>Details</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% if recent_logs %}
-                                    {% for log in recent_logs %}
-                                    <tr>
-                                        <td><small>{{ log['timestamp'][:19] if log.get('timestamp') else log.get('created_at', '')[:19] }}</small></td>
-                                        <td>{{ log.get('username', 'System') }}</td>
-                                        <td>
-                                            <span class="badge bg-info">{{ log['action'] }}</span>
-                                        </td>
-                                        <td><small class="text-muted">{{ log.get('details', '-') }}</small></td>
-                                    </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr>
-                                        <td colspan="4" class="text-center text-muted py-4">
-                                            No recent activity
-                                        </td>
-                                    </tr>
-                                {% endif %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Company Info -->
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-building"></i> Company Info</h5>
-                </div>
-                <div class="card-body">
-                    <dl class="row mb-0">
-                        <dt class="col-sm-4">Name:</dt>
-                        <dd class="col-sm-8">{{ company.name }}</dd>
-                        
-                        <dt class="col-sm-4">Address:</dt>
-                        <dd class="col-sm-8">{{ company.address or 'Not set' }}</dd>
-                        
-                        <dt class="col-sm-4">Phone:</dt>
-                        <dd class="col-sm-8">{{ company.phone or 'Not set' }}</dd>
-                        
-                        <dt class="col-sm-4">Email:</dt>
-                        <dd class="col-sm-8">{{ company.email or 'Not set' }}</dd>
-                        
-                        <dt class="col-sm-4">Your Role:</dt>
-                        <dd class="col-sm-8">
-                            <span class="badge bg-primary">{{ current_user.current_role }}</span>
-                        </dd>
-                    </dl>
-                    
-                    {% if current_user.current_role == 'business_admin' %}
-                    <a href="{{ url_for('settings') }}" class="btn btn-primary w-100 mt-3">
-                        <i class="bi bi-gear"></i> Manage Settings
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
+
 </div>
 {% endblock %}
 
@@ -296,22 +212,22 @@
                 document.getElementById('trendDateRange').textContent = fmtDate(first) + ' \u2013 ' + fmtDate(last);
             }
 
-            var today = rows[rows.length - 1] || {};
-            var prev  = rows.length > 1 ? rows[rows.length - 2] : null;
+            var today     = rows[rows.length - 1] || {};
+            var yesterday = rows.length > 1 ? rows[rows.length - 2] : null;
+            var twoDaysAgo = rows.length > 2 ? rows[rows.length - 3] : null;
 
             var todaySales   = parseFloat(today.total_sales) || 0;
-            var todayDeposit = parseFloat(today.deposit) || 0;
-            var prevSales    = prev ? (parseFloat(prev.total_sales) || 0) : null;
-            var prevDeposit  = prev ? (parseFloat(prev.deposit) || 0) : null;
+            var yesterdaySales = yesterday ? (parseFloat(yesterday.total_sales) || 0) : 0;
+            var twoDaysAgoSales = twoDaysAgo ? (parseFloat(twoDaysAgo.total_sales) || 0) : null;
 
             var salesValEl = document.getElementById('kpiSalesVal');
             if (salesValEl && todaySales > 0) salesValEl.textContent = fmt$(todaySales);
 
-            var depositValEl = document.getElementById('kpiDepositVal');
-            if (depositValEl) depositValEl.textContent = todayDeposit > 0 ? fmt$(todayDeposit) : '$0.00';
+            var yesterdayValEl = document.getElementById('kpiYesterdaySalesVal');
+            if (yesterdayValEl && yesterdaySales > 0) yesterdayValEl.textContent = fmt$(yesterdaySales);
 
-            updateKpiDelta('kpiSalesDelta', todaySales, prevSales);
-            updateKpiDelta('kpiDepositDelta', todayDeposit, prevDeposit);
+            updateKpiDelta('kpiSalesDelta', todaySales, yesterdaySales);
+            updateKpiDelta('kpiYesterdayDelta', yesterdaySales, twoDaysAgoSales);
         });
 })();
 </script>

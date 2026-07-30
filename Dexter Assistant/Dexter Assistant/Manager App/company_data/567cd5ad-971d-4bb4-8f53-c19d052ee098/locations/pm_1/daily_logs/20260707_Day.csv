@@ -1,0 +1,41 @@
+Date,2026-07-07
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Breanna Ramos,Day,Dining,110.48,115.4,-4.92,481.93,388.93,0,53.83,0,28.25,10.95,0,810.4,0
+Destiny Pena,Day,Bar,18.08,97.04,-78.96,434.49,253.76,0,52.36,0,0,0,0,611.19,3.95
+Alysha Ramirez,Day,Dining,112.79,85.75,27.04,130.57,42.24,272.81,0,0,23,28.1,0,385.53,0
+Regeana Rochester,Night,Dining,84.64,100.1,-15.46,455.24,340.05,0,0,0,131.35,23.85,0,565.34,6.75
+Rebecca Otero,Night,Bar,131.65,62.41,69.24,217.93,187.29,0,0,0,207.2,129.35,0,101.89,39.99
+Milo Saenz,Night,Dining,6.44,40.86,-34.42,225.01,160.97,0,0,0,21.85,4,0,298.98,15.99
+Alyssa Vinton,Night,Dining,79.97,41.39,38.58,340.93,118.93,0,0,0,12.5,10.95,0,437.08,0
+
+Cash Drawer Count
+Pennies,80.0
+Nickels,33.0
+Dimes,29.0
+Quarters,8.0
+Rolled Coins,5.0
+Ones,45.0
+Fives,5.0
+Tens,5.0
+Twenties,7.0
+Fifties,0.0
+Hundreds,1.0
+Drawer Total,372.35
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+
+Cash Deductions
+"bleach, bell peppers",HEB,16.91
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,16.91
+Cash in Drawer,372.35
+DEPOSIT AMOUNT,-15.81

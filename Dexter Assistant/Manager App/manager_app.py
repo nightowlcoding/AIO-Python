@@ -90,7 +90,18 @@ def _configure_company_data_storage() -> None:
             shutil.copytree(local_company_data, backup_dir, dirs_exist_ok=True)
             shutil.rmtree(local_company_data)
 
-    local_company_data.symlink_to(target_company_data, target_is_directory=True)
+    try:
+        local_company_data.symlink_to(target_company_data, target_is_directory=True)
+    except OSError:
+        # Windows often blocks symlink creation without elevated privileges.
+        # Fall back to a real directory mirror so the app can still read data.
+        local_company_data.mkdir(parents=True, exist_ok=True)
+        for item in target_company_data.iterdir():
+            destination = local_company_data / item.name
+            if item.is_dir():
+                shutil.copytree(item, destination, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, destination)
 
 
 try:

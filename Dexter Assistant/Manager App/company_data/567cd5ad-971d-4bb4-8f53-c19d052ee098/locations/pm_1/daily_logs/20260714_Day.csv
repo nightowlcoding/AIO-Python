@@ -1,0 +1,44 @@
+Date,2026-07-14
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Jailyn Carabajal,Day,Dining,83.01,78.25,4.76,297.75,323.95,0,0,0,0,15.9,0,562.71,0
+Breanna Ramos,Day,Dining,104.75,79.7,25.05,455.51,272.83,0,62.83,0,21.35,0,0,732.19,0
+Shelbie Ramos,Day,Bar,34.37,49.94,-15.57,357.92,30,0,0,0,66.25,67.65,0,210.04,0
+Milo Saenz,Night,Dining,330.51,19.87,310.64,338,37.5,0,0,0,20.25,0,0,613.63,0
+Regeana Rochester,Night,Dining,72.24,35.63,36.61,177.99,267.31,0,0,0,0,10,0,435.24,0
+Alyssa Lazo,Night,Dining,58.83,67.41,-8.58,209.06,388.08,41.86,0,0,54.65,33.1,0,494.7,0
+Rebecca Otero,Night,Bar,186.97,56.22,130.75,391.94,148.03,0,0,0,191.1,233.2,0,195.43,0
+
+Cash Drawer Count
+Pennies,0
+Nickels,14
+Dimes,45
+Quarters,23
+Rolled Coins,15.00
+Ones,142
+Fives,13
+Tens,4
+Twenties,6
+Fifties,0
+Hundreds,0
+Drawer Total,392.95
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+end_night,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-15T04:08:28.383Z
+
+Cash Deductions
+bell peppers kids burger buns,HEB,0
+mini cucumbers pineapple,HEB,0
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+,,,0
+
+Deposit Summary
+Cash Adjustments,0.0
+Cash in Drawer,392.95
+DEPOSIT AMOUNT,483.66

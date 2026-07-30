@@ -1,0 +1,50 @@
+Date,2026-07-12
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Alexis Bratten,Day,Dining,148.51,37.45,111.06,101.72,221.34,0,0,0,0,0,0,401.01,0
+Milo Saenz,Day,Dining,288.23,116.76,171.47,478.12,407.92,0,0,0,18.25,29.85,0,928.86,0
+Jailyn Carabajal,Day,Dining,154.49,111.93,42.56,463.55,388.39,0,0,0,11.9,0,0,814.41,0
+April Salinas,Day,Bar,155.25,137.46,17.79,671.47,204.89,0,0,0,452.9,150.05,0,223.14,0
+Kimora Adair,Day,To Go,0,1.28,-1.28,69,10.52,0,0,0,0,0,0,72.28,0
+Saleigh Ramos,Night,Dining,7.56,24.33,-16.77,289.42,72.04,0,0,0,27.5,9.95,0,281,13.99
+Kimora Adair,Night,To Go,77.86,24.43,53.43,114.36,122.76,0,0,0,0,0,0,268.45,0
+Destiny Pena,Night,Bar,269.1,133.92,135.18,678.01,264.09,105.52,29.37,0,406,288.85,0,425.25,3.5
+Regeana Rochester,Night,Dining,43.27,57.42,-14.15,290.8,170.54,0,0,0,43.75,0,0,369.43,0
+Alyssa Vinton,Night,Dining,104.01,91.17,12.84,443.28,131.08,0,0,0,108,44,0,390.48,0
+
+Cash Drawer Count
+Pennies,50
+Nickels,15
+Dimes,0.0
+Quarters,26
+Rolled Coins,20.00
+Ones,75
+Fives,28
+Tens,1
+Twenties,7
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,392.75
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-13T04:24:12.154Z
+end_night,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-13T04:24:13.923Z
+
+Cash Deductions
+Sliced mushroom x 3,HEB,11.82
+Plastic ware ,HEB,22.69
+"parmesean, torts",HEB,32.82
+"carrots,tomatoes,coleslaw,corn",HEB,76.05
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+,,,0
+
+Deposit Summary
+Cash Adjustments,143.38
+Cash in Drawer,392.75
+DEPOSIT AMOUNT,368.75

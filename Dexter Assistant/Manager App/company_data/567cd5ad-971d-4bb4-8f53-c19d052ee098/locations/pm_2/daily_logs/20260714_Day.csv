@@ -1,0 +1,54 @@
+Date,2026-07-14
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Alexa Garcia,Day,Dining,16.73,12.4,4.33,80.18,64.14,0,0,0,0,0,0,137.31,0
+Alyssa Rodriguez,Day,Dining,0,10,-10,22.36,56.33,27.45,0,0,0,0,0,88.8,0
+Austin Barnes,Day,Dining,16.22,45.57,-29.35,275.99,158.4,0,0,0,2.5,12.95,0,358.74,0
+Indira Garcia,Day,Bar,95.24,71.48,23.76,278.86,93.36,19.81,0,0,54.85,17.2,0,312.07,0
+Brycen Driver,Day,Dining,136.31,46,90.31,64.49,336.06,0,0,0,7.9,10.95,0,434.57,0
+J’Elle Longoria,Night,Dining,20.55,60,-39.45,270.21,281.51,0,0,0,20.45,14.95,0,437.9,0
+Isabel García,Night,Dining,91.58,31.25,60.33,49.18,155.17,0,54.62,0,34.75,6.95,0,253.3,0
+Kassidy Pena,Night,Dining,80,28.2,51.8,280.34,73.5,0,0,0,12,21.95,0,340.85,0
+Bailee Pena,Night,Dining,166.72,22,144.72,224.68,61.41,0,0,0,18.75,0,0,379.28,0
+Kaitlyn Esfahani,Night,Dining,138.53,60.37,78.16,228.31,187.26,0,0,0,6.25,0,0,449.9,0
+Indira Garcia,Night,Bar,125.74,29,96.74,161.97,35.25,0,0,0,80.7,23.15,0,167.77,16.99
+Kiara McCoy,Night,Bar,54.54,43,11.54,314.7,145.01,42.08,0,0,135.8,18.9,0,319.57,0
+
+Cash Drawer Count
+Pennies,62.0
+Nickels,5.0
+Dimes,52.0
+Quarters,33
+Rolled Coins,36.0
+Ones,44.0
+Fives,1.0
+Tens,0.0
+Twenties,5.0
+Fifties,0.0
+Hundreds,2.0
+Drawer Total,399.32
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,0,0,0,0,0,0,0,0,0,0,0,0,2026-07-14T16:41:21.052Z
+end_night,68,8,52,15,84,10,6,8,0,0,36,400.03,2026-07-15T03:59:21.413Z
+
+Cash Deductions
+Bar and kitchen supplies,Walmart,72.92
+Gas ticket-Cool,Always plaza ,45.51
+Gas ticket - victor,Kwik Pantry,20.0
+Chico V,,50.0
+Juke Box ,BHB,15.0
+Negative Deposit ,7/13/2026 ,11.81
+Refund Beef Tacos ,BHB,14.99
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,230.23
+Cash in Drawer,399.32
+DEPOSIT AMOUNT,252.66

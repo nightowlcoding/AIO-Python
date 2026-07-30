@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "Nicholas ",
+    "lastName": "Moya",
+    "dateOfHire": "2026-05-23",
+    "id": 1779569806289.1187,
+    "locationId": "pm_2"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

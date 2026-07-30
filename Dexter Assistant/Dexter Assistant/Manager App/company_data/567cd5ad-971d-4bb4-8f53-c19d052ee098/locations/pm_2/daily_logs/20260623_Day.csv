@@ -1,0 +1,55 @@
+Date,2026-06-23
+Shift,Day
+Notes,
+
+Employee Entries
+Name,Shift,Area,Cash,C.C. Tips,Cash Diff,Visa,Mastercard,Amex,Discover,Credit Total,Beer,Liquor,Wine,Food,Voids
+Hailey Nun,Day,Dining,72.85,22,50.85,70.79,98.09,17.81,0,0,0,0,0,219.41,0
+Bailee Pena,Day,Dining,0,60.26,-60.26,174.91,271.49,0,0,0,6.75,21.9,0,328.07,0
+Austin Barnes,Day,Dining,27.89,21,6.89,122.26,57.44,0,0,0,0,0,0,172.35,0
+Isabella Salina’s,Day,Bar,244.36,69.49,174.87,298.06,217.13,96.27,0,0,129.15,59.35,0,537.89,0
+Alyssa Rodriguez,Day,Dining,63.29,51.66,11.63,283.56,63.29,0,0,0,31.6,13.85,0,561.84,0
+Isabella Salinas,Night,Dining,0,25,-25,0,120.28,0,0,0,25,0,0,63.05,0
+Isabel García,Night,Dining,79.3,19,60.3,94.66,97.45,0,0,0,0,0,0,233.1,0
+Kass Pena,Night,Dining,19.21,50,-30.79,338.64,0,71.29,0,0,0,19.9,0,330.42,12.5
+Madison Zamora,Night,Dining,0,40.7,-40.7,374.53,102.71,0,0,0,6.28,10.95,0,386.14,11.85
+Taylor McCarthy,Night,Dining,62.26,203,-140.74,959.14,441.58,0,0,0,51.3,139.35,0,973.41,12.48
+Kiara McCoy,Night,Bar,18.17,0,18.17,0,0,0,0,0,0,0,0,16.79,0
+Emileigh Salinas,Night,Bar,79.23,125.77,-46.54,418.01,226.44,0,0,0,200.45,69.38,0,282.61,0
+Indira Garcia,Night,Bar,109.5,58.98,50.52,299.52,25.82,0,0,0,80.6,16,0,250.64,47.77
+
+Cash Drawer Count
+Pennies,83.0
+Nickels,40.0
+Dimes,0.0
+Quarters,14.0
+Rolled Coins,14.0
+Ones,81.0
+Fives,34.0
+Tens,1.0
+Twenties,0.0
+Fifties,0.0
+Hundreds,0.0
+Drawer Total,281.33
+
+Shift Drawer Checkpoints
+Checkpoint,Pennies,Nickels,Dimes,Quarters,Ones,Fives,Tens,Twenties,Fifties,Hundreds,Rolled Coins,Drawer Total,Timestamp
+start_day,83,40,0,14,81,34,1,0,0,0,14,281.33,2026-06-24T04:39:18.632Z
+end_day,83,40,0,14,81,34,1,0,0,0,14,281.33,2026-06-24T04:39:11.206Z
+start_night,83,40,0,14,81,34,1,0,0,0,14,281.33,2026-06-24T04:39:16.731Z
+end_night,83,40,0,14,81,34,1,0,0,0,14,281.33,2026-06-24T04:39:09.246Z
+
+Cash Deductions
+Avocados ,Walmart ,16.19
+Gas ,Stripes/Kiel pantry ,70.0
+Bar sodas ,Kwik pantry ,26.78
+Hose clamps ,Lowe’s ,10.31
+Towels ,Harbor freight ,33.51
+
+Tax Exempt
+Holder Name,Exempt Number,Transaction Notes,Total
+
+Deposit Summary
+Cash Adjustments,156.79
+Cash in Drawer,281.33
+DEPOSIT AMOUNT,-127.59

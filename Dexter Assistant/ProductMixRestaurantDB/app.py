@@ -3650,7 +3650,40 @@ def _get_restaurant_order_windows(restaurant_id):
         (int(restaurant_id),),
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return _dedupe_weekly_schedule_windows([dict(r) for r in rows])
+
+
+def _normalize_weekly_order_type(value):
+    cleaned = _clean_text(value, 80)
+    words = [word.capitalize() for word in str(cleaned or "").strip().split() if word]
+    return " ".join(words)
+
+
+def _weekly_schedule_window_signature(window):
+    return (
+        str(_clean_text(window.get("order_type"), 80) or "").strip().lower(),
+        int(window.get("anchor_weekday") or 0),
+        int(window.get("window_start_offset_days") or 0),
+        int(window.get("window_end_offset_days") or 0),
+    )
+
+
+def _dedupe_weekly_schedule_windows(windows):
+    deduped = []
+    seen = set()
+    for raw_window in windows or []:
+        normalized = {
+            "order_type": _normalize_weekly_order_type(raw_window.get("order_type")),
+            "anchor_weekday": int(raw_window.get("anchor_weekday") or 0),
+            "window_start_offset_days": int(raw_window.get("window_start_offset_days") or 0),
+            "window_end_offset_days": int(raw_window.get("window_end_offset_days") or 0),
+        }
+        key = _weekly_schedule_window_signature(normalized)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped
 
 
 def _get_restaurant_order_schedule(restaurant_id):
@@ -3685,7 +3718,7 @@ def _get_restaurant_order_schedule(restaurant_id):
     conn.close()
     return {
         "schedule": dict(schedule_row) if schedule_row else None,
-        "windows": [dict(r) for r in window_rows],
+        "windows": _dedupe_weekly_schedule_windows([dict(r) for r in window_rows]),
     }
 
 
@@ -3704,6 +3737,8 @@ def _parse_weekly_schedule_int(raw_value, label, min_value, max_value):
 
 
 def _upsert_restaurant_order_schedule(restaurant_id, schedule_name, windows):
+    normalized_windows = _dedupe_weekly_schedule_windows(windows)
+
     conn = get_db_connection()
     conn.execute(
         """
@@ -3756,7 +3791,7 @@ def _upsert_restaurant_order_schedule(restaurant_id, schedule_name, windows):
                 int(window.get("window_start_offset_days") or 0),
                 int(window.get("window_end_offset_days") or 0),
             )
-            for window in (windows or [])
+            for window in normalized_windows
         ],
     )
     conn.commit()
@@ -3895,7 +3930,7 @@ def _recompute_weekly_usage_averages(restaurant, start_date=None, end_date=None)
     if end_day < start_day:
         end_day = start_day
 
-    windows = _get_restaurant_order_windows(int(restaurant["id"]))
+    windows = _dedupe_weekly_schedule_windows(_get_restaurant_order_windows(int(restaurant["id"])))
     if not windows:
         conn = get_db_connection()
         conn.execute(
@@ -5092,7 +5127,7 @@ def index():
     end_date = _normalize_report_date_filter(request.args.get("end_date")) or ""
     recent_uploads = _get_recent_product_mix_uploads(
         restaurant=restaurant,
-        limit=None,
+        limit=10,
     )
 
     uploads_by_location = {}

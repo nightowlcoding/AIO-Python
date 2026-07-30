@@ -1,11 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+{% set is_overlay_mode = (request.args.get('embedded_overlay', '')|string|lower) in ['1', 'true', 'yes'] %}
+<html lang="en"{% if is_overlay_mode %} class="dx-groups-overlay"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Dexter Assistant — restaurant operations dashboard">
     <meta name="theme-color" content="#22427A">
-    <script>try{if(window.top!==window.self){document.documentElement.classList.add("dx-embedded");}}catch(e){document.documentElement.classList.add("dx-embedded");}</script>
+    <script>
+        try {
+            if (window.top !== window.self) {
+                document.documentElement.classList.add("dx-embedded");
+            }
+        } catch (e) {
+            document.documentElement.classList.add("dx-embedded");
+        }
+        try {
+            var params = new URLSearchParams(window.location.search || "");
+            var overlayMode = String(params.get("embedded_overlay") || "").trim().toLowerCase();
+            if (overlayMode === "1" || overlayMode === "true" || overlayMode === "yes") {
+                document.documentElement.classList.add("dx-groups-overlay");
+            }
+        } catch (_e) {
+            // Ignore query parsing errors and keep default layout.
+        }
+    </script>
     <title>{% block title %}Dexter Restaurant Management Assistant{% endblock %}</title>
 
     <!-- Brand favicons -->
@@ -118,6 +136,35 @@
         html.dx-embedded .container.mt-3 {
             margin-top: 0.35rem !important;
         }
+
+        html.dx-embedded #homeButton {
+            color: #ffffff !important;
+            background: #111827 !important;
+            border: 1px solid #0f172a !important;
+        }
+
+        html.dx-embedded #homeButton:hover,
+        html.dx-embedded #homeButton:focus {
+            background: #0f172a !important;
+            color: #ffffff !important;
+        }
+
+        html.dx-embedded #backButton {
+            color: #ffffff !important;
+            background: #7f1d1d !important;
+            border: 1px solid #5f0f0f !important;
+        }
+
+        html.dx-embedded #backButton:hover,
+        html.dx-embedded #backButton:focus {
+            background: #5f0f0f !important;
+            color: #ffffff !important;
+        }
+
+        html.dx-groups-overlay #operationsMenuToggle,
+        html.dx-groups-overlay #backButton {
+            display: none !important;
+        }
     </style>
 
     {% block extra_css %}{% endblock %}
@@ -131,6 +178,7 @@
                 <span class="d-none d-md-inline">Manager App</span>
             </a>
             <div class="d-flex align-items-center ms-auto gap-2 flex-wrap">
+                {% if not is_overlay_mode %}
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle btn btn-sm btn-dark {% if request.endpoint in ['dashboard', 'daily_log', 'cash_manager', 'employees', 'reports'] %}active{% endif %}"
@@ -142,11 +190,6 @@
                             <i class="bi bi-list"></i> Menu
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="operationsMenuToggle">
-                            <li>
-                                <a class="dropdown-item {% if request.endpoint == 'daily_log' %}active{% endif %}" href="{{ url_for('daily_log') }}">
-                                    <i class="bi bi-house-door"></i> Home
-                                </a>
-                            </li>
                             <li>
                                 <a class="dropdown-item {% if request.endpoint == 'daily_log' %}active{% endif %}" href="{{ url_for('daily_log') }}">
                                     <i class="bi bi-calendar-check"></i> Daily Log
@@ -167,15 +210,26 @@
                                     <i class="bi bi-graph-up"></i> Reports
                                 </a>
                             </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'audit_log' %}active{% endif %}" href="{{ url_for('audit_log') }}">
+                                    <i class="bi bi-activity"></i> Recent Activity
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
+                                    <i class="bi bi-building"></i> Company Info
+                                </a>
+                            </li>
                         </ul>
                     </li>
                 </ul>
-                <a class="btn btn-light btn-sm fw-semibold {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
-                    <i class="bi bi-house-door"></i> Home
-                </a>
-                <button type="button" class="btn btn-light btn-sm fw-semibold" onclick="window.history.length > 1 ? window.history.back() : window.location.href='{{ url_for('dashboard') }}'">
+                {% endif %}
+                {% if not is_overlay_mode %}
+                <button id="backButton" type="button" class="btn btn-light btn-sm fw-semibold" onclick="window.history.length > 1 ? window.history.back() : window.location.href='{{ url_for('dashboard') }}'">
                     <i class="bi bi-arrow-left"></i> Back
                 </button>
+                {% endif %}
             </div>
         </div>
     </nav>
@@ -209,16 +263,10 @@
         {% block content %}{% endblock %}
     </main>
 
-    <div class="dx-version-badge" aria-hidden="true">Dexter · Manager · v0.9</div>
-    
     <!-- Footer -->
     <footer class="footer mt-auto py-3 bg-light">
         <div class="container text-center">
-            <span class="text-muted">
-                &copy; 2025 Manager App | 
-                <a href="#">Privacy Policy</a> | 
-                <a href="#">Terms of Service</a>
-            </span>
+            <span class="text-muted">2026 Dexter Assist v0.9</span>
         </div>
     </footer>
     

@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "J'Elle",
+    "lastName": "Longoria",
+    "dateOfHire": "2026-05-23",
+    "id": 1779570063858.3462,
+    "locationId": "pm_1"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}

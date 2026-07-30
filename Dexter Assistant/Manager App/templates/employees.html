@@ -1034,7 +1034,7 @@ function saveAllData() {
     }
     
     // Also save to backend
-    fetch('/api/save-employees', {
+    fetch('api/save-employees', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -1065,7 +1065,7 @@ function saveEmployeesToBackend() {
 
 // Load employees from backend on page load
 function loadEmployeesFromBackend() {
-    fetch('/api/employee-names')
+    fetch('api/employee-names')
         .then(response => response.json())
         .then(data => {
             if (data.success) {

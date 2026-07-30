@@ -1,0 +1,50 @@
+{
+  "employeeInfo": {
+    "firstName": "Lariah",
+    "middleName": "",
+    "lastName": "Saenz",
+    "dateOfHire": "2026-07-01",
+    "id": 1782950016614.459,
+    "locationId": "pm_2",
+    "jobTitle": "BAR; HOST; SERVER",
+    "email": "",
+    "phone": ""
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  },
+  "documents": {
+    "legal": {
+      "i9": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "w2": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "alcoholServingPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "foodHandlersPermit": {
+        "status": "missing",
+        "expiresOn": "",
+        "notes": "",
+        "lastUpdated": ""
+      },
+      "additionalPermits": []
+    },
+    "medicalCallIns": [],
+    "essentialPaperwork": []
+  }
+}

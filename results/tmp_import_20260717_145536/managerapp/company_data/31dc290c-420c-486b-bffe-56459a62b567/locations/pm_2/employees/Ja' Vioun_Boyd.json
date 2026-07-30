@@ -1,0 +1,15 @@
+{
+  "employeeInfo": {
+    "firstName": "Ja' Vioun",
+    "lastName": "Boyd",
+    "dateOfHire": "2026-05-23",
+    "id": 1779570915348.813,
+    "locationId": "pm_2"
+  },
+  "disciplinaryReports": [],
+  "certifications": {
+    "TABC": null,
+    "FoodHandlers": null,
+    "Other": []
+  }
+}
