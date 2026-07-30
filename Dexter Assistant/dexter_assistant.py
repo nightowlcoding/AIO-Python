@@ -21,10 +21,8 @@ import signal
 import threading
 import tempfile
 import time
-import uuid
-import zipfile
 import webbrowser
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -36,7 +34,7 @@ from urllib.request import urlopen
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, redirect, render_template, render_template_string, request, send_file, session, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
@@ -53,7 +51,6 @@ LEGACY_BRANDING_LOGO_PATH = ROOT.parent / "Restaurant Management" / "Manager App
 _render_data_root = Path("/dexter-data")
 _render_data_writable = False
 _running_on_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID") or os.environ.get("RENDER_EXTERNAL_URL"))
-_allow_hosted_data_import = str(os.environ.get("DEXTER_ALLOW_HOSTED_DATA_IMPORT", "")).strip().lower() in {"1", "true", "yes", "on"}
 if not _running_on_render and _render_data_root.exists():
     _running_on_render = True
 if _render_data_root.exists():
@@ -89,10 +86,6 @@ except OSError as e:
         print(f"[dexter] FATAL: Could not create fallback AUTH_STORAGE_ROOT: {e2}", file=sys.stderr)
     AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 AUTH_USERS_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_users.json"
-
-
-def _hosted_data_import_enabled() -> bool:
-    return (not _running_on_render) or _allow_hosted_data_import
 RBAC_DB_PATH = AUTH_STORAGE_ROOT / "dexter_assistant_rbac.db"
 
 LEGACY_AUTH_USERS_PATH = ROOT / "dexter_assistant_users.json"
@@ -141,35 +134,27 @@ _MGR_BACKUP_STATE_LOCK = threading.Lock()
 _MGR_BACKUP_LAST_RUN: dict[str, Any] | None = None
 _MGR_BACKUP_THREAD_STARTED = False
 _RBAC_WAL_DISABLED = False
+_EMERGENCY_BACKUP_PRUNE_ATTEMPTED = False
 
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
 
 
-def _emergency_prune_local_backups_for_space(max_keep: int = 5) -> None:
-    """Prune old backup snapshots to free disk space. Runs every time it is called
-    (not limited to once per process) so that repeated disk-full events are handled."""
+def _emergency_prune_local_backups_for_space(max_keep: int = 0) -> None:
+    global _EMERGENCY_BACKUP_PRUNE_ATTEMPTED
+    if _EMERGENCY_BACKUP_PRUNE_ATTEMPTED:
+        return
+    _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = True
+
     backup_tree = _render_data_root / "backups"
 
     try:
-        if not (backup_tree.exists() and backup_tree.is_dir()):
-            print("[dexter] Emergency backup prune skipped (backup tree not found)", file=sys.stderr)
-            return
-
-        all_snapshots = sorted(
-            [p for p in backup_tree.rglob("*snapshot_*") if p.is_dir() and p.parent != p],
-            key=lambda p: p.name,
-        )
-        # Keep only the most recent max_keep snapshots across all subdirs
-        to_delete = all_snapshots[: max(0, len(all_snapshots) - max_keep)]
-        for snap in to_delete:
-            shutil.rmtree(snap, ignore_errors=True)
-
-        if to_delete:
-            print(f"[dexter] Emergency backup prune: deleted {len(to_delete)} old snapshots, kept {max_keep}", file=sys.stderr)
+        if backup_tree.exists() and backup_tree.is_dir():
+            shutil.rmtree(backup_tree, ignore_errors=True)
+            print("[dexter] Emergency backup prune executed (cleared /dexter-data/backups)", file=sys.stderr)
         else:
-            print("[dexter] Emergency backup prune: nothing to prune", file=sys.stderr)
+            print("[dexter] Emergency backup prune skipped (backup tree not found)", file=sys.stderr)
     except OSError as prune_error:
-        print(f"[dexter] Emergency backup prune failed: {prune_error}", file=sys.stderr)
+        print(f"[dexter] Emergency backup prune skipped: {prune_error}", file=sys.stderr)
 
 
 def _bootstrap_auth_storage_from_legacy() -> None:
@@ -775,8 +760,7 @@ def migrate_add_user_location_assignments_v1() -> None:
 def ensure_default_super_admin_user() -> None:
     admin_username = os.environ.get("DEXTER_ADMIN_USER", "").strip()
     admin_password = os.environ.get("DEXTER_ADMIN_PASS", "").strip()
-    force_password_reset = _env_flag("DEXTER_ADMIN_FORCE_PASSWORD_RESET", default=False)
-    if not admin_username:
+    if not admin_username or not admin_password:
         return
 
     conn = get_rbac_db_connection()
@@ -785,33 +769,16 @@ def ensure_default_super_admin_user() -> None:
         role_id = _get_role_id(conn, "Super Admin")
         existing = _get_user_by_username(conn, admin_username)
         if existing:
-            if force_password_reset and admin_password:
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET password_hash = ?, role_id = ?, is_active = 1,
-                        company_id = COALESCE(company_id, ?), updated_at = datetime('now')
-                    WHERE id = ?
-                    """,
-                    (generate_password_hash(admin_password), role_id, default_company_id, int(existing["id"])),
-                )
-            else:
-                conn.execute(
-                    """
-                    UPDATE users
-                    SET role_id = ?, is_active = 1,
-                        company_id = COALESCE(company_id, ?), updated_at = datetime('now')
-                    WHERE id = ?
-                    """,
-                    (role_id, default_company_id, int(existing["id"])),
-                )
+            conn.execute(
+                """
+                UPDATE users
+                SET password_hash = ?, role_id = ?, is_active = 1,
+                    company_id = COALESCE(company_id, ?), updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (generate_password_hash(admin_password), role_id, default_company_id, int(existing["id"])),
+            )
         else:
-            if not admin_password:
-                print(
-                    "[dexter] DEXTER_ADMIN_USER is set but DEXTER_ADMIN_PASS is empty; cannot create default super admin",
-                    file=sys.stderr,
-                )
-                return
             conn.execute(
                 """
                 INSERT INTO users (username, password_hash, role_id, company_id, is_active, created_at, updated_at)
@@ -1061,371 +1028,6 @@ def _list_company_storage_entries(company_id: int, relative_dir: str = "") -> li
             }
         )
     return entries
-
-
-def _sqlite_backup_copy(source_path: Path, destination_path: Path) -> bool:
-    if not source_path.exists():
-        return False
-
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
-    source_conn = sqlite3.connect(source_path.resolve().as_uri(), uri=True)
-    destination_conn = sqlite3.connect(str(destination_path))
-    try:
-        source_conn.backup(destination_conn)
-        destination_conn.commit()
-        return True
-    finally:
-        try:
-            source_conn.close()
-        finally:
-            destination_conn.close()
-
-
-def _collect_export_manifest() -> dict[str, Any]:
-    backup_paths = _manager_backup_paths()
-    manifest: dict[str, Any] = {
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "auth_users_path": str(AUTH_USERS_PATH),
-        "rbac_db_path": str(RBAC_DB_PATH),
-        "company_storage_root": str(COMPANY_STORAGE_ROOT),
-        "manager_backup_paths": {k: str(v) for k, v in backup_paths.items()},
-        "source_is_read_only": True,
-    }
-
-    try:
-        conn = get_rbac_db_connection()
-        try:
-            counts = {
-                "companies": conn.execute("SELECT COUNT(*) AS total FROM companies").fetchone()["total"],
-                "roles": conn.execute("SELECT COUNT(*) AS total FROM roles").fetchone()["total"],
-                "users": conn.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"],
-                "tasks": conn.execute("SELECT COUNT(*) AS total FROM tasks").fetchone()["total"],
-                "audit_logs": conn.execute("SELECT COUNT(*) AS total FROM audit_logs").fetchone()["total"],
-                "company_profiles": conn.execute("SELECT COUNT(*) AS total FROM company_profiles").fetchone()["total"],
-                "company_email_settings": conn.execute("SELECT COUNT(*) AS total FROM company_email_settings").fetchone()["total"],
-                "user_location_assignments": conn.execute("SELECT COUNT(*) AS total FROM user_location_assignments").fetchone()["total"],
-            }
-        finally:
-            conn.close()
-        manifest["rbac_counts"] = {k: int(v or 0) for k, v in counts.items()}
-    except Exception as exc:
-        manifest["rbac_counts_error"] = str(exc)
-
-    try:
-        users = load_auth_users()
-        manifest["auth_users_count"] = len(users)
-    except Exception as exc:
-        manifest["auth_users_error"] = str(exc)
-
-    try:
-        if COMPANY_STORAGE_ROOT.exists():
-            manifest["company_storage_files"] = sum(1 for path in COMPANY_STORAGE_ROOT.rglob("*") if path.is_file())
-        else:
-            manifest["company_storage_files"] = 0
-    except Exception as exc:
-        manifest["company_storage_error"] = str(exc)
-
-    for key, manifest_key in [
-        ("company_data_path", "manager_company_data_files"),
-        ("inventory_data_root", "inventory_data_files"),
-        ("daily_logs_root", "daily_logs_files"),
-        ("uploads_root", "uploads_files"),
-        ("order_invoices_root", "order_invoices_files"),
-        ("reports_root", "reports_files"),
-        ("ic3_data_path", "ic3_data_files"),
-    ]:
-        try:
-            source_root = backup_paths[key]
-            manifest[manifest_key] = sum(1 for path in source_root.rglob("*") if path.is_file()) if source_root.exists() else 0
-        except Exception as exc:
-            manifest[f"{manifest_key}_error"] = str(exc)
-
-    try:
-        product_mix_db = backup_paths["productmix_root"] / "product_mix.db"
-        manifest["product_mix_db_exists"] = product_mix_db.exists()
-        manifest["product_mix_db_bytes"] = int(product_mix_db.stat().st_size) if product_mix_db.exists() else 0
-    except Exception as exc:
-        manifest["product_mix_db_error"] = str(exc)
-
-    try:
-        manager_db = backup_paths["db_path"]
-        manifest["manager_db_exists"] = manager_db.exists()
-        manifest["manager_db_bytes"] = int(manager_db.stat().st_size) if manager_db.exists() else 0
-    except Exception as exc:
-        manifest["manager_db_error"] = str(exc)
-
-    return manifest
-
-
-def _build_export_bundle() -> Path:
-    backup_paths = _manager_backup_paths()
-    export_root = Path(tempfile.mkdtemp(prefix="dexter_export_"))
-    bundle_root = export_root / "dexter_data_export"
-    bundle_root.mkdir(parents=True, exist_ok=True)
-
-    manifest = _collect_export_manifest()
-    (bundle_root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-
-    if AUTH_USERS_PATH.exists():
-        auth_dir = bundle_root / "auth"
-        auth_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(AUTH_USERS_PATH, auth_dir / AUTH_USERS_PATH.name)
-
-    if RBAC_DB_PATH.exists():
-        auth_dir = bundle_root / "auth"
-        auth_dir.mkdir(parents=True, exist_ok=True)
-        _sqlite_backup_copy(RBAC_DB_PATH, auth_dir / RBAC_DB_PATH.name)
-
-    if CONFIG_PATH.exists():
-        shutil.copy2(CONFIG_PATH, bundle_root / CONFIG_PATH.name)
-
-    if COMPANY_STORAGE_ROOT.exists():
-        company_data_dest = bundle_root / "company_data"
-        for source_path in COMPANY_STORAGE_ROOT.rglob("*"):
-            relative_path = source_path.relative_to(COMPANY_STORAGE_ROOT)
-            destination_path = company_data_dest / relative_path
-            if source_path.is_dir():
-                destination_path.mkdir(parents=True, exist_ok=True)
-            else:
-                destination_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_path, destination_path)
-
-    manager_root = bundle_root / "managerapp"
-    manager_company_data = backup_paths["company_data_path"]
-    if manager_company_data.exists() and manager_company_data.is_dir():
-        manager_company_dest = manager_root / "company_data"
-        for source_path in manager_company_data.rglob("*"):
-            relative_path = source_path.relative_to(manager_company_data)
-            destination_path = manager_company_dest / relative_path
-            if source_path.is_dir():
-                destination_path.mkdir(parents=True, exist_ok=True)
-            else:
-                destination_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_path, destination_path)
-
-    manager_db_path = backup_paths["db_path"]
-    if manager_db_path.exists():
-        manager_root.mkdir(parents=True, exist_ok=True)
-        _sqlite_backup_copy(manager_db_path, manager_root / manager_db_path.name)
-
-    productmix_db_path = backup_paths["productmix_root"] / "product_mix.db"
-    if productmix_db_path.exists():
-        productmix_dest = bundle_root / "ProductMixRestaurantDB"
-        productmix_dest.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(productmix_db_path, productmix_dest / productmix_db_path.name)
-
-    for source_root, folder_name in [
-        (backup_paths["inventory_data_root"], "inventory_data"),
-        (backup_paths["daily_logs_root"], "daily_logs"),
-        (backup_paths["uploads_root"], "uploads"),
-        (backup_paths["order_invoices_root"], "OrderInvoices"),
-        (backup_paths["reports_root"], "reports"),
-        (backup_paths["ic3_data_path"], "ic3_data"),
-    ]:
-        if not source_root.exists() or not source_root.is_dir():
-            continue
-        destination_root = bundle_root / folder_name
-        for source_path in source_root.rglob("*"):
-            relative_path = source_path.relative_to(source_root)
-            destination_path = destination_root / relative_path
-            if source_path.is_dir():
-                destination_path.mkdir(parents=True, exist_ok=True)
-            else:
-                destination_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_path, destination_path)
-
-    readme_path = bundle_root / "README.txt"
-    readme_path.write_text(
-        "Dexter Assistant export package\n\n"
-        "This archive is read-only with respect to dexterassist.com data.\n"
-        "It was generated for local analysis, formatting, and migration work.\n\n"
-        "Contents:\n"
-        "- auth/dexter_assistant_users.json\n"
-        "- auth/dexter_assistant_rbac.db\n"
-        "- company_data/\n"
-        "- managerapp/company_data/\n"
-        "- managerapp/manager_app.db\n"
-        "- ProductMixRestaurantDB/product_mix.db\n"
-        "- inventory_data/\n"
-        "- daily_logs/\n"
-        "- uploads/\n"
-        "- OrderInvoices/\n"
-        "- reports/\n"
-        "- ic3_data/\n"
-        "- manifest.json\n"
-        "- dexter_assistant_config.json (if present)\n",
-        encoding="utf-8",
-    )
-
-    zip_path = export_root / f"dexter_assistant_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zipf:
-        for file_path in bundle_root.rglob("*"):
-            if file_path.is_file():
-                zipf.write(file_path, file_path.relative_to(bundle_root))
-
-    return zip_path
-
-
-def _safe_extract_export_zip(zip_path: Path, extract_root: Path) -> Path:
-    extract_root.mkdir(parents=True, exist_ok=True)
-    resolved_root = extract_root.resolve()
-
-    with zipfile.ZipFile(zip_path, "r") as zipf:
-        for info in zipf.infolist():
-            member_path = Path(info.filename)
-            if member_path.is_absolute() or any(part == ".." for part in member_path.parts):
-                raise ValueError(f"Unsafe archive member: {info.filename}")
-
-            destination_path = (extract_root / member_path).resolve()
-            try:
-                destination_path.relative_to(resolved_root)
-            except ValueError as exc:
-                raise ValueError(f"Unsafe archive member: {info.filename}") from exc
-
-            if info.is_dir():
-                destination_path.mkdir(parents=True, exist_ok=True)
-                continue
-
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-            with zipf.open(info, "r") as source, destination_path.open("wb") as target:
-                shutil.copyfileobj(source, target)
-
-    return extract_root
-
-
-def _backup_local_storage_before_import(backup_root: Path) -> dict[str, Any]:
-    backup_manifest: dict[str, Any] = {
-        "backup_root": str(backup_root),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "items": [],
-    }
-    backup_root.mkdir(parents=True, exist_ok=True)
-
-    if AUTH_USERS_PATH.exists():
-        auth_backup_dir = backup_root / "auth"
-        auth_backup_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(AUTH_USERS_PATH, auth_backup_dir / AUTH_USERS_PATH.name)
-        backup_manifest["items"].append("auth_users")
-
-    if RBAC_DB_PATH.exists():
-        auth_backup_dir = backup_root / "auth"
-        auth_backup_dir.mkdir(parents=True, exist_ok=True)
-        _sqlite_backup_copy(RBAC_DB_PATH, auth_backup_dir / RBAC_DB_PATH.name)
-        backup_manifest["items"].append("rbac_db")
-
-    if COMPANY_STORAGE_ROOT.exists() and COMPANY_STORAGE_ROOT.is_dir():
-        company_backup_dir = backup_root / "company_data"
-        shutil.copytree(COMPANY_STORAGE_ROOT, company_backup_dir, dirs_exist_ok=True)
-        backup_manifest["items"].append("company_data")
-
-    (backup_root / "manifest.json").write_text(json.dumps(backup_manifest, indent=2), encoding="utf-8")
-    return backup_manifest
-
-
-def _import_export_bundle(zip_path: Path) -> dict[str, Any]:
-    if not zip_path.exists() or not zip_path.is_file():
-        raise FileNotFoundError(f"Export package not found: {zip_path}")
-
-    import_root = Path(tempfile.mkdtemp(prefix="dexter_import_"))
-    extract_root = import_root / "extracted"
-    _safe_extract_export_zip(zip_path, extract_root)
-
-    manifest_path = extract_root / "manifest.json"
-    if not manifest_path.exists():
-        raise ValueError("Export package is missing manifest.json")
-
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict):
-        raise ValueError("Export package manifest is invalid")
-    if not bool(manifest.get("source_is_read_only", False)):
-        raise ValueError("Export package did not declare a read-only source")
-
-    backup_root = AUTH_STORAGE_ROOT / "import_backups" / datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_manifest = _backup_local_storage_before_import(backup_root)
-
-    imported: dict[str, Any] = {
-        "zip_path": str(zip_path),
-        "import_root": str(import_root),
-        "backup_root": str(backup_root),
-        "backup_items": backup_manifest.get("items", []),
-        "applied": [],
-    }
-
-    auth_dir = extract_root / "auth"
-    imported_users = False
-    imported_db = False
-    if auth_dir.exists() and auth_dir.is_dir():
-        users_source = auth_dir / AUTH_USERS_PATH.name
-        db_source = auth_dir / RBAC_DB_PATH.name
-
-        if users_source.exists():
-            AUTH_USERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(users_source, AUTH_USERS_PATH)
-            imported["applied"].append("auth_users")
-            imported_users = True
-
-        if db_source.exists():
-            RBAC_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(db_source, RBAC_DB_PATH)
-            imported["applied"].append("rbac_db")
-            imported_db = True
-
-    company_data_source = extract_root / "company_data"
-    if company_data_source.exists() and company_data_source.is_dir():
-        if COMPANY_STORAGE_ROOT.exists() and COMPANY_STORAGE_ROOT.is_dir():
-            shutil.rmtree(COMPANY_STORAGE_ROOT, ignore_errors=True)
-        COMPANY_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(company_data_source, COMPANY_STORAGE_ROOT, dirs_exist_ok=True)
-        imported["applied"].append("company_data")
-
-    backup_paths = _manager_backup_paths()
-
-    manager_root = extract_root / "managerapp"
-    manager_company_data_source = manager_root / "company_data"
-    if manager_company_data_source.exists() and manager_company_data_source.is_dir():
-        manager_company_target = backup_paths["company_data_path"]
-        if manager_company_target.exists() and manager_company_target.is_dir():
-            shutil.rmtree(manager_company_target, ignore_errors=True)
-        manager_company_target.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(manager_company_data_source, manager_company_target, dirs_exist_ok=True)
-        imported["applied"].append("manager_company_data")
-
-    manager_db_source = manager_root / backup_paths["db_path"].name
-    if manager_db_source.exists():
-        manager_db_target = backup_paths["db_path"]
-        manager_db_target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(manager_db_source, manager_db_target)
-        imported["applied"].append("manager_db")
-
-    productmix_db_source = extract_root / "ProductMixRestaurantDB" / "product_mix.db"
-    if productmix_db_source.exists():
-        productmix_target_dir = backup_paths["productmix_root"]
-        productmix_target_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(productmix_db_source, productmix_target_dir / "product_mix.db")
-        imported["applied"].append("product_mix_db")
-
-    for folder_name, target_path, applied_name in [
-        ("inventory_data", backup_paths["inventory_data_root"], "inventory_data"),
-        ("daily_logs", backup_paths["daily_logs_root"], "daily_logs"),
-        ("uploads", backup_paths["uploads_root"], "uploads"),
-        ("OrderInvoices", backup_paths["order_invoices_root"], "order_invoices"),
-        ("reports", backup_paths["reports_root"], "reports"),
-        ("ic3_data", backup_paths["ic3_data_path"], "ic3_data"),
-    ]:
-        source_root = extract_root / folder_name
-        if not source_root.exists() or not source_root.is_dir():
-            continue
-        if target_path.exists() and target_path.is_dir():
-            shutil.rmtree(target_path, ignore_errors=True)
-        target_path.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source_root, target_path, dirs_exist_ok=True)
-        imported["applied"].append(applied_name)
-
-    imported["manifest"] = manifest
-    imported["users_imported"] = imported_users
-    imported["rbac_db_imported"] = imported_db
-    imported["auth_users_count"] = len(load_auth_users())
-    return imported
 
 def _super_admin_scope_violation_message(scoped_company_id: int | None) -> str | None:
     if scoped_company_id is None:
@@ -3614,7 +3216,6 @@ limiter = Limiter(
     key_func=_rate_limit_key,
     app=app,
     default_limits=[],
-    storage_uri=os.environ.get("DEXTER_RATE_LIMIT_STORAGE", "memory://"),
 )
 
 try:
@@ -3808,30 +3409,25 @@ def auth_forgot_password() -> Response:
         if not username:
             error = "Please enter your username."
         else:
+            conn = get_rbac_db_connection()
             try:
-                migrate_add_password_reset_fields_v1()
-                conn = get_rbac_db_connection()
-                try:
-                    row = conn.execute(
-                        "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND is_active = 1 LIMIT 1",
-                        (username,),
-                    ).fetchone()
-                    if row:
-                        token = secrets.token_urlsafe(32)
-                        expires = (datetime.now() + timedelta(hours=1)).isoformat(timespec="seconds")
-                        conn.execute(
-                            "UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?",
-                            (token, expires, int(row["id"])),
-                        )
-                        conn.commit()
-                        reset_url = _build_public_endpoint_url("auth_reset_password", token=token)
-                    else:
-                        error = "If that username exists, a reset link has been generated. Ask an admin."
-                finally:
-                    conn.close()
-            except Exception as exc:
-                print(f"[auth_forgot_password] Exception: {type(exc).__name__}: {exc}", file=sys.stderr)
-                error = "Password reset is temporarily unavailable. Please contact your administrator."
+                row = conn.execute(
+                    "SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND is_active = 1 LIMIT 1",
+                    (username,),
+                ).fetchone()
+                if row:
+                    token = secrets.token_urlsafe(32)
+                    expires = (datetime.now() + timedelta(hours=1)).isoformat(timespec="seconds")
+                    conn.execute(
+                        "UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?",
+                        (token, expires, int(row["id"])),
+                    )
+                    conn.commit()
+                    reset_url = _build_public_endpoint_url("auth_reset_password", token=token)
+                else:
+                    error = "If that username exists, a reset link has been generated. Ask an admin."
+            finally:
+                conn.close()
 
     return Response(
         render_template(
@@ -3851,66 +3447,61 @@ def auth_reset_password(token: str) -> Response:
     error = ""
     done = False
 
+    conn = get_rbac_db_connection()
     try:
-        migrate_add_password_reset_fields_v1()
-        conn = get_rbac_db_connection()
+        row = conn.execute(
+            """
+            SELECT id, password_reset_expires FROM users
+            WHERE password_reset_token = ? AND is_active = 1
+            LIMIT 1
+            """,
+            (token,),
+        ).fetchone()
+
+        if not row:
+            return Response(
+                render_template("reset_password.html", error="Invalid or expired reset link.", done=False)
+            )
+
+        expires_str = str(row["password_reset_expires"] or "")
         try:
-            row = conn.execute(
-                """
-                SELECT id, password_reset_expires FROM users
-                WHERE password_reset_token = ? AND is_active = 1
-                LIMIT 1
-                """,
-                (token,),
-            ).fetchone()
+            expires_dt = datetime.fromisoformat(expires_str)
+        except ValueError:
+            expires_dt = datetime.min
 
-            if not row:
-                return Response(
-                    render_template("reset_password.html", error="Invalid or expired reset link.", done=False)
-                )
+        if datetime.now() > expires_dt:
+            conn.execute(
+                "UPDATE users SET password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?",
+                (int(row["id"]),),
+            )
+            conn.commit()
+            return Response(
+                render_template("reset_password.html", error="Reset link has expired. Please request a new one.", done=False)
+            )
 
-            expires_str = str(row["password_reset_expires"] or "")
-            try:
-                expires_dt = datetime.fromisoformat(expires_str)
-            except ValueError:
-                expires_dt = datetime.min
-
-            if datetime.now() > expires_dt:
+        if request.method == "POST":
+            password = request.form.get("password") or ""
+            confirm = request.form.get("confirm") or ""
+            if len(password) < 8:
+                error = "Password must be at least 8 characters."
+            elif password != confirm:
+                error = "Passwords do not match."
+            else:
                 conn.execute(
-                    "UPDATE users SET password_reset_token = NULL, password_reset_expires = NULL WHERE id = ?",
-                    (int(row["id"]),),
+                    """
+                    UPDATE users
+                    SET password_hash = ?,
+                        password_reset_token = NULL,
+                        password_reset_expires = NULL,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (generate_password_hash(password), int(row["id"])),
                 )
                 conn.commit()
-                return Response(
-                    render_template("reset_password.html", error="Reset link has expired. Please request a new one.", done=False)
-                )
-
-            if request.method == "POST":
-                password = request.form.get("password") or ""
-                confirm = request.form.get("confirm") or ""
-                if len(password) < 8:
-                    error = "Password must be at least 8 characters."
-                elif password != confirm:
-                    error = "Passwords do not match."
-                else:
-                    conn.execute(
-                        """
-                        UPDATE users
-                        SET password_hash = ?,
-                            password_reset_token = NULL,
-                            password_reset_expires = NULL,
-                            updated_at = datetime('now')
-                        WHERE id = ?
-                        """,
-                        (generate_password_hash(password), int(row["id"])),
-                    )
-                    conn.commit()
-                    done = True
-        finally:
-            conn.close()
-    except Exception as exc:
-        print(f"[auth_reset_password] Exception: {type(exc).__name__}: {exc}", file=sys.stderr)
-        error = "Password reset is temporarily unavailable. Please contact your administrator."
+                done = True
+    finally:
+        conn.close()
 
     return Response(render_template("reset_password.html", error=error, done=done))
 
@@ -4750,139 +4341,6 @@ def admin_audit_logs_page() -> Response:
             selected_company_id=selected_company_id,
         )
     )
-
-
-@app.route("/admin/data-export")
-@login_required
-@role_required("Super Admin")
-def admin_data_export_page() -> Response:
-    manifest = _collect_export_manifest()
-    import_enabled = _hosted_data_import_enabled()
-    return Response(
-        render_template_string(
-            """
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dexter Data Export</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 20px; color: #1f2937; background: #f8fafc; }
-        .card { max-width: 860px; background: #fff; border: 1px solid #d1d5db; border-radius: 14px; padding: 18px; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
-        h1 { margin: 0 0 8px; }
-        p { color: #6b7280; }
-        .warn { border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412; border-radius: 12px; padding: 10px 12px; margin: 12px 0; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin: 14px 0; }
-        .stat { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; background: #f9fafb; }
-        .stat .label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
-        .stat .value { font-size: 24px; font-weight: 800; color: #0f172a; }
-        a.btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 10px; border: 1px solid #cbd5e1; text-decoration: none; color: #1f2937; background: #fff; font-weight: 600; }
-        a.primary { background: #ea580c; color: #fff; border-color: #c2410c; }
-        .small { font-size: 12px; color: #6b7280; word-break: break-word; }
-        pre { margin-top: 14px; background: #1e293b; color: #e2e8f0; border-radius: 12px; padding: 12px; overflow: auto; }
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>Dexter Data Export</h1>
-        <p>Read-only package for local formatting, analysis, and migration work. This page does not mutate dexterassist.com data.</p>
-        <div class="warn">Export-only path: no delete, truncate, or overwrite operations are performed on the source data.</div>
-        {% if message %}<div class="warn" style="background:#ecfdf5;border-color:#86efac;color:#166534;">{{ message }}</div>{% endif %}
-        {% if error %}<div class="warn" style="background:#fef2f2;border-color:#fecaca;color:#991b1b;">{{ error }}</div>{% endif %}
-        <a class="btn primary" href="/api/admin/data-export">Download ZIP export</a>
-        {% if import_enabled %}
-        <form method="post" action="/api/admin/data-import" enctype="multipart/form-data" style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-            <input type="file" name="export_zip" accept=".zip" required />
-            <button class="btn" type="submit">Import ZIP into local app</button>
-        </form>
-        <div class="small" style="margin-top:8px;">The import backs up the current local auth DB, users JSON, and company_data tree before replacing them with the selected export.</div>
-        {% else %}
-        <div class="warn">Hosted import is disabled. Download the ZIP here, then import it only into your local Dexter Assistant copy.</div>
-        {% endif %}
-        <div class="grid">
-            <div class="stat"><div class="label">Users</div><div class="value">{{ manifest.rbac_counts.users if manifest.rbac_counts else 'n/a' }}</div></div>
-            <div class="stat"><div class="label">Companies</div><div class="value">{{ manifest.rbac_counts.companies if manifest.rbac_counts else 'n/a' }}</div></div>
-            <div class="stat"><div class="label">Tasks</div><div class="value">{{ manifest.rbac_counts.tasks if manifest.rbac_counts else 'n/a' }}</div></div>
-            <div class="stat"><div class="label">Company Files</div><div class="value">{{ manifest.company_storage_files if manifest.company_storage_files is not none else 'n/a' }}</div></div>
-        </div>
-        <div class="small">Generated at {{ manifest.generated_at }}</div>
-        <pre>{{ manifest | tojson(indent=2) }}</pre>
-    </div>
-</body>
-</html>
-            """,
-            manifest=manifest,
-            import_enabled=import_enabled,
-            message=request.args.get("message", ""),
-            error=request.args.get("error", ""),
-        )
-    )
-
-
-@app.route("/api/admin/data-export", methods=["GET"])
-@login_required
-@role_required("Super Admin")
-def api_admin_data_export() -> Response:
-        export_zip = _build_export_bundle()
-        response = send_file(
-                export_zip,
-                as_attachment=True,
-                download_name=export_zip.name,
-                mimetype="application/zip",
-                max_age=0,
-                conditional=False,
-        )
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
-        response.headers["Pragma"] = "no-cache"
-
-        cleanup_root = export_zip.parent
-
-        @response.call_on_close
-        def _cleanup_export_bundle() -> None:
-                shutil.rmtree(cleanup_root, ignore_errors=True)
-
-        return response
-
-
-@app.route("/api/admin/data-import", methods=["POST"])
-@csrf.exempt
-@login_required
-@role_required("Super Admin")
-def api_admin_data_import() -> Response:
-    if not _hosted_data_import_enabled():
-        return redirect(
-            f"/admin/data-export?error={requests.utils.quote('Hosted import is disabled. Use your local Dexter Assistant copy for imports only.')}"
-        )
-
-    upload = request.files.get("export_zip")
-    if upload is None or not str(getattr(upload, "filename", "") or "").strip():
-        return redirect(f"/admin/data-export?error={requests.utils.quote('Please choose a ZIP export file.')}")
-
-    temp_upload = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-    temp_upload_path = Path(temp_upload.name)
-    temp_upload.close()
-    import_root: Path | None = None
-
-    try:
-        upload.save(str(temp_upload_path))
-        imported = _import_export_bundle(temp_upload_path)
-        import_root = Path(str(imported.get("import_root") or "")) if imported.get("import_root") else None
-        message = (
-            f"Import complete. Applied: {', '.join(imported.get('applied', [])) or 'none'}. "
-            f"Local backups saved to {imported.get('backup_root')}."
-        )
-        return redirect(f"/admin/data-export?message={requests.utils.quote(message)}")
-    except Exception as exc:
-        error = f"Import failed: {type(exc).__name__}: {exc}"
-        return redirect(f"/admin/data-export?error={requests.utils.quote(error)}")
-    finally:
-        try:
-            temp_upload_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-        if import_root is not None:
-            shutil.rmtree(import_root, ignore_errors=True)
 
 @app.route("/api/admin/users", methods=["GET"])
 @login_required
@@ -6736,19 +6194,18 @@ def _proxy(name: str, path: str) -> Response:
         except Exception:
             response_body = upstream.content
             
-    if resolved_name in {"managerapp", "manager", "productmix"} and "text/html" in content_type.lower():
+    if resolved_name in {"managerapp", "manager"} and "text/html" in content_type.lower():
         try:
             html = (response_body if isinstance(response_body, bytes) else upstream.content).decode(upstream.encoding or "utf-8", errors="replace")
-            rewrite_app_name = "managerapp" if resolved_name in {"managerapp", "manager"} else resolved_name
 
             def _rewrite_attr(match: re.Match[str]) -> str:
                 attr = match.group("attr")
                 quoted_path = match.group("path")
-                if quoted_path.startswith(f"/app/{rewrite_app_name}/"):
+                if quoted_path.startswith("/app/managerapp/"):
                     return f"{attr}{quoted_path}"
                 if quoted_path == "/":
-                    return f"{attr}/app/{rewrite_app_name}/"
-                return f"{attr}/app/{rewrite_app_name}{quoted_path}"
+                    return f"{attr}/app/managerapp/"
+                return f"{attr}/app/managerapp{quoted_path}"
 
             html = re.sub(
                 r'(?P<attr>\b(?:href|src|action)\s*=\s*["\'])(?P<path>/[^"\']*)',
@@ -6836,7 +6293,7 @@ def manager_backup_status() -> Response:
 @login_required
 @role_required("Super Admin")
 def manager_backup_run_now() -> Response:
-    payload = _run_manager_backup("manual", mode="full")
+    payload = _run_manager_backup("manual")
     status = 200 if payload.get("ok") else 500
     return jsonify(payload), status
 
@@ -6881,7 +6338,6 @@ def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str,
 def _manager_backup_config() -> dict[str, Any]:
     keep_snapshots = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_KEEP_SNAPSHOTS", "672")))
     enabled = _env_flag("DEXTER_MGR_BACKUP_ENABLED", default=True)
-    interval_minutes = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_INTERVAL_MINUTES", "30")))
     nas_enabled = _env_flag("DEXTER_NAS_BACKUP_ENABLED", default=(os.name == "nt"))
     nas_required = _env_flag("DEXTER_NAS_BACKUP_REQUIRED", default=False)
     nas_root = str((os.environ.get("DEXTER_NAS_BACKUP_ROOT") or DEFAULT_NAS_BACKUP_ROOT).strip())
@@ -6894,7 +6350,6 @@ def _manager_backup_config() -> dict[str, Any]:
             critical_schedule_times.append(value)
     return {
         "enabled": enabled,
-        "interval_minutes": interval_minutes,
         "keep_snapshots": keep_snapshots,
         "nas_enabled": nas_enabled,
         "nas_required": nas_required,
@@ -7026,7 +6481,7 @@ def _collect_snapshot_operations(snapshot_dir: Path, paths: dict[str, Path], mod
 
 
 def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
-    started_at = datetime.now(UTC)
+    started_at = datetime.utcnow()
     cfg = _manager_backup_config()
     paths = _manager_backup_paths()
     backup_root = paths["backup_root"]
@@ -7055,14 +6510,14 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
         if not persistent_root.exists():
             raise RuntimeError(f"Persistent data root missing: {persistent_root}")
 
-        stamp = started_at.strftime("%Y%m%dT%H%M%SZ")
+        stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         snapshot_dir = backup_root / f"{mode}_snapshot_{stamp}"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         result["snapshot_dir"] = str(snapshot_dir)
         result["operations"].extend(_collect_snapshot_operations(snapshot_dir, paths, mode))
 
         manifest = {
-            "created_at": started_at.isoformat(),
+            "created_at": datetime.utcnow().isoformat(),
             "trigger": trigger,
             "config": cfg,
             "paths": {k: str(v) for k, v in paths.items()},
@@ -7083,7 +6538,7 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
                 nas_target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(snapshot_dir, nas_target, dirs_exist_ok=True)
                 result["nas_sync"]["copied"] = True
-                cutoff = datetime.now(UTC).timestamp() - (15 * 24 * 60 * 60)
+                cutoff = datetime.utcnow().timestamp() - (15 * 24 * 60 * 60)
                 for old_snapshot in sorted([p for p in nas_root.glob("snapshot_*") if p.is_dir()], key=lambda p: p.name):
                     try:
                         if old_snapshot.stat().st_mtime < cutoff:
@@ -7097,7 +6552,7 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
                     raise RuntimeError(f"NAS backup required but failed: {nas_exc}")
 
         snapshots = sorted(
-            [p for p in backup_root.glob("*snapshot_*") if p.is_dir()],
+            [p for p in backup_root.glob("snapshot_*") if p.is_dir()],
             key=lambda p: p.name,
         )
         keep = int(cfg["keep_snapshots"])
@@ -7114,7 +6569,7 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
         result["message"] = str(exc)
         return result
     finally:
-        result["finished_at"] = datetime.now(UTC).isoformat()
+        result["finished_at"] = datetime.utcnow().isoformat()
         _update_manager_backup_state(result)
 
 
@@ -7299,7 +6754,6 @@ def contextual_proxy(path: str) -> Response:
         "categories",
         "production-list",
         "restaurant-setup",
-        "restaurant/",
         "upload",
         "export",
         "auth/",
@@ -7318,7 +6772,7 @@ def contextual_proxy(path: str) -> Response:
             return _proxy("productmix", path)
         return jsonify({"ok": False, "message": "Not found"}), 404
 
-    if "/app/productmix/" in referer or "/portal/productmix" in referer or path.startswith(productmix_prefixes):
+    if "/app/productmix/" in referer or path.startswith(productmix_prefixes):
         return _proxy("productmix", path)
     if "/app/ic3/" in referer:
         return _proxy("ic3", path)
@@ -7338,11 +6792,6 @@ if __name__ == "__main__":
     if not open_path.startswith("/"):
         open_path = f"/{open_path}"
 
-    browser_host_override = (os.environ.get("DEXTER_BROWSER_HOST") or "").strip()
-    browser_host = browser_host_override or host
-    if browser_host in {"0.0.0.0", "::", "[::]"}:
-        browser_host = "127.0.0.1"
-
     startup_result = MANAGER.start_all()
     if not startup_result.get("ok"):
         print("Dexter Assistant preflight warning:", startup_result)
@@ -7354,7 +6803,7 @@ if __name__ == "__main__":
     MANAGER.start_watchdog()
 
     if auto_open_browser:
-        startup_url = f"{scheme}://{browser_host}:{port}{open_path}"
+        startup_url = f"{scheme}://{host}:{port}{open_path}"
         threading.Timer(1.0, lambda: open_url_in_chrome(startup_url)).start()
 
     debug_mode = os.environ.get("PM_DEBUG", "0") == "1"

@@ -43,7 +43,9 @@
   {% set hide_top_nav_items = active_endpoint in compact_nav_endpoints and not show_full_nav %}
   <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
     <div class="container-fluid">
-      <span class="navbar-brand d-flex align-items-center" aria-hidden="true"></span>
+      <a class="navbar-brand d-flex align-items-center" href="{{ url_for('home') }}">
+        <span class="d-none d-md-inline">{{ branding_company_name or 'Product Mix' }}</span>
+      </a>
       {% if active_endpoint in compact_nav_endpoints %}
         {% if hide_top_nav_items %}
         <a class="btn btn-sm btn-outline-light ms-auto" href="{{ request.path }}?fullnav=1">Show Full Menu</a>
@@ -69,7 +71,7 @@
           <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
           <select class="form-select form-select-sm top-select" name="restaurant_id" onchange="this.form.submit()">
             {% for option in location_switch_options %}
-            <option value="{{ option.id }}" {% if location_switch_active_id and location_switch_active_id == option.id %}selected{% endif %}>{{ option.location or option.name }}</option>
+            <option value="{{ option.id }}" {% if location_switch_active_id and location_switch_active_id == option.id %}selected{% endif %}>{{ option.name }}{% if option.location %} - {{ option.location }}{% endif %}</option>
             {% endfor %}
           </select>
         </form>

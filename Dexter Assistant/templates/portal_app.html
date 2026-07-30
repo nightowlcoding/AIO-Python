@@ -39,14 +39,7 @@
             background: #ffffff;
             box-shadow: 0 1px 4px rgba(15,23,42,0.06);
         }
-        .brand {
-            font-size: 16px;
-            font-weight: 800;
-            color: #0f172a;
-            cursor: default;
-            user-select: text;
-            pointer-events: none;
-        }
+        .brand { font-size: 16px; font-weight: 800; color: #0f172a; }
         .brand-wrap { display: flex; align-items: center; gap: 9px; }
         .brand-logo { width: 144px; height: 144px; object-fit: contain; border-radius: 12px; background: #fff; border: 1px solid var(--edge); padding: 6px; }
         .nav { display: flex; gap: 7px; flex-wrap: wrap; }
@@ -179,9 +172,7 @@
             <div class="brand" id="brandTitle">{{ current_location_name if app_key == 'ic3' and current_location_name else app_title }}</div>
         </div>
         <div class="nav">
-            {% if app_key != 'productmix' %}
             <a class="nav-action nav-action-home" href="/portal" onclick="return openDexterHub(event)"><span class="mini-ico">D</span><span class="nav-label">Dexter Hub</span><span class="nav-short">DH</span></a>
-            {% endif %}
             <a class="nav-action nav-action-admin" href="/admin"><span class="mini-ico">A</span><span class="nav-label">Admin</span><span class="nav-short">AD</span></a>
             {% if show_shell_nav %}
             <button class="nav-action nav-action-back" type="button" onclick="goBack()"><span class="mini-ico">B</span><span class="nav-label">Back</span><span class="nav-short">BK</span></button>
@@ -346,13 +337,6 @@
                             .replace(/(.*?)\s*\d+\s*uploads?$/i, "$1")
                             .trim();
                     }
-                }
-                if (label.indexOf(' - ') !== -1) {
-                    var labelParts = label.split(' - ');
-                    label = (labelParts[labelParts.length - 1] || label).trim();
-                }
-                if (/^big\s*house\s*burgers$/i.test(label)) {
-                    label = '';
                 }
                 if (label) {
                     brand.textContent = label;

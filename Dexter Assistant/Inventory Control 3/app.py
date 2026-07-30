@@ -179,6 +179,7 @@ PRODUCTMIX_SYNC_UI_SCRIPT = r"""
             panel = document.createElement('div');
             panel.id = 'ic3ProductMixSyncPanel';
             panel.innerHTML = [
+                '<button id="ic3ProductMixSyncButton" type="button">Sync ProductMix</button>',
                 '<span id="ic3ProductMixSyncStatus">Waiting for first sync check...</span>'
             ].join('');
 
@@ -594,8 +595,8 @@ LOCATION_OPTIONS_SYNC_SCRIPT = r"""
 OVERRIDE_SCRIPT = r"""
 <script>
 (function () {
-    if (window.__ic3InvoiceOverrideInstalledV2) return;
-    window.__ic3InvoiceOverrideInstalledV2 = true;
+    if (window.__ic3InvoiceOverrideInstalled) return;
+    window.__ic3InvoiceOverrideInstalled = true;
 
     const LOCAL_API_ORIGINS = [
         'http://localhost:5003',
@@ -661,7 +662,6 @@ OVERRIDE_SCRIPT = r"""
     const state = {
         bulkInvoices: [],
         selectedInvoiceImportIds: new Set(),
-        selectedInvoiceRowKeys: new Set(),
     };
 
     function parseDateFromFilename(filename) {
@@ -738,27 +738,6 @@ OVERRIDE_SCRIPT = r"""
             return false;
         }
         return headers.includes('import id') && headers.includes('date/time') && headers.includes('filename') && headers.includes('actions');
-    }
-
-    function buildInvoiceRowKey(row, fallbackIndex) {
-        const cells = Array.from(row.querySelectorAll('td'));
-        const hasSelectCell = !!(cells[0] && cells[0].querySelector('.ic3-import-checkbox'));
-        const base = hasSelectCell ? 1 : 0;
-        const importId = cells[base] ? String(cells[base].innerText || '').trim() : '';
-        const timestamp = cells[base + 1] ? String(cells[base + 1].innerText || '').trim() : '';
-        const filename = cells[base + 2] ? String(cells[base + 2].innerText || '').trim() : '';
-        const deliveryDate = cells[base + 3] ? String(cells[base + 3].innerText || '').trim() : '';
-        return [importId, timestamp, filename, deliveryDate, String(fallbackIndex || 0)].join('||');
-    }
-
-    function readInvoiceImportIdFromRow(row) {
-        const cells = Array.from(row.querySelectorAll('td'));
-        if (!cells.length) {
-            return '';
-        }
-        const hasSelectCell = !!cells[0].querySelector('.ic3-import-checkbox');
-        const index = hasSelectCell ? 1 : 0;
-        return cells[index] ? String(cells[index].innerText || '').trim() : '';
     }
 
     function sortInvoiceHistoryTableRows(table) {
@@ -852,26 +831,22 @@ OVERRIDE_SCRIPT = r"""
     async function bulkDeleteInvoiceImports(table) {
         const checkboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox:checked'));
         const selectedRows = checkboxes
-            .map((cb) => ({
-                importId: String(cb.dataset.importId || '').trim(),
-                rowKey: String(cb.dataset.rowKey || '').trim(),
-            }))
+            .map((cb) => ({ importId: String(cb.dataset.importId || '').trim() }))
             .filter((row) => !!row.importId);
         if (!selectedRows.length) {
             alert('Select at least one invoice import to delete.');
             return;
         }
 
-        const uniqueImportIds = Array.from(new Set(selectedRows.map((row) => row.importId)));
-
-        if (!confirm('Delete ' + uniqueImportIds.length + ' selected invoice import(s)? This cannot be undone.')) {
+        if (!confirm('Delete ' + selectedRows.length + ' selected invoice import(s)? This cannot be undone.')) {
             return;
         }
 
         let successCount = 0;
         const failed = [];
 
-        for (const importId of uniqueImportIds) {
+        for (const row of selectedRows) {
+            const importId = row.importId;
             try {
                 const response = await fetch('/api/invoices/import/' + encodeURIComponent(importId), {
                     method: 'DELETE',
@@ -880,11 +855,6 @@ OVERRIDE_SCRIPT = r"""
                 if (response.ok && payload && payload.success) {
                     successCount += 1;
                     state.selectedInvoiceImportIds.delete(importId);
-                    selectedRows.forEach((row) => {
-                        if (row.importId === importId && row.rowKey) {
-                            state.selectedInvoiceRowKeys.delete(row.rowKey);
-                        }
-                    });
                 } else {
                     failed.push(importId + (payload && payload.message ? ' (' + payload.message + ')' : ''));
                 }
@@ -928,54 +898,26 @@ OVERRIDE_SCRIPT = r"""
                 headRow.insertBefore(th, headRow.firstElementChild);
 
                 bodyRows.forEach((row) => {
-                    const importId = readInvoiceImportIdFromRow(row);
-                    const rowKey = buildInvoiceRowKey(row, row.rowIndex);
+                    const firstCell = row.querySelector('td');
+                    const importId = firstCell ? (firstCell.innerText || '').trim() : '';
                     row.dataset.importId = importId;
-                    row.dataset.rowKey = rowKey;
 
                     const td = document.createElement('td');
                     td.style.padding = '8px';
                     td.style.textAlign = 'center';
 
-                    const checked = rowKey && state.selectedInvoiceRowKeys.has(rowKey) ? ' checked' : '';
-                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '" data-row-key="' + escapeHtml(rowKey) + '" data-ic3-wired="1"' + checked + '>';
+                    const checked = importId && state.selectedInvoiceImportIds.has(importId) ? ' checked' : '';
+                    td.innerHTML = '<input type="checkbox" class="ic3-import-checkbox" data-import-id="' + escapeHtml(importId) + '"' + checked + '>';
                     row.insertBefore(td, row.firstElementChild);
                 });
 
                 table.dataset.ic3InvoiceBulkPatched = '1';
-            } else {
-                bodyRows.forEach((row) => {
-                    const importId = readInvoiceImportIdFromRow(row);
-                    const rowKey = buildInvoiceRowKey(row, row.rowIndex);
-                    row.dataset.importId = importId;
-                    row.dataset.rowKey = rowKey;
-
-                    const existingCheckbox = row.querySelector('.ic3-import-checkbox');
-                    if (!existingCheckbox) {
-                        return;
-                    }
-
-                    const replacement = existingCheckbox.cloneNode(false);
-                    replacement.className = 'ic3-import-checkbox';
-                    replacement.dataset.importId = importId;
-                    replacement.dataset.rowKey = rowKey;
-                    replacement.dataset.ic3Wired = '1';
-                    if (rowKey && state.selectedInvoiceRowKeys.has(rowKey)) {
-                        replacement.checked = true;
-                    }
-                    existingCheckbox.replaceWith(replacement);
-                });
             }
 
             let panel = table.previousElementSibling;
-            if (panel && panel.classList && panel.classList.contains('ic3-invoice-bulk-tools') && panel.dataset.ic3PanelVersion !== '2') {
-                panel.remove();
-                panel = null;
-            }
             if (!(panel && panel.classList && panel.classList.contains('ic3-invoice-bulk-tools'))) {
                 panel = document.createElement('div');
                 panel.className = 'ic3-invoice-bulk-tools';
-                panel.dataset.ic3PanelVersion = '2';
                 panel.style.display = 'flex';
                 panel.style.alignItems = 'center';
                 panel.style.gap = '8px';
@@ -991,11 +933,11 @@ OVERRIDE_SCRIPT = r"""
                     const checkboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
                     checkboxes.forEach((cb) => {
                         cb.checked = value;
-                        if (cb.dataset.rowKey) {
+                        if (cb.dataset.importId) {
                             if (value) {
-                                state.selectedInvoiceRowKeys.add(cb.dataset.rowKey);
+                                state.selectedInvoiceImportIds.add(cb.dataset.importId);
                             } else {
-                                state.selectedInvoiceRowKeys.delete(cb.dataset.rowKey);
+                                state.selectedInvoiceImportIds.delete(cb.dataset.importId);
                             }
                         }
                     });
@@ -1007,56 +949,43 @@ OVERRIDE_SCRIPT = r"""
                 panel.querySelector('.ic3-delete-selected-btn').addEventListener('click', function () { bulkDeleteInvoiceImports(table); });
             }
 
-            let headerCheckbox = table.querySelector('thead .ic3-import-select-all');
-            if (headerCheckbox) {
-                const replacement = headerCheckbox.cloneNode(false);
-                replacement.className = 'ic3-import-select-all';
-                replacement.title = 'Select all';
-                replacement.checked = headerCheckbox.checked;
-                replacement.indeterminate = headerCheckbox.indeterminate;
-                replacement.dataset.ic3Wired = '1';
-                headerCheckbox.replaceWith(replacement);
-                headerCheckbox = replacement;
-            }
-
-            if (headerCheckbox && !headerCheckbox.dataset.ic3V2Wired) {
+            const headerCheckbox = table.querySelector('thead .ic3-import-select-all');
+            if (headerCheckbox && !headerCheckbox.dataset.ic3Wired) {
                 headerCheckbox.addEventListener('change', function () {
                     const all = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
                     all.forEach((cb) => {
                         cb.checked = headerCheckbox.checked;
-                        if (cb.dataset.rowKey) {
+                        if (cb.dataset.importId) {
                             if (cb.checked) {
-                                state.selectedInvoiceRowKeys.add(cb.dataset.rowKey);
+                                state.selectedInvoiceImportIds.add(cb.dataset.importId);
                             } else {
-                                state.selectedInvoiceRowKeys.delete(cb.dataset.rowKey);
+                                state.selectedInvoiceImportIds.delete(cb.dataset.importId);
                             }
                         }
                     });
                     updateInvoiceSelectionUi(table);
                 });
                 headerCheckbox.dataset.ic3Wired = '1';
-                headerCheckbox.dataset.ic3V2Wired = '1';
             }
 
             const rowCheckboxes = Array.from(table.querySelectorAll('tbody .ic3-import-checkbox'));
             rowCheckboxes.forEach((checkbox) => {
-                if (!checkbox.dataset.ic3V2Wired) {
+                if (!checkbox.dataset.ic3Wired) {
                     checkbox.addEventListener('change', function () {
-                        const rowKey = checkbox.dataset.rowKey;
-                        if (rowKey) {
+                        const importId = checkbox.dataset.importId;
+                        if (importId) {
                             if (checkbox.checked) {
-                                state.selectedInvoiceRowKeys.add(rowKey);
+                                state.selectedInvoiceImportIds.add(importId);
                             } else {
-                                state.selectedInvoiceRowKeys.delete(rowKey);
+                                state.selectedInvoiceImportIds.delete(importId);
                             }
                         }
                         updateInvoiceSelectionUi(table);
                     });
                     checkbox.dataset.ic3Wired = '1';
-                    checkbox.dataset.ic3V2Wired = '1';
                 }
 
-                if (checkbox.dataset.rowKey && state.selectedInvoiceRowKeys.has(checkbox.dataset.rowKey)) {
+                if (checkbox.dataset.importId && state.selectedInvoiceImportIds.has(checkbox.dataset.importId)) {
                     checkbox.checked = true;
                 }
             });
@@ -1072,473 +1001,6 @@ OVERRIDE_SCRIPT = r"""
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
-    }
-
-    function buildInvoiceDedupKey(location, deliveryDate, filename) {
-        const loc = String(location || '').trim().toLowerCase();
-        const day = String(deliveryDate || '').trim();
-        const file = String(filename || '').trim().toLowerCase();
-        return loc + '||' + day + '||' + file;
-    }
-
-    async function loadExistingInvoiceDedupKeys() {
-        const response = await fetch('/api/invoices/import-log');
-        const result = await response.json();
-        const keys = new Set();
-        if (!response.ok || !result || !result.success || !Array.isArray(result.imports)) {
-            return keys;
-        }
-
-        result.imports.forEach((item) => {
-            const key = buildInvoiceDedupKey(item.location, item.delivery_date, item.filename);
-            if (key) {
-                keys.add(key);
-            }
-        });
-        return keys;
-    }
-
-    function normalizeMenuText(value) {
-        return String(value || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, ' ')
-            .trim();
-    }
-
-    function removeInventorySortAndViewControls() {
-        const inventoryTab = document.getElementById('inventory');
-        if (!inventoryTab) {
-            return;
-        }
-
-        const panel = inventoryTab.querySelector('.inventory-controls-panel');
-        if (panel) {
-            const sortSelect = panel.querySelector('#sortBy');
-            const viewSelect = panel.querySelector('#viewMode');
-
-            const sortGroup = sortSelect && sortSelect.closest ? sortSelect.closest('.control-group') : null;
-            const viewGroup = viewSelect && viewSelect.closest ? viewSelect.closest('.control-group') : null;
-
-            if (sortGroup && sortGroup.parentElement) {
-                sortGroup.parentElement.removeChild(sortGroup);
-            }
-            if (viewGroup && viewGroup.parentElement) {
-                viewGroup.parentElement.removeChild(viewGroup);
-            }
-        }
-
-        let hiddenControls = inventoryTab.querySelector('#ic3HiddenInventoryControls');
-        if (!hiddenControls) {
-            hiddenControls = document.createElement('div');
-            hiddenControls.id = 'ic3HiddenInventoryControls';
-            hiddenControls.style.display = 'none';
-            inventoryTab.appendChild(hiddenControls);
-        }
-
-        if (!document.getElementById('sortBy')) {
-            const sortFallback = document.createElement('select');
-            sortFallback.id = 'sortBy';
-            sortFallback.innerHTML = [
-                '<option value="csv-order" selected>CSV Order (Row Numbers)</option>',
-                '<option value="category">By Category</option>',
-                '<option value="product-name">By Product Name</option>',
-                '<option value="product-number">By Product Number</option>'
-            ].join('');
-            hiddenControls.appendChild(sortFallback);
-        }
-
-        if (!document.getElementById('viewMode')) {
-            const viewFallback = document.createElement('select');
-            viewFallback.id = 'viewMode';
-            viewFallback.innerHTML = [
-                '<option value="list">Single List View (Shows Row Order)</option>',
-                '<option value="categorized" selected>Categorized View (Groups by Category)</option>'
-            ].join('');
-            hiddenControls.appendChild(viewFallback);
-        }
-    }
-
-    function organizeInventoryControlsPanel() {
-        const inventoryTab = document.getElementById('inventory');
-        if (!inventoryTab) {
-            return;
-        }
-
-        const panel = inventoryTab.querySelector('.inventory-controls-panel');
-        if (!panel) {
-            return;
-        }
-
-        const searchBox = panel.querySelector('#searchBox');
-        const showEditToggle = panel.querySelector('#showEditButtons');
-        const inventoryListWrap = panel.querySelector('#dexterIc3InventoryListInventoryWrap') || panel.querySelector('.dexter-inventory-list-control');
-
-        const searchGroup = searchBox && searchBox.closest ? searchBox.closest('.control-group') : null;
-        const editGroup = showEditToggle && showEditToggle.closest ? showEditToggle.closest('.control-group') : null;
-
-        if (searchGroup && searchBox) {
-            searchGroup.classList.add('ic3-search-group');
-            const searchLabel = searchGroup.querySelector('label[for="searchBox"]') || searchGroup.querySelector('label');
-            if (searchLabel) {
-                searchLabel.classList.add('ic3-search-trigger');
-            }
-
-            if (searchGroup.dataset.ic3SearchBound !== '1') {
-                searchGroup.dataset.ic3SearchBound = '1';
-
-                const expand = function () {
-                    searchGroup.classList.add('is-expanded');
-                };
-                const collapseIfEmpty = function () {
-                    if (searchGroup.dataset.ic3SearchPinnedOpen === '1') {
-                        return;
-                    }
-                    if (!String(searchBox.value || '').trim()) {
-                        searchGroup.classList.remove('is-expanded');
-                    }
-                };
-
-                if (searchLabel) {
-                    searchLabel.addEventListener('click', function (event) {
-                        event.preventDefault();
-                        const nextOpen = !searchGroup.classList.contains('is-expanded');
-                        searchGroup.classList.toggle('is-expanded', nextOpen);
-                        searchGroup.dataset.ic3SearchPinnedOpen = nextOpen ? '1' : '0';
-                        if (searchGroup.classList.contains('is-expanded')) {
-                            searchBox.focus();
-                        }
-                    });
-                }
-
-                searchBox.addEventListener('focus', expand);
-                searchBox.addEventListener('blur', function () {
-                    window.setTimeout(collapseIfEmpty, 120);
-                });
-            }
-
-            const hasQuery = String(searchBox.value || '').trim().length > 0;
-            if (hasQuery || searchGroup.dataset.ic3SearchPinnedOpen === '1') {
-                searchGroup.classList.add('is-expanded');
-            } else {
-                searchGroup.classList.remove('is-expanded');
-            }
-        }
-
-        if (editGroup) {
-            let hiddenControls = inventoryTab.querySelector('#ic3HiddenInventoryControls');
-            if (!hiddenControls) {
-                hiddenControls = document.createElement('div');
-                hiddenControls.id = 'ic3HiddenInventoryControls';
-                hiddenControls.style.display = 'none';
-                inventoryTab.appendChild(hiddenControls);
-            }
-
-            if (showEditToggle && showEditToggle.parentElement !== hiddenControls) {
-                showEditToggle.checked = false;
-                hiddenControls.appendChild(showEditToggle);
-            }
-
-            if (editGroup.parentElement) {
-                editGroup.parentElement.removeChild(editGroup);
-            }
-        }
-
-        if (inventoryListWrap) {
-            inventoryListWrap.classList.add('ic3-inventory-list-group');
-        }
-    }
-
-    function installCompactInventoryHeaderRow() {
-        const inventoryTab = document.getElementById('inventory');
-        if (!inventoryTab) {
-            return;
-        }
-
-        const directChildren = Array.from(inventoryTab.children || []);
-        const directLocationSelector = directChildren.find((el) => el.classList && el.classList.contains('location-selector'));
-        const directDateSelector = directChildren.find((el) => el.classList && el.classList.contains('date-selector'));
-
-        let row = inventoryTab.querySelector('.ic3-header-row');
-        const rowLocationSelector = row ? row.querySelector('.location-selector') : null;
-        const rowDateSelector = row ? row.querySelector('.date-selector') : null;
-
-        const locationSelector = directLocationSelector || rowLocationSelector;
-        const dateSelector = directDateSelector || rowDateSelector;
-        if (!locationSelector || !dateSelector) {
-            return;
-        }
-
-        if (!row) {
-            row = document.createElement('div');
-            row.className = 'ic3-header-row';
-            inventoryTab.insertBefore(row, locationSelector || inventoryTab.firstChild || null);
-        }
-
-        if (locationSelector.parentElement !== row) {
-            row.appendChild(locationSelector);
-        }
-        if (dateSelector.parentElement !== row) {
-            row.appendChild(dateSelector);
-        }
-
-        const todayButton = dateSelector.querySelector('button[onclick*="setToday"], .btn.btn-secondary');
-        if (todayButton && todayButton.parentElement) {
-            todayButton.parentElement.removeChild(todayButton);
-        }
-
-        const menuNav = document.getElementById('ic3HamburgerNav');
-        if (menuNav && menuNav.parentElement !== row) {
-            row.insertBefore(menuNav, row.firstChild || null);
-        }
-    }
-
-    function installHamburgerMenu() {
-        const tabsContainer = document.querySelector('.tabs');
-        if (!tabsContainer || !tabsContainer.parentNode) {
-            return;
-        }
-
-        const styleId = 'ic3HamburgerNavStyle';
-        if (!document.getElementById(styleId)) {
-            const style = document.createElement('style');
-            style.id = styleId;
-            style.textContent = [
-                '.tabs.ic3-tabs-collapsed { display: none !important; }',
-                '#ic3HamburgerNav { position: relative; margin: 8px 0 14px; }',
-                '#ic3HamburgerToggle { min-height: 40px; border: 1px solid #0f4c81; border-radius: 10px; background: #0b5c9e; color: #fff; font-weight: 700; letter-spacing: 0.2px; padding: 8px 14px; cursor: pointer; }',
-                '#ic3HamburgerToggle:hover { background: #084c83; }',
-                '#ic3HamburgerPanel { position: absolute; left: 0; top: 48px; z-index: 20; width: min(380px, calc(100vw - 28px)); max-height: min(70vh, 620px); overflow: auto; border: 1px solid #cfd8dc; border-radius: 12px; background: #fff; box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18); padding: 10px; display: none; }',
-                '#ic3HamburgerNav.open #ic3HamburgerPanel { display: block; }',
-                '.ic3-h-menu-group { padding: 6px 4px 2px; }',
-                '.ic3-h-menu-title { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.4px; color: #546e7a; text-transform: uppercase; margin: 0 0 6px; }',
-                '.ic3-h-menu-item { width: 100%; text-align: left; border: 0; background: #f7fafc; border-radius: 8px; padding: 9px 10px; margin: 3px 0; cursor: pointer; color: #1f2937; font-weight: 600; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }',
-                '.ic3-h-menu-item:hover { background: #e8f1f8; }',
-                '.ic3-h-menu-item.is-active { background: #d9ecfb; color: #0f4c81; }',
-                '#inventory .ic3-header-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; width: min(100%, 1120px); margin: 4px auto 10px; }',
-                '#inventory .ic3-header-row #ic3HamburgerNav { margin: 0; justify-self: start; }',
-                '#inventory .ic3-header-row #ic3HamburgerToggle { min-height: 44px; padding: 8px 16px; }',
-                '#inventory .ic3-header-row .location-selector { margin: 0; display: flex; justify-content: center; justify-self: center; width: auto; max-width: none; }',
-                '#inventory .ic3-header-row .date-selector { margin: 0; display: flex; align-items: center; justify-content: flex-end; justify-self: end; gap: 10px; }',
-                '#inventory .ic3-header-row .date-selector label { margin: 0; }',
-                '#inventory .inventory-controls-panel { grid-template-columns: minmax(260px, 1fr) !important; align-items: center; gap: 12px 18px !important; }',
-                '#inventory .inventory-controls-panel > .control-group, #inventory .inventory-controls-panel > .dexter-inventory-list-control { min-width: 0; }',
-                '#inventory .inventory-controls-panel .ic3-search-group { grid-column: 1; }',
-                '#inventory .inventory-controls-panel .ic3-inventory-list-group { grid-column: 1 / -1; justify-self: stretch; width: 100%; }',
-                '#inventory .inventory-controls-panel .ic3-search-group label { margin-bottom: 0; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }',
-                '#inventory .inventory-controls-panel .ic3-search-group #searchBox { width: 100%; overflow: hidden; max-height: 52px; transition: max-height 0.2s ease, opacity 0.2s ease, margin 0.2s ease, padding 0.2s ease, border-width 0.2s ease; }',
-                '#inventory .inventory-controls-panel .ic3-search-group:not(.is-expanded) #searchBox { max-height: 0; opacity: 0; margin-top: 0; padding-top: 0; padding-bottom: 0; border-width: 0; pointer-events: none; }',
-                '#inventory .inventory-controls-panel .ic3-search-group.is-expanded #searchBox { max-height: 52px; opacity: 1; margin-top: 8px; }',
-                '#inventory .inventory-controls-panel .ic3-inventory-list-group { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: auto; max-width: 520px; }',
-                '#inventory .inventory-controls-panel .ic3-inventory-list-group label { margin: 0; text-align: left; font-weight: 700; color: #24344d; white-space: nowrap; }',
-                '#inventory .inventory-controls-panel .ic3-inventory-list-group select { width: clamp(180px, 28vw, 300px); min-width: 160px; }',
-                '@media (max-width: 700px) {',
-                '  #inventory .inventory-controls-panel { grid-template-columns: 1fr !important; }',
-                '  #inventory .inventory-controls-panel .ic3-search-group, #inventory .inventory-controls-panel .ic3-inventory-list-group { grid-column: 1; justify-self: stretch; width: 100%; }',
-                '  #inventory .inventory-controls-panel .ic3-inventory-list-group { display: flex !important; align-items: center; flex-wrap: nowrap; gap: 8px; max-width: 100%; width: auto; justify-self: start; }',
-                '  #inventory .inventory-controls-panel .ic3-inventory-list-group label { white-space: nowrap; margin: 0; }',
-                '  #inventory .inventory-controls-panel .ic3-inventory-list-group select { flex: 1 1 auto; width: clamp(140px, 42vw, 240px); min-width: 120px; max-width: 240px; }',
-                '}',
-                '@media (max-width: 768px) {',
-                '  #ic3HamburgerToggle { min-height: 44px; font-size: 1rem; }',
-                '  #ic3HamburgerPanel { width: calc(100vw - 28px); left: 0; }',
-                '  #inventory .ic3-header-row { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }',
-                '  #inventory .ic3-header-row #ic3HamburgerNav { justify-self: start; }',
-                '  #inventory .ic3-header-row .location-selector { justify-self: center; }',
-                '  #inventory .ic3-header-row .date-selector { justify-self: end; }',
-                '}'
-            ].join('\n');
-            (document.head || document.documentElement).appendChild(style);
-        }
-
-        const MENU_GROUPS = [
-            {
-                title: 'Inventory',
-                items: [
-                    { key: 'inventory', label: 'Enter Inventory', tabId: 'inventory', aliases: ['enter inventory'] },
-                    { key: 'saved', label: 'Saved Inventories', tabId: 'saved', aliases: ['saved inventories'] },
-                    { key: 'estimate', label: 'Estimated vs Actual', tabId: 'estimate', aliases: ['estimated vs actual'] },
-                ],
-            },
-            {
-                title: 'Product Management',
-                items: [
-                    { key: 'orders', label: 'Orders', tabId: 'orders', aliases: ['orders'] },
-                    { key: 'products', label: 'Manage Product', tabId: 'products', aliases: ['manage product', 'manage products'] },
-                    { key: 'productdetail', label: 'Product Info', tabId: 'productdetail', buttonId: 'ic3ProductDetailTabButton', aliases: ['product info'] },
-                ],
-            },
-            {
-                title: 'Reports',
-                items: [
-                    { key: 'report', label: 'Reports', tabId: 'report', aliases: ['reports', 'report analysis'] },
-                    { key: 'forecast', label: 'Forecast', tabId: 'forecast', aliases: ['forecast'] },
-                    { key: 'analytics', label: 'Analytics', tabId: 'analytics', aliases: ['analytics'] },
-                    { key: 'usagehistory', label: 'Usage History', tabId: 'usagehistory', aliases: ['usage history', 'useage history'] },
-                ],
-            },
-            {
-                title: 'Rename CSV',
-                items: [
-                    { key: 'renamecsv', label: 'Rename Order CSVs', tabId: 'renamecsv', buttonId: 'ic3RenameCsvTabButton', aliases: ['rename order csvs'] },
-                ],
-            },
-        ];
-
-        let nav = document.getElementById('ic3HamburgerNav');
-        if (!nav) {
-            nav = document.createElement('div');
-            nav.id = 'ic3HamburgerNav';
-            nav.innerHTML = [
-                '<button id="ic3HamburgerToggle" type="button" aria-haspopup="true" aria-expanded="false">&#9776; Menu</button>',
-                '<div id="ic3HamburgerPanel" role="menu" aria-label="Inventory control menu"></div>'
-            ].join('');
-            tabsContainer.parentNode.insertBefore(nav, tabsContainer);
-        }
-
-        tabsContainer.classList.add('ic3-tabs-collapsed');
-
-        const panel = document.getElementById('ic3HamburgerPanel');
-        const toggle = document.getElementById('ic3HamburgerToggle');
-        if (!panel || !toggle) {
-            return;
-        }
-
-        installCompactInventoryHeaderRow();
-
-        function findButtonForItem(item) {
-            if (item.buttonId) {
-                const byId = document.getElementById(item.buttonId);
-                if (byId) return byId;
-            }
-
-            if (item.tabId) {
-                const byTabId = tabsContainer.querySelector(".tab[onclick*=\"showTab('" + item.tabId + "'\"]");
-                if (byTabId) return byTabId;
-            }
-
-            const allTabs = Array.from(tabsContainer.querySelectorAll('.tab'));
-            const aliases = Array.isArray(item.aliases) ? item.aliases.map(normalizeMenuText) : [];
-            for (const tab of allTabs) {
-                const tabText = normalizeMenuText(tab.textContent || tab.innerText || '');
-                if (!tabText) {
-                    continue;
-                }
-                if (aliases.some((alias) => alias && (tabText === alias || tabText.includes(alias)))) {
-                    return tab;
-                }
-            }
-
-            return null;
-        }
-
-        function currentActiveKey() {
-            const active = tabsContainer.querySelector('.tab.active');
-            if (!active) {
-                return '';
-            }
-            const onclickText = String(active.getAttribute('onclick') || '');
-            const match = onclickText.match(/showTab\(['\"]([^'\"]+)['\"]/);
-            if (match && match[1]) {
-                return match[1];
-            }
-            if (active.id === 'ic3ProductDetailTabButton') return 'productdetail';
-            if (active.id === 'ic3RenameCsvTabButton') return 'renamecsv';
-            return '';
-        }
-
-        function closeMenu() {
-            nav.classList.remove('open');
-            toggle.setAttribute('aria-expanded', 'false');
-        }
-
-        function openMenu() {
-            nav.classList.add('open');
-            toggle.setAttribute('aria-expanded', 'true');
-        }
-
-        function toggleMenu() {
-            if (nav.classList.contains('open')) {
-                closeMenu();
-            } else {
-                openMenu();
-            }
-        }
-
-        function renderMenu() {
-            const activeKey = currentActiveKey();
-            let html = '';
-            MENU_GROUPS.forEach((group) => {
-                html += '<section class="ic3-h-menu-group">';
-                html += '<div class="ic3-h-menu-title">' + escapeHtml(group.title) + '</div>';
-                (group.items || []).forEach((item) => {
-                    const activeClass = item.key === activeKey ? ' is-active' : '';
-                    html += '<button type="button" class="ic3-h-menu-item' + activeClass + '" data-menu-key="' + escapeHtml(item.key) + '" role="menuitem">' + escapeHtml(item.label) + '</button>';
-                });
-                html += '</section>';
-            });
-            panel.innerHTML = html;
-        }
-
-        renderMenu();
-
-        if (!toggle.dataset.ic3Bound) {
-            toggle.dataset.ic3Bound = '1';
-            toggle.addEventListener('click', function () {
-                toggleMenu();
-            });
-
-            document.addEventListener('click', function (event) {
-                if (!nav.contains(event.target)) {
-                    closeMenu();
-                }
-            });
-
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape') {
-                    closeMenu();
-                }
-            });
-        }
-
-        if (!panel.dataset.ic3Bound) {
-            panel.dataset.ic3Bound = '1';
-            panel.addEventListener('click', function (event) {
-                const itemButton = event.target && event.target.closest ? event.target.closest('.ic3-h-menu-item') : null;
-                if (!itemButton) {
-                    return;
-                }
-                const key = String(itemButton.getAttribute('data-menu-key') || '').trim();
-                if (!key) {
-                    return;
-                }
-
-                let selected = null;
-                MENU_GROUPS.forEach((group) => {
-                    (group.items || []).forEach((item) => {
-                        if (item.key === key) {
-                            selected = item;
-                        }
-                    });
-                });
-                if (!selected) {
-                    return;
-                }
-
-                const targetButton = findButtonForItem(selected);
-                if (targetButton && typeof targetButton.click === 'function') {
-                    targetButton.click();
-                    closeMenu();
-                    window.setTimeout(renderMenu, 10);
-                    return;
-                }
-
-                if (selected.tabId && typeof showTab === 'function') {
-                    showTab(selected.tabId, { currentTarget: tabsContainer.querySelector('.tab.active') || null });
-                    closeMenu();
-                    window.setTimeout(renderMenu, 10);
-                }
-            });
-        }
     }
 
     function installOrderRenameTab() {
@@ -1931,7 +1393,7 @@ OVERRIDE_SCRIPT = r"""
         clearBulkUi();
     };
 
-    window.uploadInvoiceCSV = async function () {
+    window.uploadInvoiceCSV = function () {
         const fileInput = document.getElementById('uploadInvoiceCSV');
         const file = fileInput && fileInput.files ? fileInput.files[0] : null;
         const location = document.getElementById('invoiceLocation')?.value;
@@ -1958,25 +1420,9 @@ OVERRIDE_SCRIPT = r"""
         statusDiv.style.color = '#0c5460';
         statusDiv.innerHTML = '&#8987; Uploading invoice...';
 
-        const resolvedLocation = location || guessCurrentLocation() || 'Kingsville';
-        const dedupKey = buildInvoiceDedupKey(resolvedLocation, deliveryDate, file.name);
-        try {
-            const existingKeys = await loadExistingInvoiceDedupKeys();
-            if (existingKeys.has(dedupKey)) {
-                statusDiv.style.background = '#fff3cd';
-                statusDiv.style.color = '#7a5200';
-                statusDiv.innerHTML = '&#9888; Duplicate blocked: this invoice file/date/location is already imported.';
-                fileInput.value = '';
-                if (fileNameSpan) fileNameSpan.textContent = '';
-                return;
-            }
-        } catch (error) {
-            // Continue upload if duplicate check fails to avoid blocking operations on transient log errors.
-        }
-
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('location', resolvedLocation);
+        formData.append('location', location || guessCurrentLocation() || 'Kingsville');
         formData.append('delivery_date', deliveryDate);
 
         fetch('/api/orders/upload-invoice', {
@@ -2028,13 +1474,6 @@ OVERRIDE_SCRIPT = r"""
         let successCount = 0;
         let failCount = 0;
         const results = [];
-        let existingKeys = new Set();
-
-        try {
-            existingKeys = await loadExistingInvoiceDedupKeys();
-        } catch (error) {
-            existingKeys = new Set();
-        }
 
         for (let i = 0; i < state.bulkInvoices.length; i++) {
             const invoice = state.bulkInvoices[i];
@@ -2046,12 +1485,6 @@ OVERRIDE_SCRIPT = r"""
             try {
                 const parsedDate = parseDateFromFilename(invoice.file.name);
                 invoice.date = invoice.date || parsedDate;
-                const dedupKey = buildInvoiceDedupKey(location, invoice.date, invoice.file.name);
-                if (existingKeys.has(dedupKey)) {
-                    failCount++;
-                    results.push({ filename: invoice.file.name, date: invoice.date, success: false, error: 'Duplicate blocked (already imported).' });
-                    continue;
-                }
 
                 const formData = new FormData();
                 formData.append('file', invoice.file);
@@ -2066,7 +1499,6 @@ OVERRIDE_SCRIPT = r"""
 
                 if (result.success) {
                     successCount++;
-                    existingKeys.add(dedupKey);
                     results.push({ filename: invoice.file.name, date: invoice.date, success: true, matched: result.matched_count, total: result.total_items, newProducts: result.new_products_created || 0 });
                 } else {
                     failCount++;
@@ -2115,22 +1547,14 @@ OVERRIDE_SCRIPT = r"""
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
             renderBulkInvoiceList();
-            installCompactInventoryHeaderRow();
-            removeInventorySortAndViewControls();
             installInventorySearchFilter();
-            organizeInventoryControlsPanel();
             installOrderRenameTab();
-            installHamburgerMenu();
             installInvoiceBulkDeleteControls();
         });
     } else {
         renderBulkInvoiceList();
-        installCompactInventoryHeaderRow();
-        removeInventorySortAndViewControls();
         installInventorySearchFilter();
-        organizeInventoryControlsPanel();
         installOrderRenameTab();
-        installHamburgerMenu();
         installInvoiceBulkDeleteControls();
     }
 
@@ -2142,13 +1566,9 @@ OVERRIDE_SCRIPT = r"""
         ic3UiRefreshScheduled = true;
         window.setTimeout(function () {
             ic3UiRefreshScheduled = false;
-            installCompactInventoryHeaderRow();
-            removeInventorySortAndViewControls();
             installInventorySearchFilter();
-            organizeInventoryControlsPanel();
             applyInventorySearchFilter();
             installOrderRenameTab();
-            installHamburgerMenu();
             installInvoiceBulkDeleteControls();
         }, 120);
     };
@@ -3205,7 +2625,7 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         updated,
         flags=re.DOTALL,
     )
-    if "__ic3InvoiceOverrideInstalledV2" not in updated and "</body>" in updated:
+    if "__ic3InvoiceOverrideInstalled" not in updated and "</body>" in updated:
         updated = updated.replace("</body>", OVERRIDE_SCRIPT + "\n</body>", 1)
 
     if "__ic3ProductDetailInstalled" not in updated and "</body>" in updated:
@@ -4914,91 +4334,6 @@ def _install_dexter_location_guard_patch() -> None:
     app._ic3_dexter_location_guard_installed = True
 
 
-def _register_invoice_duplicate_guard(flask_app) -> None:
-    if getattr(flask_app, "_ic3_invoice_duplicate_guard_registered", False):
-        return
-
-    try:
-        from flask import jsonify, request
-    except Exception:
-        return
-
-    def _normalize_text(value) -> str:
-        return str(value or "").strip().lower()
-
-    @flask_app.before_request
-    def _prevent_duplicate_invoice_imports():
-        if request.method != "POST":
-            return None
-
-        path = (request.path or "").rstrip("/")
-        if path != "/api/orders/upload-invoice":
-            return None
-
-        location = str(request.form.get("location") or "").strip()
-        delivery_date = str(request.form.get("delivery_date") or "").strip()
-        upload = request.files.get("file")
-        filename = str(upload.filename or "").strip() if upload else ""
-
-        if not location or not delivery_date or not filename:
-            return None
-
-        candidate_key = (
-            _normalize_text(location),
-            str(delivery_date),
-            _normalize_text(Path(filename).name),
-        )
-
-        invoice_import_log_obj = globals().get("invoice_import_log") or []
-        for entry in invoice_import_log_obj:
-            existing_key = (
-                _normalize_text(entry.get("location")),
-                str(entry.get("delivery_date") or "").strip(),
-                _normalize_text(Path(str(entry.get("filename") or "")).name),
-            )
-            if existing_key == candidate_key:
-                return jsonify(
-                    {
-                        "success": False,
-                        "message": "Duplicate blocked: invoice already imported for this location/date/filename.",
-                        "duplicate": True,
-                    }
-                ), 409
-
-        return None
-
-    flask_app._ic3_invoice_duplicate_guard_registered = True
-
-
-def _install_invoice_duplicate_guard_patch() -> None:
-    try:
-        from flask import Flask
-    except Exception:
-        return
-
-    if getattr(Flask, "_ic3_invoice_duplicate_guard_patch_installed", False):
-        return
-
-    original_init = Flask.__init__
-
-    def patched_init(self, *args, **kwargs):
-        original_init(self, *args, **kwargs)
-        try:
-            _register_invoice_duplicate_guard(self)
-        except Exception:
-            pass
-
-    Flask.__init__ = patched_init
-    Flask._ic3_invoice_duplicate_guard_patch_installed = True
-
-    existing_app = globals().get("app")
-    if existing_app is not None:
-        try:
-            _register_invoice_duplicate_guard(existing_app)
-        except Exception:
-            pass
-
-
 def _install_order_csv_rename_api_patch() -> None:
     try:
         from flask import Flask
@@ -5319,7 +4654,6 @@ _install_order_csv_rename_api_patch()
 _install_product_detail_api_patch()
 _install_productmix_sync_api_patch()
 _install_usage_reports_patch()
-_install_invoice_duplicate_guard_patch()
 _force_production_flask_run()
 _original_module_name = globals().get("__name__", "__main__")
 if _original_module_name == "__main__":
