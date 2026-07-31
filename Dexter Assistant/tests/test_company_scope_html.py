@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from _dexter_test_harness import load_dexter_module
@@ -68,7 +69,12 @@ class CompanyScopeHtmlTests(unittest.TestCase):
                     INSERT INTO users (username, password_hash, role_id, company_id, is_active)
                     VALUES (?, ?, ?, ?, 1)
                     """,
-                    ("mgr_alpha", "hash", role_ids["Manager"], alpha_id),
+                    (
+                        "mgr_alpha",
+                        _dexter.generate_password_hash("manager-password-123"),
+                        role_ids["Manager"],
+                        alpha_id,
+                    ),
                 ).lastrowid
             )
             lockout_user_id = int(
@@ -238,6 +244,20 @@ class CompanyScopeHtmlTests(unittest.TestCase):
         )
         self.assertEqual(blocked.status_code, 200)
         self.assertIn("Account temporarily locked", blocked.get_data(as_text=True))
+
+    def test_manager_login_redirects_without_starting_all_apps(self) -> None:
+        with patch.object(_dexter.MANAGER, "start_all") as start_all:
+            response = self.client.post(
+                "/auth/login",
+                data={"username": "mgr_alpha", "password": "manager-password-123"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers.get("Location"), "/portal/managerapp")
+        start_all.assert_not_called()
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess[_dexter.SESSION_USER_KEY]["role_name"], "Manager")
 
     def test_security_headers_present_on_login_page(self) -> None:
         res = self.client.get("/auth/login")

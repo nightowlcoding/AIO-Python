@@ -3286,8 +3286,6 @@ def auth_login() -> Response:
                     "email": key or username,
                 }
                 session.permanent = True
-                if role_name in ("Super Admin", "Manager"):
-                    MANAGER.start_all()
                 return redirect(default_post_login_path())
             elif user and int(user.get("is_active", 1)) == 1:
                 attempts, lockout_until = register_failed_login_attempt(int(user["id"]))
