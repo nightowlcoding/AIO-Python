@@ -437,7 +437,8 @@
       </div>
       <div style="font-size:0.72rem;color:var(--green-dim);margin-top:10px;line-height:1.5;">
         ACCOUNT BALANCE = PERSON 1 BALANCE + PERSON 2 BALANCE.<br/>
-        BILLS DUE AFTER ACCOUNT BALANCE = MONTHLY EXPENSES - ACCOUNT BALANCE.<br/>
+        MONTHLY EXPENSES BUDGET = LATEST RECURRING BILLS + LATEST MORTGAGE.<br/>
+        BILLS DUE AFTER ACCOUNT BALANCE = MONTHLY EXPENSES BUDGET - ACCOUNT BALANCE.<br/>
         ADJUSTED BILLS PERSON 1 = BILLS DUE * 60% | ADJUSTED BILLS PERSON 2 = BILLS DUE * 40%.
       </div>
       <div id="income-status" style="font-size:0.78rem;min-height:20px;margin-top:10px;color:var(--green-dim);"></div>
@@ -1321,7 +1322,7 @@ function renderIncomeResult(result) {
   };
 
   $('income-results-cards').innerHTML = `
-    <div class="card amber"><div class="label">MONTHLY EXPENSES</div><div class="value">${fmt(result.monthly_expenses.total)}</div></div>
+    <div class="card amber"><div class="label">MONTHLY EXPENSES BUDGET</div><div class="value">${fmt(result.monthly_expenses.total)}</div></div>
     <div class="card amber"><div class="label">RECURRING</div><div class="value">${fmt(result.monthly_expenses.recurring)}</div></div>
     <div class="card cyan"><div class="label">MORTGAGE</div><div class="value">${fmt(result.monthly_expenses.mortgage)}</div></div>
     <div class="card red"><div class="label">EXPENSE</div><div class="value">${fmt(result.monthly_expenses.expense)}</div></div>
@@ -1368,14 +1369,8 @@ async function calculateIncomePlan() {
     return;
   }
   renderIncomeResult(data);
-  const requested = data.inputs?.run_month_requested || payload.run_month || 'all data';
-  const used = data.inputs?.run_month_used || requested;
-  if (requested && used && requested !== used) {
-    $('inc-run-month').value = used;
-    $('income-status').textContent = `CALCULATION COMPLETE. NO DATA FOR ${requested}; USED ${used}.`;
-  } else {
-    $('income-status').textContent = `CALCULATION COMPLETE FOR ${used || 'ALL DATA'}.`;
-  }
+  const runMonth = data.inputs?.run_month_requested || payload.run_month || 'UNSPECIFIED MONTH';
+  $('income-status').textContent = `CALCULATION COMPLETE FOR ${runMonth} USING CURRENT RECURRING + MORTGAGE BUDGET.`;
 }
 
 async function saveIncomePlan() {

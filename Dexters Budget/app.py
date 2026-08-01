@@ -531,17 +531,17 @@ def sum_expense_excluding_transfers(conn, month: str = None, import_id: int = No
     return round(total, 2)
 
 
-def calculate_monthly_expenses_avg(conn) -> float:
-    """Sum each recurring/mortgage merchant's most recent monthly total."""
+def calculate_monthly_budget_breakdown(conn) -> dict:
+    """Sum each recurring/mortgage merchant's most recent monthly total by category."""
     rec_rows = conn.execute(
         """
-        SELECT merchant, strftime('%Y-%m', date) as month, SUM(amount) as total
+        SELECT merchant, category, strftime('%Y-%m', date) as month, SUM(amount) as total
         FROM transactions WHERE category IN ('recurring','mortgage')
-        GROUP BY merchant, month
+        GROUP BY merchant, category, month
         UNION ALL
-        SELECT merchant, strftime('%Y-%m', date) as month, SUM(amount) as total
+        SELECT merchant, category, strftime('%Y-%m', date) as month, SUM(amount) as total
         FROM manual_entries WHERE category IN ('recurring','mortgage')
-        GROUP BY merchant, month
+        GROUP BY merchant, category, month
         ORDER BY merchant, month
         """
     ).fetchall()
@@ -549,10 +549,26 @@ def calculate_monthly_expenses_avg(conn) -> float:
     for r in rec_rows:
         merchant = r["merchant"]
         if merchant not in merchant_latest or r["month"] > merchant_latest[merchant]["month"]:
-            merchant_latest[merchant] = {"month": r["month"], "total": abs(r["total"])}
+            merchant_latest[merchant] = {
+                "month": r["month"],
+                "recurring": 0.0,
+                "mortgage": 0.0,
+            }
+            merchant_latest[merchant][r["category"]] = abs(r["total"])
         elif r["month"] == merchant_latest[merchant]["month"]:
-            merchant_latest[merchant]["total"] += abs(r["total"])
-    return round(sum(v["total"] for v in merchant_latest.values()), 2)
+            merchant_latest[merchant][r["category"]] += abs(r["total"])
+
+    recurring = round(sum(v["recurring"] for v in merchant_latest.values()), 2)
+    mortgage = round(sum(v["mortgage"] for v in merchant_latest.values()), 2)
+    return {
+        "recurring": recurring,
+        "mortgage": mortgage,
+        "total": round(recurring + mortgage, 2),
+    }
+
+
+def calculate_monthly_expenses_avg(conn) -> float:
+    return calculate_monthly_budget_breakdown(conn)["total"]
 
 
 def get_actual_spend_by_category(conn, month: str) -> dict:
@@ -647,37 +663,8 @@ def compute_income_plan(payload: dict, conn) -> dict:
     # Account balance is derived from both person balances by requirement.
     bills_account_balance = round(balance_1 + balance_2, 2)
     run_month = payload.get("run_month") or None  # e.g. "2026-05"
-    run_month_used = run_month
-
-    totals = get_expense_totals(conn, month=run_month)
-    if run_month and totals["monthly_expenses_total"] == 0:
-        latest_import = conn.execute(
-            "SELECT id FROM csv_imports ORDER BY imported_at DESC, id DESC LIMIT 1"
-        ).fetchone()
-        if latest_import:
-            import_totals = get_expense_totals_from_import_rows(
-                conn,
-                import_id=latest_import["id"],
-                month=run_month,
-            )
-            if import_totals["monthly_expenses_total"] > 0:
-                totals = import_totals
-
-        if totals["monthly_expenses_total"] == 0:
-            latest_month = get_latest_data_month(conn)
-            if latest_month and latest_month != run_month:
-                fallback_totals = get_expense_totals(conn, month=latest_month)
-                if fallback_totals["monthly_expenses_total"] == 0 and latest_import:
-                    fallback_totals = get_expense_totals_from_import_rows(
-                        conn,
-                        import_id=latest_import["id"],
-                        month=latest_month,
-                    )
-                if fallback_totals["monthly_expenses_total"] > 0:
-                    totals = fallback_totals
-                    run_month_used = latest_month
-
-    monthly_expenses_total = totals["monthly_expenses_total"]
+    budget = calculate_monthly_budget_breakdown(conn)
+    monthly_expenses_total = budget["total"]
 
     contribution_1 = round(monthly_expenses_total * (split_pct_1 / 100.0), 2)
     contribution_2 = round(monthly_expenses_total * (split_pct_2 / 100.0), 2)
@@ -717,7 +704,8 @@ def compute_income_plan(payload: dict, conn) -> dict:
             "buffer_goal": round(buffer_goal, 2),
             "bills_account_balance": round(bills_account_balance, 2),
             "run_month_requested": run_month,
-            "run_month_used": run_month_used,
+            "run_month_used": run_month,
+            "budget_basis": "latest_recurring_and_mortgage",
             "split_pct_1": round(split_pct_1, 2),
             "split_pct_2": round(split_pct_2, 2),
             "sinking_pct": round(sinking_pct, 2),
@@ -725,9 +713,9 @@ def compute_income_plan(payload: dict, conn) -> dict:
             "fun_pct": round(fun_pct, 2),
         },
         "monthly_expenses": {
-            "recurring": totals["recurring"],
-            "mortgage": totals["mortgage"],
-            "expense": totals["expenses"],
+            "recurring": budget["recurring"],
+            "mortgage": budget["mortgage"],
+            "expense": 0.0,
             "total": monthly_expenses_total,
         },
         "bills_split": {
