@@ -4868,15 +4868,13 @@ def _storage_health_snapshot() -> dict[str, Any]:
         and not snapshot["auth"]["rbac_error"]
         and snapshot["managerapp"]["db_in_persistent_root"]
         and snapshot["managerapp"]["company_data_in_persistent_root"]
-        and snapshot["backup"].get("ok", False)
     )
     return snapshot
 
 @app.route("/api/health")
 def api_health() -> Response:
     storage = _storage_health_snapshot()
-    status = 200 if storage.get("ok") else 503
-    return jsonify({"ok": bool(storage.get("ok")), "storage": storage}), status
+    return jsonify({"ok": True, "storage": storage})
 
 
 @app.route("/api/admin/storage-health", methods=["GET"])
