@@ -21,13 +21,14 @@ import signal
 import threading
 import tempfile
 import time
+import uuid
 import webbrowser
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import formataddr, parsedate_to_datetime
 from urllib.error import URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import urlopen
@@ -94,6 +95,10 @@ COMPANY_STORAGE_ROOT = ROOT.parent / "company_data"
 SESSION_USER_KEY = "dexter_user"
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
+
+
+class AuthLookupUnavailableError(RuntimeError):
+    """Raised when the persistent auth store cannot be queried safely."""
 
 try:
     RBAC_BUSY_TIMEOUT_MS = int(os.environ.get("DEXTER_RBAC_BUSY_TIMEOUT_MS", "3000") or "3000")
@@ -821,7 +826,7 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
         print(f"[find_auth_user] Failed to query auth database: {error_msg}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
-        return None, None
+        raise AuthLookupUnavailableError(error_msg) from e
 
 def update_user_last_login(user_id: int) -> None:
     try:
@@ -3047,6 +3052,77 @@ class AppManager:
         print("[dexter watchdog] Started — checking every %ds." % interval, file=sys.stderr)
 
 CONFIG = load_config()
+
+
+def _coerce_date_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+            return raw
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date().isoformat()
+        except ValueError:
+            pass
+        try:
+            return datetime.strptime(raw, "%Y/%m/%d").date().isoformat()
+        except ValueError:
+            pass
+        try:
+            return datetime.strptime(raw, "%m/%d/%Y").date().isoformat()
+        except ValueError:
+            pass
+        try:
+            parsed = parsedate_to_datetime(raw)
+            if parsed is not None:
+                return parsed.date().isoformat()
+        except (TypeError, ValueError, IndexError):
+            pass
+    return None
+
+
+def _get_effective_user_date() -> str:
+    override = _coerce_date_value(os.environ.get("DEXTER_USER_DATE") or os.environ.get("DEXTER_DATE_OVERRIDE"))
+    if override:
+        return override
+
+    try:
+        request_value = request.args.get("user_date") or request.headers.get("X-User-Date") or request.headers.get("X-Forwarded-Date")
+        override = _coerce_date_value(request_value)
+        if override:
+            return override
+    except Exception:
+        pass
+
+    public_base_url = str(CONFIG.get("mail", {}).get("public_base_url") or "").strip()
+    candidate_urls = []
+    if public_base_url:
+        candidate_urls.append(public_base_url.rstrip("/") + "/")
+    candidate_urls.extend(["https://dexterassist.com/", "https://app.dexterassist.com/"])
+
+    seen_urls: set[str] = set()
+    for candidate in candidate_urls:
+        if candidate in seen_urls:
+            continue
+        seen_urls.add(candidate)
+        try:
+            response = requests.get(candidate, timeout=2, allow_redirects=True)
+            response.raise_for_status()
+            header_value = response.headers.get("Date") or response.headers.get("Last-Modified")
+            parsed = _coerce_date_value(header_value)
+            if parsed:
+                return parsed
+        except Exception:
+            continue
+
+    return datetime.now().date().isoformat()
+
+
 MANAGER = AppManager(CONFIG)
 app = Flask(__name__, static_folder=None)
 _secret = _load_persistent_front_door_secret_key()
@@ -3060,6 +3136,11 @@ app.config["SESSION_COOKIE_SECURE"] = _env_flag("DEXTER_SESSION_COOKIE_SECURE", 
 app.config["SESSION_COOKIE_NAME"] = str(os.environ.get("DEXTER_SESSION_COOKIE_NAME", "dexter_session") or "dexter_session")
 app.config["PREFERRED_URL_SCHEME"] = "https" if app.config["SESSION_COOKIE_SECURE"] else "http"
 csrf = CSRFProtect(app)
+
+
+@app.context_processor
+def inject_user_date_context() -> dict[str, str]:
+    return {"user_date": _get_effective_user_date(), "current_date": _get_effective_user_date()}
 
 
 def _stop_child_apps_for_shutdown() -> None:
@@ -3268,7 +3349,20 @@ def auth_login() -> Response:
         if request.method == "POST":
             username = (request.form.get("username") or "").strip()
             password = request.form.get("password") or ""
-            key, user = find_auth_user(username)
+            try:
+                key, user = find_auth_user(username)
+            except AuthLookupUnavailableError as exc:
+                print(f"[auth_login] Auth lookup unavailable: {exc}", file=sys.stderr)
+                return Response(
+                    render_template(
+                        "login.html",
+                        error="Sign-in is temporarily unavailable. Please try again in a moment.",
+                        next_path=request.args.get("next", ""),
+                        action_url=url_for("auth_login"),
+                        register_url=url_for("auth_register"),
+                    ),
+                    status=503,
+                )
             if user and int(user.get("is_active", 1)) == 1 and is_user_locked_out(user):
                 error = f"Account temporarily locked. Try again in {LOGIN_LOCKOUT_MINUTES} minutes."
             elif user and int(user.get("is_active", 1)) == 1 and check_password_hash(str(user.get("password_hash", "")), password):
@@ -4712,6 +4806,9 @@ def _storage_health_snapshot() -> dict[str, Any]:
     manager_root = root / "managerapp"
     manager_db = manager_root / "manager_app.db"
     manager_company_data = manager_root / "company_data"
+    auth_root = AUTH_STORAGE_ROOT
+    auth_users_path = AUTH_USERS_PATH
+    auth_db_path = RBAC_DB_PATH
     snapshot["managerapp"] = {
         "root": str(manager_root),
         "db_path": str(manager_db),
@@ -4723,10 +4820,52 @@ def _storage_health_snapshot() -> dict[str, Any]:
         "company_data_in_persistent_root": _is_subpath(manager_company_data, root) if root.exists() else False,
     }
 
+    auth_users_count: int | None = None
+    if auth_users_path.exists() and auth_users_path.is_file():
+        try:
+            users_payload = json.loads(auth_users_path.read_text(encoding="utf-8"))
+            auth_users = users_payload.get("users") if isinstance(users_payload, dict) else None
+            if isinstance(auth_users, list):
+                auth_users_count = len(auth_users)
+            elif isinstance(users_payload, dict):
+                auth_users_count = len(users_payload)
+        except Exception:
+            auth_users_count = None
+
+    auth_db_user_count: int | None = None
+    auth_db_error = ""
+    try:
+        conn = get_rbac_db_connection()
+        try:
+            row = conn.execute("SELECT COUNT(*) AS count FROM users").fetchone()
+            auth_db_user_count = int(row["count"] if row and row["count"] is not None else 0)
+        finally:
+            conn.close()
+    except Exception as exc:
+        auth_db_error = f"{type(exc).__name__}: {exc}"
+
+    snapshot["auth"] = {
+        "root": str(auth_root),
+        "users_path": str(auth_users_path),
+        "rbac_db_path": str(auth_db_path),
+        "root_exists": auth_root.exists(),
+        "users_exists": auth_users_path.exists(),
+        "rbac_db_exists": auth_db_path.exists(),
+        "root_in_persistent_root": _is_subpath(auth_root, root) if root.exists() else False,
+        "users_in_persistent_root": _is_subpath(auth_users_path, root) if root.exists() else False,
+        "rbac_db_in_persistent_root": _is_subpath(auth_db_path, root) if root.exists() else False,
+        "users_count": auth_users_count,
+        "rbac_user_count": auth_db_user_count,
+        "rbac_error": auth_db_error,
+    }
+
     snapshot["backup"] = _manager_backup_status_payload()
 
     snapshot["ok"] = bool(
         root.exists()
+        and snapshot["auth"]["root_in_persistent_root"]
+        and snapshot["auth"]["rbac_db_in_persistent_root"]
+        and not snapshot["auth"]["rbac_error"]
         and snapshot["managerapp"]["db_in_persistent_root"]
         and snapshot["managerapp"]["company_data_in_persistent_root"]
         and snapshot["backup"].get("ok", False)
@@ -4735,7 +4874,9 @@ def _storage_health_snapshot() -> dict[str, Any]:
 
 @app.route("/api/health")
 def api_health() -> Response:
-    return jsonify({"ok": True, "storage": _storage_health_snapshot()})
+    storage = _storage_health_snapshot()
+    status = 200 if storage.get("ok") else 503
+    return jsonify({"ok": bool(storage.get("ok")), "storage": storage}), status
 
 
 @app.route("/api/admin/storage-health", methods=["GET"])

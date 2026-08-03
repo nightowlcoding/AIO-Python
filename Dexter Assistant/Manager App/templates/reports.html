@@ -87,7 +87,10 @@
     <div class="card" id="reportContainer" style="display: none;">
         <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
             <h5 class="mb-0" id="reportTitle"><i class="bi bi-file-earmark-bar-graph"></i> Report Results</h5>
-            <div>
+            <div class="d-flex gap-2 align-items-center">
+                <button type="button" class="btn btn-outline-light btn-sm" id="backToAllBtn" style="display:none;" onclick="backToAllEmployees()">
+                    <i class="bi bi-arrow-left"></i> Back to All Employees
+                </button>
                 <button type="button" class="btn btn-light btn-sm" onclick="exportToCSV()">
                     <i class="bi bi-download"></i> Export CSV
                 </button>
@@ -150,6 +153,9 @@ async function fetchManagerJson(path) {
 
 // Load employee names on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Scroll this page and the parent portal frame to the top on every load
+    window.scrollTo(0, 0);
+    try { window.parent.scrollTo(0, 0); } catch(e) {}
     loadEmployeeNames();
 });
 
@@ -242,6 +248,21 @@ function generateReport() {
     }
 }
 
+function drillToEmployee(name) {
+    document.getElementById('employeeName').value = name;
+    document.getElementById('reportType').value = 'employee';
+    document.getElementById('backToAllBtn').style.display = 'inline-flex';
+    generateReport();
+    window.scrollTo(0, 0);
+    try { window.parent.scrollTo(0, 0); } catch(e) {}
+}
+
+function backToAllEmployees() {
+    document.getElementById('employeeName').value = '';
+    document.getElementById('backToAllBtn').style.display = 'none';
+    generateReport();
+}
+
 function fetchCashDeductions(startDate, endDate) {
     fetchManagerJson(`/api/reports/cash-deductions?start_date=${startDate}&end_date=${endDate}`)
         .then(data => {
@@ -263,28 +284,48 @@ function displayCashDeductions(data) {
     const thead = document.getElementById('reportTableHead');
     const tbody = document.getElementById('reportTableBody');
     const summaryStats = document.getElementById('summaryStats');
-    // Set currentReportData for export
     currentReportData = [data];
-    // Table header
+
+    const entries = data.entries || [];
+
     thead.innerHTML = `
         <tr>
-            <th>Date</th>
-            <th>Total Deductions</th>
+            <th style="cursor:pointer;" onclick="sortTable('date')">Date <i class="bi bi-arrow-down-up"></i></th>
+            <th style="cursor:pointer;" onclick="sortTable('description')">Description <i class="bi bi-arrow-down-up"></i></th>
+            <th style="cursor:pointer;" onclick="sortTable('location')">Location <i class="bi bi-arrow-down-up"></i></th>
+            <th style="cursor:pointer;" onclick="sortTable('amount')">Amount <i class="bi bi-arrow-down-up"></i></th>
         </tr>
     `;
-    // Table body with clickable date
-    tbody.innerHTML = data.daily.map(row => `
-        <tr>
-            <td><a href="${buildManagerAppUrl(`/daily-log?date=${row.date}`)}" class="text-decoration-none" title="Open Daily Log for ${row.date}">${row.date}</a></td>
-            <td>$${row.deductions.toFixed(2)}</td>
-        </tr>
-    `).join('');
-    // Summary
+
+    if (entries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No deductions found for this period.</td></tr>';
+    } else {
+        tbody.innerHTML = entries.map(row => `
+            <tr>
+                <td><a href="${buildManagerAppUrl(`/daily-log?date=${row.date}`)}" class="text-decoration-none" title="Open Daily Log">${row.date}</a></td>
+                <td>${row.description || '<span class="text-muted">—</span>'}</td>
+                <td>${row.location   || '<span class="text-muted">—</span>'}</td>
+                <td class="fw-semibold">$${row.amount.toFixed(2)}</td>
+            </tr>
+        `).join('');
+    }
+
+    // Summary by description
+    const byDesc = {};
+    entries.forEach(e => { const k = e.description || 'Uncategorized'; byDesc[k] = (byDesc[k] || 0) + e.amount; });
+    const badges = Object.entries(byDesc)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `<span class="badge bg-secondary me-1 mb-1">${k}: $${v.toFixed(2)}</span>`)
+        .join('');
+
     summaryStats.innerHTML = `
-        <div class="alert alert-info mt-3">
+        ${badges ? `<div class="d-flex flex-wrap mt-3 mb-1">${badges}</div>` : ''}
+        <div class="alert alert-info mt-2 mb-0">
             <strong>Total Cash Deductions:</strong> $${data.total_deductions.toFixed(2)}
+            &nbsp;&middot;&nbsp; <strong>${entries.length}</strong> entr${entries.length === 1 ? 'y' : 'ies'}
         </div>
     `;
+
     document.getElementById('reportContainer').style.display = 'block';
     document.getElementById('reportTitle').innerHTML = '<i class="bi bi-cash-coin"></i> Cash Deductions Report';
 }
@@ -627,7 +668,8 @@ function displayEmployeePerformance(data) {
         // Populate table body
         tbody.innerHTML = data.map(row => `
             <tr>
-                <td><strong>${row.name}</strong></td>
+                <td><button type="button" class="btn btn-link p-0 fw-semibold text-start" onclick="drillToEmployee('${row.name.replace(/'/g, "\\'")}')"
+                    title="View ${row.name}'s detailed report">${row.name} <i class="bi bi-person-lines-fill ms-1" style="font-size:0.75rem;"></i></button></td>
                 <td>${row.shifts_worked}</td>
                 <td>$${row.total_sales.toFixed(2)}</td>
                 <td>$${row.avg_sales.toFixed(2)}</td>

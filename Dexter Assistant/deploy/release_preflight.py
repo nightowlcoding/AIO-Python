@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 RUNTIME_DATA_PREFIXES = [
+    "Dexter Assistant/dexter_assistant_users.json",
     "Dexter Assistant/dexter_assistant_rbac.db",
     "Dexter Assistant/Manager App/manager_app.db",
     "Dexter Assistant/ProductMixRestaurantDB/product_mix.db",

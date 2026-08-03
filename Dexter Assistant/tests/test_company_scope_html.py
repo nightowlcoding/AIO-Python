@@ -245,6 +245,23 @@ class CompanyScopeHtmlTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 200)
         self.assertIn("Account temporarily locked", blocked.get_data(as_text=True))
 
+    def test_login_returns_503_when_auth_lookup_is_unavailable(self) -> None:
+        with patch.object(
+            _dexter,
+            "find_auth_user",
+            side_effect=_dexter.AuthLookupUnavailableError("database is locked"),
+        ):
+            res = self.client.post(
+                "/auth/login",
+                data={"username": "mgr_alpha", "password": "manager-password-123"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(res.status_code, 503)
+        body = res.get_data(as_text=True)
+        self.assertIn("Sign-in is temporarily unavailable", body)
+        self.assertNotIn("Invalid username or password", body)
+
     def test_manager_login_redirects_without_starting_all_apps(self) -> None:
         with patch.object(_dexter.MANAGER, "start_all") as start_all:
             response = self.client.post(

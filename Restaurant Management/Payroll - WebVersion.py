@@ -62,7 +62,7 @@ def process_payroll(csv_path, include_kingsville_only_row=False):
     new_row3 = {
         'Employee': 'Lesli Rodriguez',
         'Job Title': 'Media Admin',
-        'Regular Hours': 15,
+        'Regular Hours': 20,
         'Overtime Hours': 0,
         'Declared Tips': 0,
         'Non-Cash Tips': 0,

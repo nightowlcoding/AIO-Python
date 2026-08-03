@@ -2000,76 +2000,6 @@ def api_daily_log_version():
     })
 
 
-@app.route('/cash-manager', methods=['GET', 'POST'])
-@login_required
-@company_required
-def cash_manager():
-    """Cash management"""
-    selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
-    active_tab = request.args.get('tab', 'drawer')
-    
-    if request.method == 'POST':
-        action = request.form.get('action')
-        
-        try:
-            if action == 'save_drawer':
-                # Save cash drawer counts
-                drawer_data = {
-                    'date': request.form.get('date'),
-                    'shift': request.form.get('shift'),
-                    'pennies': request.form.get('pennies', 0),
-                    'nickels': request.form.get('nickels', 0),
-                    'dimes': request.form.get('dimes', 0),
-                    'quarters': request.form.get('quarters', 0),
-                    'ones': request.form.get('ones', 0),
-                    'fives': request.form.get('fives', 0),
-                    'tens': request.form.get('tens', 0),
-                    'twenties': request.form.get('twenties', 0),
-                    'fifties': request.form.get('fifties', 0),
-                    'hundreds': request.form.get('hundreds', 0),
-                    'total': request.form.get('total', 0)
-                }
-                save_cash_drawer(current_user.current_company_id, drawer_data)
-                flash('Cash drawer saved successfully!', 'success')
-                
-            elif action == 'save_deduction':
-                # Save cash deduction
-                deduction_data = {
-                    'date': request.form.get('date'),
-                    'description': request.form.get('description'),
-                    'amount': request.form.get('amount', 0)
-                }
-                save_cash_deduction(current_user.current_company_id, deduction_data)
-                flash('Deduction saved successfully!', 'success')
-                
-            elif action == 'delete_deduction':
-                deduction_id = request.form.get('deduction_id')
-                delete_cash_deduction(deduction_id)
-                flash('Deduction deleted successfully!', 'success')
-            
-            db.log_action(
-                current_user.id,
-                f'cash_manager_{action}',
-                current_user.current_company_id,
-                {'date': request.form.get('date')}
-            )
-            
-            return redirect(url_for('cash_manager', date=request.form.get('date'), tab=active_tab))
-        except Exception as e:
-            flash(f'Error: {str(e)}', 'danger')
-    
-    # Load data
-    drawer_data = load_cash_drawer(current_user.current_company_id, selected_date)
-    deductions = load_cash_deductions(current_user.current_company_id, selected_date)
-    
-    return render_template(
-        'cash_manager.html',
-        date=selected_date,
-        active_tab=active_tab,
-        drawer_data=drawer_data,
-        deductions=deductions
-    )
-
 
 @app.route('/employees')
 @login_required
@@ -2388,7 +2318,7 @@ def api_daily_summary():
 @login_required
 @company_required
 def api_cash_deductions():
-    """Get total cash deductions for a date range"""
+    """Get cash deductions with per-entry breakdown for a date range"""
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     location_id = _resolve_effective_location_id(_effective_location_options(current_user.current_company_id))
@@ -2397,15 +2327,16 @@ def api_cash_deductions():
     else:
         data_dir = f"company_data/{current_user.current_company_id}/daily_logs"
     total_deductions = 0.0
+    entries = []
     daily_deductions = []
     if not os.path.exists(data_dir):
-        return jsonify({'success': True, 'total_deductions': 0.0, 'daily': []})
+        return jsonify({'success': True, 'total_deductions': 0.0, 'daily': [], 'entries': []})
     try:
         start = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
         end = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
     except:
         return jsonify({'success': False, 'error': 'Invalid date format'})
-    for filename in os.listdir(data_dir):
+    for filename in sorted(os.listdir(data_dir), reverse=True):
         if not filename.endswith('.csv') or filename.startswith('.'):
             continue
         date_str = filename.split('_')[0]
@@ -2417,34 +2348,44 @@ def api_cash_deductions():
                 continue
             if end and file_date > end:
                 continue
-            # Read CSV and extract deductions
-            filepath = f"{data_dir}/{filename}"
-            with open(filepath, 'r') as f:
-                reader = csv.reader(f)
-                rows = list(reader)
-                found = False
-                for row in rows:
-                    if row and row[0] in ['Cash Adjustments', 'Total Deductions']:
-                        try:
-                            deduction_val = float(row[1]) if len(row) > 1 and row[1] else 0.0
-                            total_deductions += deduction_val
-                            daily_deductions.append({
-                                'date': file_date.strftime('%Y-%m-%d'),
-                                'deductions': round(deduction_val, 2)
-                            })
-                            found = True
-                        except Exception:
-                            continue
-                if not found:
-                    daily_deductions.append({
-                        'date': file_date.strftime('%Y-%m-%d'),
-                        'deductions': 0.0
-                    })
+            shift = filename.split('_')[1].replace('.csv', '') if '_' in filename else 'Day'
+            log = load_daily_log(
+                current_user.current_company_id,
+                file_date.strftime('%Y-%m-%d'),
+                location_id=location_id,
+                shift=shift,
+            )
+            if not log:
+                continue
+            descs   = log.get('deduction_descs', [])
+            locs    = log.get('deduction_locations', [])
+            amounts = log.get('deduction_amounts', [])
+            day_total = 0.0
+            for i, desc in enumerate(descs):
+                amt = float(amounts[i]) if i < len(amounts) else 0.0
+                loc = locs[i] if i < len(locs) else ''
+                # Skip void entries — voids are tracked separately on employee records
+                if 'void' in str(desc).lower():
+                    continue
+                entries.append({
+                    'date':        file_date.strftime('%Y-%m-%d'),
+                    'description': desc,
+                    'location':    loc,
+                    'amount':      round(amt, 2),
+                })
+                day_total        += amt
+                total_deductions += amt
+            if descs:
+                daily_deductions.append({'date': file_date.strftime('%Y-%m-%d'), 'deductions': round(day_total, 2)})
         except Exception:
             continue
-    # Sort by date
     daily_deductions.sort(key=lambda x: x['date'], reverse=True)
-    return jsonify({'success': True, 'total_deductions': round(total_deductions, 2), 'daily': daily_deductions})
+    return jsonify({
+        'success':          True,
+        'total_deductions': round(total_deductions, 2),
+        'daily':            daily_deductions,
+        'entries':          entries,
+    })
 
 
 @app.route('/api/reports/tax-exempt')
