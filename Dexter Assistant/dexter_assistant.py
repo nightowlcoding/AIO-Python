@@ -3190,11 +3190,28 @@ except Exception as e:
 # ----- Dexter UI brand injection -------------------------------------------
 _DEXTER_UI_DIR = ROOT / "dexter-ui"
 
+_PUBLIC_ASSET_CACHE_SECONDS = 3600
+
+def _apply_public_asset_cache_headers(response: Response, *, max_age_seconds: int = _PUBLIC_ASSET_CACHE_SECONDS) -> Response:
+    # Emit explicit CDN cache headers so edge caches can store shared assets.
+    cache_policy = (
+        f"public, max-age={int(max_age_seconds)}, s-maxage={int(max_age_seconds)}, "
+        "stale-while-revalidate=60"
+    )
+    response.headers["Cache-Control"] = cache_policy
+    response.headers["CDN-Cache-Control"] = cache_policy
+    response.headers["Cloudflare-CDN-Cache-Control"] = cache_policy
+    response.headers.pop("Pragma", None)
+    response.headers.pop("Expires", None)
+    return response
+
 def _dexter_ui_static(filename: str):
-    return send_file(_DEXTER_UI_DIR / filename, max_age=3600)
+    response = send_file(_DEXTER_UI_DIR / filename, max_age=_PUBLIC_ASSET_CACHE_SECONDS)
+    return _apply_public_asset_cache_headers(response)
 
 def _dexter_ui_brand(filename: str):
-    return send_file(_DEXTER_UI_DIR / "brand" / filename, max_age=3600)
+    response = send_file(_DEXTER_UI_DIR / "brand" / filename, max_age=_PUBLIC_ASSET_CACHE_SECONDS)
+    return _apply_public_asset_cache_headers(response)
 
 if _DEXTER_UI_DIR.exists():
     app.add_url_rule(
@@ -3605,7 +3622,8 @@ def auth_logout() -> Response:
 @app.route("/favicon.ico")
 def front_door_favicon() -> Response:
     if FRONT_DOOR_FAVICON.exists():
-        return send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=3600)
+        response = send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=_PUBLIC_ASSET_CACHE_SECONDS)
+        return _apply_public_asset_cache_headers(response)
     return jsonify({"ok": False, "message": "Not found"}), 404
 
 @app.route("/branding/logo")
@@ -3614,11 +3632,14 @@ def branding_logo() -> Response:
 
 def _default_branding_logo_response() -> Response:
     if BRANDING_LOGO_PATH.exists():
-        return send_file(BRANDING_LOGO_PATH, mimetype="image/png", max_age=3600)
+        response = send_file(BRANDING_LOGO_PATH, mimetype="image/png", max_age=_PUBLIC_ASSET_CACHE_SECONDS)
+        return _apply_public_asset_cache_headers(response)
     if LEGACY_BRANDING_LOGO_PATH.exists():
-        return send_file(LEGACY_BRANDING_LOGO_PATH, mimetype="image/png", max_age=3600)
+        response = send_file(LEGACY_BRANDING_LOGO_PATH, mimetype="image/png", max_age=_PUBLIC_ASSET_CACHE_SECONDS)
+        return _apply_public_asset_cache_headers(response)
     if FRONT_DOOR_FAVICON.exists():
-        return send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=3600)
+        response = send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=_PUBLIC_ASSET_CACHE_SECONDS)
+        return _apply_public_asset_cache_headers(response)
     return jsonify({"ok": False, "message": "Not found"}), 404
 
 @app.route("/branding/company-logo")

@@ -3,7 +3,7 @@ services:
     name: dexter-assistant
     env: python
     buildCommand: pip install -r "Dexter Assistant/requirements_dexter_assistant.txt"
-    startCommand: gunicorn --chdir "Dexter Assistant" --workers 1 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT dexter_assistant:app
+    startCommand: gunicorn --chdir "Dexter Assistant" --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT dexter_assistant:app
     domains:
       - dexterassist.com
       - www.dexterassist.com
