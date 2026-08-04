@@ -3099,27 +3099,6 @@ def _get_effective_user_date() -> str:
     except Exception:
         pass
 
-    public_base_url = str(CONFIG.get("mail", {}).get("public_base_url") or "").strip()
-    candidate_urls = []
-    if public_base_url:
-        candidate_urls.append(public_base_url.rstrip("/") + "/")
-    candidate_urls.extend(["https://dexterassist.com/", "https://app.dexterassist.com/"])
-
-    seen_urls: set[str] = set()
-    for candidate in candidate_urls:
-        if candidate in seen_urls:
-            continue
-        seen_urls.add(candidate)
-        try:
-            response = requests.get(candidate, timeout=2, allow_redirects=True)
-            response.raise_for_status()
-            header_value = response.headers.get("Date") or response.headers.get("Last-Modified")
-            parsed = _coerce_date_value(header_value)
-            if parsed:
-                return parsed
-        except Exception:
-            continue
-
     return datetime.now().date().isoformat()
 
 
@@ -3140,7 +3119,8 @@ csrf = CSRFProtect(app)
 
 @app.context_processor
 def inject_user_date_context() -> dict[str, str]:
-    return {"user_date": _get_effective_user_date(), "current_date": _get_effective_user_date()}
+    resolved_date = _get_effective_user_date()
+    return {"user_date": resolved_date, "current_date": resolved_date}
 
 
 def _stop_child_apps_for_shutdown() -> None:
