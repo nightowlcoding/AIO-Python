@@ -667,43 +667,44 @@
 
                         <div class="tab-content" id="drawerCpTabContent">
                             {% for cp_key, cp_label in [('start_day','Start Day'),('end_day','End Day'),('start_night','Start Night'),('end_night','End Night')] %}
+                            {% set cp_values = (log_data.drawer_checkpoints.get(cp_key, {}) if log_data and log_data.drawer_checkpoints else {}) %}
                             <div class="tab-pane fade {% if cp_key == 'start_day' %}show active{% endif %}" id="cp_{{ cp_key }}" role="tabpanel">
                                 <div class="row g-2 align-items-start mt-1">
                                     <div class="col-6">
                                         <h6 class="text-success mb-1 small"><i class="bi bi-coin"></i> Coins</h6>
                                         <div class="row g-1">
                                             <div class="col-6"><label class="form-label small mb-0">Pennies</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="pennies"      data-value="0.01" value="0" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="pennies"      data-value="0.01" value="{{ cp_values.get('pennies', 0) }}" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">Nickels</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="nickels"      data-value="0.05" value="0" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="nickels"      data-value="0.05" value="{{ cp_values.get('nickels', 0) }}" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">Dimes</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="dimes"        data-value="0.10" value="0" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="dimes"        data-value="0.10" value="{{ cp_values.get('dimes', 0) }}" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">Quarters</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="quarters"     data-value="0.25" value="0" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="quarters"     data-value="0.25" value="{{ cp_values.get('quarters', 0) }}" min="0" max="9999"    oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-12"><label class="form-label small mb-0">Rolled Coins ($)</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="rolled_coins" data-value="1"    value="0" min="0" max="9999.99" step="0.01" oninput="enforceCurrencyAmount(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="rolled_coins" data-value="1"    value="{{ cp_values.get('rolled_coins', 0) }}" min="0" max="9999.99" step="0.01" oninput="enforceCurrencyAmount(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                         </div>
                                     </div>
                                     <div class="col-6">
                                         <h6 class="text-success mb-1 small"><i class="bi bi-cash-stack"></i> Bills</h6>
                                         <div class="row g-1">
                                             <div class="col-6"><label class="form-label small mb-0">$1 Bills</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="ones"     data-value="1"   value="0" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="ones"     data-value="1"   value="{{ cp_values.get('ones', 0) }}" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">$5 Bills</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="fives"    data-value="5"   value="0" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="fives"    data-value="5"   value="{{ cp_values.get('fives', 0) }}" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">$10 Bills</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="tens"     data-value="10"  value="0" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="tens"     data-value="10"  value="{{ cp_values.get('tens', 0) }}" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">$20 Bills</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="twenties" data-value="20"  value="0" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="twenties" data-value="20"  value="{{ cp_values.get('twenties', 0) }}" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">$50 Bills</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="fifties"  data-value="50"  value="0" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="fifties"  data-value="50"  value="{{ cp_values.get('fifties', 0) }}" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                             <div class="col-6"><label class="form-label small mb-0">$100 Bills</label>
-                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="hundreds" data-value="100" value="0" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
+                                                <input type="number" class="form-control form-control-sm cp-denom" data-cp="{{ cp_key }}" data-denom="hundreds" data-value="100" value="{{ cp_values.get('hundreds', 0) }}" min="0" max="9999" oninput="enforceMaxDigits(this);calcCpTotal('{{ cp_key }}')" onchange="calcCpTotal('{{ cp_key }}')"></div>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="small fw-semibold text-info mt-2">
-                                    {{ cp_label }} Total: $<span id="cp_total_{{ cp_key }}">0.00</span>
+                                    {{ cp_label }} Total: $<span id="cp_total_{{ cp_key }}">{{ '%.2f'|format(cp_values.get('drawer_total', 0)|float) }}</span>
                                 </div>
                             </div>
                             {% endfor %}
