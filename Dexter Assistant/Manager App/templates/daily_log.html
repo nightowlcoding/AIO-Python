@@ -3275,6 +3275,14 @@ function updateCheckpointUI() {
     }
     
     // Update meta display
+    const checkpointMetaTextEl = document.getElementById('checkpointMetaText');
+    const checkpointMetaDisplayEl = document.getElementById('checkpointMetaDisplay');
+    const checkpointComparisonDisplayEl = document.getElementById('checkpointComparisonDisplay');
+
+    if (!checkpointMetaTextEl || !checkpointMetaDisplayEl || !checkpointComparisonDisplayEl) {
+        return;
+    }
+
     if (activeCheckpoint && drawerCheckpoints[activeCheckpoint]) {
         const checkpoint = drawerCheckpoints[activeCheckpoint];
         const timestamp = checkpoint.timestamp ? new Date(checkpoint.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
@@ -3285,12 +3293,12 @@ function updateCheckpointUI() {
             'end_night': 'End Night'
         };
         const displayText = `${displayNames[activeCheckpoint] || activeCheckpoint} | ${timestamp || 'no time'}`;
-        document.getElementById('checkpointMetaText').textContent = displayText;
-        document.getElementById('checkpointMetaDisplay').style.display = 'block';
+        checkpointMetaTextEl.textContent = displayText;
+        checkpointMetaDisplayEl.style.display = 'block';
         updateCheckpointComparison(activeCheckpoint);
     } else {
-        document.getElementById('checkpointMetaDisplay').style.display = 'none';
-        document.getElementById('checkpointComparisonDisplay').style.display = 'none';
+        checkpointMetaDisplayEl.style.display = 'none';
+        checkpointComparisonDisplayEl.style.display = 'none';
     }
 }
 
@@ -3402,7 +3410,8 @@ function calcCpTotal(cpKey) {
 }
 
 function initCheckpointTabs() {
-    ['start_day','end_day','start_night','end_night'].forEach(cpKey => {
+    const orderedKeys = ['start_day', 'end_day', 'start_night', 'end_night'];
+    orderedKeys.forEach(cpKey => {
         const cp = drawerCheckpoints[cpKey];
         if (!cp) return;
         document.querySelectorAll(`.cp-denom[data-cp="${cpKey}"]`).forEach(input => {
@@ -3411,6 +3420,31 @@ function initCheckpointTabs() {
         const span = document.getElementById(`cp_total_${cpKey}`);
         if (span && cp.drawer_total !== undefined) span.textContent = parseFloat(cp.drawer_total).toFixed(2);
     });
+
+    // Ensure one checkpoint is active so legacy hidden fields and deposit math use saved values.
+    if (!activeCheckpoint || !drawerCheckpoints[activeCheckpoint]) {
+        activeCheckpoint = orderedKeys.find(cpKey => {
+            const cp = drawerCheckpoints[cpKey];
+            return cp && typeof cp === 'object' && Object.keys(cp).length > 0;
+        }) || null;
+    }
+
+    if (activeCheckpoint && drawerCheckpoints[activeCheckpoint]) {
+        const cp = drawerCheckpoints[activeCheckpoint];
+        const h = id => document.getElementById(id);
+        if (h('hidden_pennies'))      h('hidden_pennies').value      = cp?.pennies ?? 0;
+        if (h('hidden_nickels'))      h('hidden_nickels').value      = cp?.nickels ?? 0;
+        if (h('hidden_dimes'))        h('hidden_dimes').value        = cp?.dimes ?? 0;
+        if (h('hidden_quarters'))     h('hidden_quarters').value     = cp?.quarters ?? 0;
+        if (h('hidden_rolled_coins')) h('hidden_rolled_coins').value = cp?.rolled_coins ?? 0;
+        if (h('hidden_ones'))         h('hidden_ones').value         = cp?.ones ?? 0;
+        if (h('hidden_fives'))        h('hidden_fives').value        = cp?.fives ?? 0;
+        if (h('hidden_tens'))         h('hidden_tens').value         = cp?.tens ?? 0;
+        if (h('hidden_twenties'))     h('hidden_twenties').value     = cp?.twenties ?? 0;
+        if (h('hidden_fifties'))      h('hidden_fifties').value      = cp?.fifties ?? 0;
+        if (h('hidden_hundreds'))     h('hidden_hundreds').value     = cp?.hundreds ?? 0;
+        if (h('drawerTotalInput'))    h('drawerTotalInput').value    = Number(cp?.drawer_total || 0).toFixed(2);
+    }
 }
 
 // stubs — kept so any residual references don't throw
@@ -3712,6 +3746,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (checkpointInput) {
         checkpointInput.value = JSON.stringify(drawerCheckpoints);
     }
+
+    // Rehydrate drawer checkpoint tabs from saved server-side data.
+    initCheckpointTabs();
     
     updateCheckpointUI();
     syncDailyLogSummary();
