@@ -139,6 +139,8 @@ _MGR_BACKUP_STATE_LOCK = threading.Lock()
 _MGR_BACKUP_LAST_RUN: dict[str, Any] | None = None
 _MGR_BACKUP_THREAD_STARTED = False
 _RBAC_WAL_DISABLED = False
+_RBAC_DB_PATH_VERIFIED: Path | None = None
+_RBAC_DB_PATH_LOCK = threading.Lock()
 _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = False
 
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
@@ -325,6 +327,12 @@ CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at DESC);
 def _find_writable_db_path() -> Path:
     """Find a writable path for the RBAC database with fallbacks."""
     global RBAC_DB_PATH
+    global _RBAC_DB_PATH_VERIFIED
+
+    with _RBAC_DB_PATH_LOCK:
+        if _RBAC_DB_PATH_VERIFIED is not None:
+            return _RBAC_DB_PATH_VERIFIED
+
     allow_ephemeral = _env_flag("DEXTER_ALLOW_EPHEMERAL_RBAC", default=False)
     if _running_on_render:
         _emergency_prune_local_backups_for_space()
@@ -363,6 +371,8 @@ def _find_writable_db_path() -> Path:
             test_conn.close()
 
             RBAC_DB_PATH = db_path
+            with _RBAC_DB_PATH_LOCK:
+                _RBAC_DB_PATH_VERIFIED = db_path
             print(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}", file=sys.stderr)
             return db_path
         except (OSError, sqlite3.OperationalError) as e:
@@ -379,6 +389,7 @@ def _find_writable_db_path() -> Path:
 
 def get_rbac_db_connection() -> sqlite3.Connection:
     global _RBAC_WAL_DISABLED
+    global _RBAC_DB_PATH_VERIFIED
     try:
         # Find a writable database path
         db_path = _find_writable_db_path()
@@ -403,10 +414,22 @@ def get_rbac_db_connection() -> sqlite3.Connection:
         return conn
     except sqlite3.OperationalError as e:
         error_msg = str(e)
+        with _RBAC_DB_PATH_LOCK:
+            _RBAC_DB_PATH_VERIFIED = None
         print(f"[get_rbac_db_connection] ERROR: Failed to connect to RBAC DB: {error_msg}", file=sys.stderr)
         print(f"[get_rbac_db_connection]   Primary path: {RBAC_DB_PATH.resolve()}", file=sys.stderr)
         print(f"[get_rbac_db_connection]   Primary writable: {os.access(RBAC_DB_PATH.parent, os.W_OK) if RBAC_DB_PATH.parent.exists() else 'N/A'}", file=sys.stderr)
         raise
+
+def _is_transient_sqlite_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    transient_markers = (
+        "database is locked",
+        "database schema is locked",
+        "disk i/o error",
+        "unable to open database file",
+    )
+    return any(marker in message for marker in transient_markers)
 
 def seed_default_roles(conn: sqlite3.Connection) -> None:
     for role_name in ("Super Admin", "Manager", "Employee"):
@@ -801,26 +824,34 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
         return None, None
 
     try:
-        conn = get_rbac_db_connection()
-        try:
-            row = conn.execute(
-                """
-                 SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login,
-                     u.failed_login_attempts, u.last_failed_login, u.lockout_until,
-                       u.company_id, c.name AS company_name, r.name AS role_name
-                FROM users u
-                JOIN roles r ON r.id = u.role_id
-                LEFT JOIN companies c ON c.id = u.company_id
-                WHERE LOWER(u.username) = LOWER(?)
-                LIMIT 1
-                """,
-                (normalized,),
-            ).fetchone()
-            if not row:
-                return None, None
-            return str(row["username"]), dict(row)
-        finally:
-            conn.close()
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                conn = get_rbac_db_connection()
+                try:
+                    row = conn.execute(
+                        """
+                         SELECT u.id, u.username, u.password_hash, u.is_active, u.last_login,
+                             u.failed_login_attempts, u.last_failed_login, u.lockout_until,
+                               u.company_id, c.name AS company_name, r.name AS role_name
+                        FROM users u
+                        JOIN roles r ON r.id = u.role_id
+                        LEFT JOIN companies c ON c.id = u.company_id
+                        WHERE LOWER(u.username) = LOWER(?)
+                        LIMIT 1
+                        """,
+                        (normalized,),
+                    ).fetchone()
+                    if not row:
+                        return None, None
+                    return str(row["username"]), dict(row)
+                finally:
+                    conn.close()
+            except sqlite3.OperationalError as sqlite_exc:
+                if attempt < (max_attempts - 1) and _is_transient_sqlite_error(sqlite_exc):
+                    time.sleep(0.15)
+                    continue
+                raise
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"[find_auth_user] Failed to query auth database: {error_msg}", file=sys.stderr)
