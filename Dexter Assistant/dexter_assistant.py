@@ -6681,7 +6681,10 @@ def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str,
 
 def _manager_backup_config() -> dict[str, Any]:
     keep_snapshots = max(1, int(os.environ.get("DEXTER_MGR_BACKUP_KEEP_SNAPSHOTS", "672")))
-    enabled = _env_flag("DEXTER_MGR_BACKUP_ENABLED", default=True)
+    if _running_on_render and not _env_flag("DEXTER_FORCE_MGR_BACKUP_ON_RENDER", default=False):
+        enabled = False
+    else:
+        enabled = _env_flag("DEXTER_MGR_BACKUP_ENABLED", default=True)
     nas_enabled = _env_flag("DEXTER_NAS_BACKUP_ENABLED", default=(os.name == "nt"))
     nas_required = _env_flag("DEXTER_NAS_BACKUP_REQUIRED", default=False)
     nas_root = str((os.environ.get("DEXTER_NAS_BACKUP_ROOT") or DEFAULT_NAS_BACKUP_ROOT).strip())
