@@ -937,9 +937,33 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
         print(f"[find_auth_user] Failed to query auth database: {error_msg}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
+
+        # Emergency fallback: permit sign-in using JSON auth store when RBAC DB is unavailable.
+        users = load_auth_users()
+        payload = users.get(normalized)
+        if isinstance(payload, dict):
+            fallback_role_name = "Super Admin" if bool(payload.get("is_admin")) else "Employee"
+            fallback_user = {
+                "id": 0,
+                "username": normalized,
+                "password_hash": str(payload.get("password_hash") or ""),
+                "is_active": 1,
+                "last_login": payload.get("last_login"),
+                "failed_login_attempts": 0,
+                "last_failed_login": None,
+                "lockout_until": None,
+                "company_id": 1,
+                "company_name": "Default Company",
+                "role_name": fallback_role_name,
+            }
+            print("[find_auth_user] Using JSON fallback auth user due to RBAC lookup failure", file=sys.stderr)
+            return normalized, fallback_user
+
         raise AuthLookupUnavailableError(error_msg) from e
 
 def update_user_last_login(user_id: int) -> None:
+    if int(user_id) <= 0:
+        return
     try:
         conn = get_rbac_db_connection()
         try:
@@ -975,6 +999,8 @@ def is_user_locked_out(user: dict[str, Any]) -> bool:
     return bool(lockout_dt and datetime.now() < lockout_dt)
 
 def register_failed_login_attempt(user_id: int) -> tuple[int, datetime | None]:
+    if int(user_id) <= 0:
+        return 0, None
     try:
         now = datetime.now()
         conn = get_rbac_db_connection()
