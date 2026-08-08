@@ -148,6 +148,39 @@ _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = False
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
 
 
+def _allow_automated_deletes() -> bool:
+    # Safety-first default: block automated deletions unless explicitly enabled.
+    return _env_flag("DEXTER_ALLOW_AUTOMATED_DELETES", default=False)
+
+
+def _is_path_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _safe_remove_tree(path: Path, *, allowed_roots: tuple[Path, ...], reason: str) -> bool:
+    if not _allow_automated_deletes():
+        print(f"[dexter] Auto-delete blocked (flag disabled) for {path} [{reason}]", file=sys.stderr)
+        return False
+
+    resolved = path.resolve()
+    allowed = any(_is_path_within(resolved, root) or resolved == root.resolve() for root in allowed_roots)
+    if not allowed:
+        print(f"[dexter] Auto-delete blocked (outside allowed roots): {resolved} [{reason}]", file=sys.stderr)
+        return False
+
+    try:
+        shutil.rmtree(resolved, ignore_errors=True)
+        print(f"[dexter] Auto-delete executed: {resolved} [{reason}]", file=sys.stderr)
+        return True
+    except OSError as exc:
+        print(f"[dexter] Auto-delete failed for {resolved}: {exc} [{reason}]", file=sys.stderr)
+        return False
+
+
 def _emergency_prune_local_backups_for_space(max_keep: int = 0) -> None:
     global _EMERGENCY_BACKUP_PRUNE_ATTEMPTED
     if _EMERGENCY_BACKUP_PRUNE_ATTEMPTED:
@@ -155,13 +188,25 @@ def _emergency_prune_local_backups_for_space(max_keep: int = 0) -> None:
     _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = True
 
     backup_tree = _render_data_root / "backups"
+    manager_backup_tree = backup_tree / "managerapp"
 
     try:
-        if backup_tree.exists() and backup_tree.is_dir():
-            shutil.rmtree(backup_tree, ignore_errors=True)
-            print("[dexter] Emergency backup prune executed (cleared /dexter-data/backups)", file=sys.stderr)
+        if manager_backup_tree.exists() and manager_backup_tree.is_dir():
+            removed_count = 0
+            for pattern in ("critical_snapshot_*", "full_snapshot_*"):
+                for snapshot_dir in sorted(manager_backup_tree.glob(pattern), key=lambda p: p.name):
+                    if snapshot_dir.is_dir() and _safe_remove_tree(
+                        snapshot_dir,
+                        allowed_roots=(manager_backup_tree,),
+                        reason="emergency-backup-prune",
+                    ):
+                        removed_count += 1
+            print(
+                f"[dexter] Emergency backup prune completed (removed {removed_count} snapshot dirs under {manager_backup_tree})",
+                file=sys.stderr,
+            )
         else:
-            print("[dexter] Emergency backup prune skipped (backup tree not found)", file=sys.stderr)
+            print("[dexter] Emergency backup prune skipped (manager backup tree not found)", file=sys.stderr)
     except OSError as prune_error:
         print(f"[dexter] Emergency backup prune skipped: {prune_error}", file=sys.stderr)
 
@@ -6814,11 +6859,15 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
                 shutil.copytree(snapshot_dir, nas_target, dirs_exist_ok=True)
                 result["nas_sync"]["copied"] = True
                 cutoff = datetime.utcnow().timestamp() - (15 * 24 * 60 * 60)
-                for old_snapshot in sorted([p for p in nas_root.glob("snapshot_*") if p.is_dir()], key=lambda p: p.name):
+                for old_snapshot in sorted([p for p in nas_root.glob("*_snapshot_*") if p.is_dir()], key=lambda p: p.name):
                     try:
                         if old_snapshot.stat().st_mtime < cutoff:
-                            shutil.rmtree(old_snapshot, ignore_errors=True)
-                            result["nas_pruned"].append(str(old_snapshot))
+                            if _safe_remove_tree(
+                                old_snapshot,
+                                allowed_roots=(nas_root,),
+                                reason="nas-backup-retention-prune",
+                            ):
+                                result["nas_pruned"].append(str(old_snapshot))
                     except OSError:
                         continue
             except Exception as nas_exc:
@@ -6826,15 +6875,16 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
                 if cfg_nas_required:
                     raise RuntimeError(f"NAS backup required but failed: {nas_exc}")
 
-        snapshots = sorted(
-            [p for p in backup_root.glob("snapshot_*") if p.is_dir()],
-            key=lambda p: p.name,
-        )
+        snapshots = sorted([p for p in backup_root.glob("*_snapshot_*") if p.is_dir()], key=lambda p: p.name)
         keep = int(cfg["keep_snapshots"])
         if len(snapshots) > keep:
             for old in snapshots[: len(snapshots) - keep]:
-                shutil.rmtree(old, ignore_errors=True)
-                result["pruned"].append(str(old))
+                if _safe_remove_tree(
+                    old,
+                    allowed_roots=(backup_root,),
+                    reason="manager-backup-retention-prune",
+                ):
+                    result["pruned"].append(str(old))
 
         result["ok"] = True
         result["message"] = "Backup completed"
