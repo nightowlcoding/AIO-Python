@@ -141,6 +141,8 @@ _MGR_BACKUP_THREAD_STARTED = False
 _RBAC_WAL_DISABLED = False
 _RBAC_DB_PATH_VERIFIED: Path | None = None
 _RBAC_DB_PATH_LOCK = threading.Lock()
+_AUTH_RECOVERY_LOCK = threading.Lock()
+_AUTH_RECOVERY_LAST_ATTEMPT_TS = 0.0
 _EMERGENCY_BACKUP_PRUNE_ATTEMPTED = False
 
 DEFAULT_NAS_BACKUP_ROOT = r"\\RAMIREZCLANNAS\personal_folder\DexterStorage"
@@ -182,19 +184,46 @@ def _load_persistent_front_door_secret_key() -> str:
     if env_key:
         return env_key
 
-    secret_path = ROOT / ".dexter_secret"
-    try:
-        existing = secret_path.read_text(encoding="utf-8").strip()
-        if existing:
-            return existing
-    except FileNotFoundError:
-        pass
+    preferred_secret_path = AUTH_STORAGE_ROOT / ".dexter_secret"
+    legacy_secret_path = ROOT / ".dexter_secret"
+
+    candidate_paths: list[Path] = []
+    for candidate in (preferred_secret_path, legacy_secret_path):
+        if candidate not in candidate_paths:
+            candidate_paths.append(candidate)
+
+    for secret_path in candidate_paths:
+        try:
+            existing = secret_path.read_text(encoding="utf-8").strip()
+            if existing:
+                if secret_path != preferred_secret_path:
+                    try:
+                        preferred_secret_path.parent.mkdir(parents=True, exist_ok=True)
+                        preferred_secret_path.write_text(existing, encoding="utf-8")
+                    except OSError:
+                        pass
+                return existing
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
 
     new_key = secrets.token_hex(32)
-    try:
-        secret_path.write_text(new_key, encoding="utf-8")
-    except OSError:
-        pass
+    for secret_path in candidate_paths:
+        try:
+            secret_path.parent.mkdir(parents=True, exist_ok=True)
+            secret_path.write_text(new_key, encoding="utf-8")
+            return new_key
+        except OSError:
+            continue
+
+    # Last-resort fallback: prefer stable derivation on Render over random per-start key churn.
+    if _running_on_render:
+        render_service_id = str(os.environ.get("RENDER_SERVICE_ID") or "").strip()
+        if render_service_id:
+            stable_seed = f"dexter:{render_service_id}:{AUTH_STORAGE_ROOT}"
+            return hashlib.sha256(stable_seed.encode("utf-8")).hexdigest()
+
     return new_key
 
 
@@ -430,6 +459,52 @@ def _is_transient_sqlite_error(exc: Exception) -> bool:
         "unable to open database file",
     )
     return any(marker in message for marker in transient_markers)
+
+def _looks_like_recoverable_auth_store_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    markers = (
+        "no such table",
+        "unable to open database file",
+        "database disk image is malformed",
+        "file is not a database",
+        "attempt to write a readonly database",
+        "readonly database",
+        "disk i/o error",
+    )
+    return any(marker in message for marker in markers)
+
+def _attempt_auth_store_recovery(reason: Exception | None = None) -> bool:
+    global _AUTH_RECOVERY_LAST_ATTEMPT_TS
+    global _RBAC_DB_PATH_VERIFIED
+
+    now_ts = time.time()
+    with _AUTH_RECOVERY_LOCK:
+        # Avoid storming migrations if many requests fail at once.
+        if (now_ts - float(_AUTH_RECOVERY_LAST_ATTEMPT_TS)) < 10.0:
+            return False
+        _AUTH_RECOVERY_LAST_ATTEMPT_TS = now_ts
+
+    try:
+        with _RBAC_DB_PATH_LOCK:
+            _RBAC_DB_PATH_VERIFIED = None
+        initialize_rbac_db()
+        migrate_legacy_json_users_to_sqlite()
+        migrate_add_task_fields_v1()
+        migrate_add_password_reset_fields_v1()
+        migrate_add_company_scope_v1()
+        migrate_add_company_profiles_v1()
+        migrate_add_company_email_settings_v1()
+        migrate_add_login_lockout_fields_v1()
+        migrate_add_user_location_assignments_v1()
+        ensure_default_super_admin_user()
+        print("[auth_recovery] Auth store recovery succeeded", file=sys.stderr)
+        return True
+    except Exception as recovery_exc:
+        print(
+            f"[auth_recovery] Recovery failed after auth error ({type(reason).__name__ if reason else 'unknown'}): {type(recovery_exc).__name__}: {recovery_exc}",
+            file=sys.stderr,
+        )
+        return False
 
 def seed_default_roles(conn: sqlite3.Connection) -> None:
     for role_name in ("Super Admin", "Manager", "Employee"):
@@ -824,7 +899,7 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
         return None, None
 
     try:
-        max_attempts = 2
+        max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 conn = get_rbac_db_connection()
@@ -848,6 +923,11 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
                 finally:
                     conn.close()
             except sqlite3.OperationalError as sqlite_exc:
+                if _looks_like_recoverable_auth_store_error(sqlite_exc):
+                    recovered = _attempt_auth_store_recovery(sqlite_exc)
+                    if recovered and attempt < (max_attempts - 1):
+                        time.sleep(0.15)
+                        continue
                 if attempt < (max_attempts - 1) and _is_transient_sqlite_error(sqlite_exc):
                     time.sleep(0.15)
                     continue
@@ -3134,7 +3214,7 @@ def _get_effective_user_date() -> str:
 
 
 MANAGER = AppManager(CONFIG)
-app = Flask(__name__, static_folder=None)
+app = Flask(__name__, static_folder=None, template_folder=str(ROOT / "templates"))
 _secret = _load_persistent_front_door_secret_key()
 app.secret_key = _secret
 app.config["WTF_CSRF_SECRET_KEY"] = _secret
