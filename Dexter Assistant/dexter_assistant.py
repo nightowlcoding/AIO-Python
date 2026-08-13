@@ -3523,6 +3523,9 @@ def require_auth_for_protected_routes() -> Response | None:
         return None
     if session.get(SESSION_USER_KEY):
         return None
+    # Ops endpoints authenticate with a shared token instead of a user session.
+    if request.path.startswith("/api/ops/") and _ops_backup_token_ok():
+        return None
     if request.path.startswith("/api/"):
         return jsonify({"ok": False, "message": "Authentication required"}), 401
     return redirect(url_for("auth_login", next=request.full_path.rstrip("?")))
