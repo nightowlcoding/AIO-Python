@@ -907,6 +907,36 @@
                                 }
                                 var show = !active || active.id === 'catch_all' ? true : !!allowed[productId];
                                 row.style.display = show ? '' : 'none';
+                                if (active && active.id !== 'catch_all' && productId && !row.querySelector('.dexter-remove-from-list')) {
+                                    var actionCell = row.cells && row.cells[row.cells.length - 1];
+                                    if (actionCell) {
+                                        var removeButton = doc.createElement('button');
+                                        removeButton.type = 'button';
+                                        removeButton.className = 'btn btn-danger dexter-remove-from-list';
+                                        removeButton.textContent = 'Remove from List';
+                                        removeButton.style.cssText = 'padding:4px 8px;margin:2px;font-size:11px;';
+                                        removeButton.title = 'Remove this product from the selected list only';
+                                        removeButton.addEventListener('click', function (event) {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            if (!frame.contentWindow.confirm('Remove this product from the selected list?')) return;
+                                            frame.contentWindow.fetch('/api/shared/inventory-default-groups/list-remove-item', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ list_id: active.id, product_number: productId })
+                                            }).then(function (resp) { return resp.json(); }).then(function (removePayload) {
+                                                if (!removePayload || !removePayload.ok) {
+                                                    frame.contentWindow.alert((removePayload && removePayload.message) || 'Unable to remove product.');
+                                                    return;
+                                                }
+                                                row.style.display = 'none';
+                                            }).catch(function () {
+                                                frame.contentWindow.alert('Unable to remove product right now.');
+                                            });
+                                        });
+                                        actionCell.appendChild(removeButton);
+                                    }
+                                }
                                 if (show) visibleManageCount += 1;
                             });
 
@@ -968,6 +998,7 @@
                                 actions.style.marginLeft = '0';
                                 actions.innerHTML = [
                                     '<button type="button" class="btn btn-secondary" id="dexterIc3ListCreate">+ New List</button>',
+                                    '<button type="button" class="btn btn-primary" id="dexterIc3ListDuplicate">Duplicate List</button>',
                                     '<button type="button" class="btn btn-secondary" id="dexterIc3ListRename">Rename</button>',
                                     '<button type="button" class="btn btn-danger" id="dexterIc3ListDelete">Delete</button>',
                                     '<button type="button" class="btn btn-primary" id="dexterIc3ListSaveVisible">Save Visible Items</button>'
@@ -977,6 +1008,90 @@
                                 } else {
                                     productsTab.insertBefore(actions, productsTab.firstChild);
                                 }
+
+                                var duplicateBtn = doc.getElementById('dexterIc3ListDuplicate');
+                                if (duplicateBtn && duplicateBtn.dataset.dexterBound !== '1') {
+                                    duplicateBtn.dataset.dexterBound = '1';
+                                    duplicateBtn.addEventListener('click', function () {
+                                        var sourceId = selectedList();
+                                        var source = findListById(sourceId);
+                                        var name = frame.contentWindow.prompt('Copy this inventory list as:', source ? safeText(source.name || '') + ' Copy' : 'New Inventory List');
+                                        name = safeText(name);
+                                        if (!name) return;
+                                        frame.contentWindow.fetch('/api/shared/inventory-default-groups/list-duplicate', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ source_list_id: sourceId, name: name })
+                                        }).then(function (resp) { return resp.json(); }).then(function (duplicatePayload) {
+                                            if (!duplicatePayload || !duplicatePayload.ok) {
+                                                frame.contentWindow.alert((duplicatePayload && duplicatePayload.message) || 'Unable to duplicate list.');
+                                                return;
+                                            }
+                                            frame.contentWindow.location.reload();
+                                        }).catch(function () {
+                                            frame.contentWindow.alert('Unable to duplicate list right now.');
+                                        });
+                                    });
+                                }
+                            }
+
+                            if (!frame.contentWindow.__dexterIc3AddProductPatched) {
+                                frame.contentWindow.__dexterIc3AddProductPatched = true;
+                                var descriptionInput = doc.getElementById('newDescription');
+                                if (descriptionInput && !doc.getElementById('newNickname')) {
+                                    var nicknameGroup = doc.createElement('div');
+                                    nicknameGroup.className = 'form-group';
+                                    nicknameGroup.innerHTML = '<label for="newNickname">Nickname:</label><input type="text" id="newNickname" maxlength="80" placeholder="Short name (optional)" />';
+                                    descriptionInput.closest('.form-group').after(nicknameGroup);
+                                }
+                                frame.contentWindow.addProduct = function () {
+                                    var read = function (id) {
+                                        var input = doc.getElementById(id);
+                                        return input ? String(input.value || '').trim() : '';
+                                    };
+                                    var description = read('newDescription');
+                                    if (!description) {
+                                        frame.contentWindow.alert('Description is required');
+                                        return;
+                                    }
+                                    var selectedId = safeText(inventoryListState.selectedListId || 'catch_all') || 'catch_all';
+                                    var selected = findListById(selectedId);
+                                    var data = {
+                                        product_number: read('newProductNum'),
+                                        nickname: read('newNickname'),
+                                        description: description,
+                                        brand: read('newBrand'),
+                                        package_size: read('newPackageSize'),
+                                        group_name: read('newGroupName') || 'OTHER',
+                                        insert_position: read('insertPosition') ? Number(read('insertPosition')) : null
+                                    };
+                                    frame.contentWindow.fetch('/api/products/add', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(data)
+                                    }).then(function (resp) { return resp.json(); }).then(function (result) {
+                                        if (!result || !result.success) throw new Error((result && result.message) || 'Unable to add product.');
+                                        var productNumber = safeText(result.product_number || (result.product || {})['Product Number']);
+                                        var nextItems = selected && Array.isArray(selected.item_keys) ? selected.item_keys.slice() : [];
+                                        if (productNumber && nextItems.indexOf(productNumber) < 0) nextItems.push(productNumber);
+                                        var endpoint = selectedId === 'catch_all'
+                                            ? '/api/shared/inventory-default-groups/catch-all-sync'
+                                            : '/api/shared/inventory-default-groups/list-items';
+                                        var body = selectedId === 'catch_all'
+                                            ? { product_ids: nextItems }
+                                            : { list_id: selectedId, item_keys: nextItems };
+                                        return frame.contentWindow.fetch(endpoint, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify(body)
+                                        }).then(function (membershipResp) { return membershipResp.json(); }).then(function (membership) {
+                                            if (!membership || (!membership.ok && membership.success !== true)) throw new Error((membership && membership.message) || 'Product was not added to the selected list.');
+                                            frame.contentWindow.location.reload();
+                                        });
+                                    }).catch(function (error) {
+                                        frame.contentWindow.alert('Error: ' + error.message);
+                                    });
+                                };
                             }
 
                             var selectorOptions = inventoryListState.lists.map(function (listItem) {

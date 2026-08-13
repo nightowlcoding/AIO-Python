@@ -1741,6 +1741,258 @@ PRODUCT_DETAIL_SCRIPT = r"""
         });
     }
 
+    function installProductNicknameColumn() {
+        const table = document.getElementById('productManagementTable');
+        const body = document.getElementById('productManagementTableBody');
+        if (!table || !body) return;
+        if (!table.dataset.ic3NicknameObserver) {
+            table.dataset.ic3NicknameObserver = '1';
+            const observer = new MutationObserver(() => installProductNicknameColumn());
+            observer.observe(body, { childList: true });
+        }
+
+        const cachedProducts = window.__ic3ProductsForNickname || [];
+        if (!cachedProducts.length && !table.dataset.ic3NicknameLoading) {
+            table.dataset.ic3NicknameLoading = '1';
+            fetch('/api/products?t=' + Date.now()).then((response) => response.json()).then((products) => {
+                window.__ic3ProductsForNickname = Array.isArray(products) ? products : [];
+                table.dataset.ic3NicknameLoading = '0';
+                installProductNicknameColumn();
+                installInventoryNicknameLabels();
+            }).catch(() => { table.dataset.ic3NicknameLoading = '0'; });
+            return;
+        }
+        const productsByNumber = {};
+        cachedProducts.forEach((product) => {
+            const number = String(product['Product Number'] || '').trim();
+            if (number) productsByNumber[number] = product;
+        });
+        const headers = Array.from(table.querySelectorAll('thead th'));
+        const descriptionIndex = headers.findIndex((header) => (header.innerText || '').trim().toLowerCase() === 'description');
+        if (descriptionIndex < 0) return;
+        let nicknameIndex = headers.findIndex((header) => (header.innerText || '').trim().toLowerCase() === 'nickname');
+        if (nicknameIndex < 0) {
+            const nicknameHeader = document.createElement('th');
+            nicknameHeader.textContent = 'Nickname';
+            headers[descriptionIndex].after(nicknameHeader);
+            nicknameIndex = descriptionIndex + 1;
+        }
+
+        const productIndex = headers.findIndex((header) => (header.innerText || '').trim().toLowerCase().includes('product #'));
+        Array.from(body.querySelectorAll('tr')).forEach((row) => {
+            const cells = Array.from(row.cells || []);
+            if (productIndex < 0 || !cells[productIndex]) return;
+            const productNumber = String(cells[productIndex].innerText || '').trim();
+            const product = productsByNumber[productNumber] || {};
+            let nicknameCell = row.cells[nicknameIndex];
+            if (!nicknameCell) {
+                nicknameCell = document.createElement('td');
+                row.cells[descriptionIndex].after(nicknameCell);
+            }
+            const description = String(product['Product Description'] || '');
+            const nickname = String(product['Product Nickname'] || '').trim();
+            nicknameCell.title = description;
+            nicknameCell.dataset.ic3NicknameCell = '1';
+            if (productNumber && !nicknameCell.querySelector('.ic3-inline-nickname-input')) {
+                nicknameCell.textContent = '';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'ic3-inline-nickname-input';
+                input.value = nickname;
+                input.maxLength = 80;
+                input.placeholder = 'Add nickname';
+                input.dataset.productNumber = productNumber;
+                input.title = description;
+                input.style.cssText = 'box-sizing:border-box;width:calc(100% - 4px);min-width:90px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;';
+                nicknameCell.appendChild(input);
+            }
+        });
+
+        const productsTab = document.getElementById('products');
+        if (productsTab && !document.getElementById('ic3BulkSaveNicknames')) {
+            const saveButton = document.createElement('button');
+            saveButton.type = 'button';
+            saveButton.id = 'ic3BulkSaveNicknames';
+            saveButton.className = 'btn btn-primary';
+            saveButton.textContent = 'Save Nicknames';
+            saveButton.title = 'Save all nickname fields in the product table';
+            saveButton.style.cssText = 'margin:8px 0;padding:8px 14px;';
+            saveButton.addEventListener('click', async () => {
+                const entries = Array.from(document.querySelectorAll('.ic3-inline-nickname-input')).map((input) => ({
+                    product_number: String(input.dataset.productNumber || '').trim(),
+                    nickname: String(input.value || '').trim(),
+                })).filter((entry) => entry.product_number);
+                saveButton.disabled = true;
+                saveButton.textContent = 'Saving...';
+                try {
+                    const response = await fetch('/api/products/update-nicknames', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ updates: entries }),
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) throw new Error(result.message || 'Unable to save nicknames.');
+                    window.__ic3ProductsForNickname = null;
+                    saveButton.textContent = 'Saved';
+                    setTimeout(() => { saveButton.textContent = 'Save Nicknames'; }, 1200);
+                } catch (error) {
+                    saveButton.textContent = 'Save Nicknames';
+                    window.alert(error.message);
+                } finally {
+                    saveButton.disabled = false;
+                }
+            });
+            const toolbar = document.getElementById('dexterIc3ListToolbar');
+            (toolbar || productsTab).insertBefore(saveButton, (toolbar || productsTab).firstChild);
+        }
+
+        const widthByLabel = {
+            '#': '5%', 'product #': '9%', 'description': '23%', 'nickname': '17%',
+            'brand': '12%', 'package size': '10%', 'category': '9%', 'sub for': '7%', 'case count': '5%', 'actions': '6%'
+        };
+        const desiredOrder = ['#', 'product #', 'description', 'nickname', 'brand', 'package size', 'category', 'sub for', 'case count', 'actions'];
+        const headerRow = table.querySelector('thead tr');
+        const headerCells = Array.from(headerRow ? headerRow.children : []);
+        const headerNodesByLabel = {};
+        headerCells.forEach((header) => {
+            const label = (header.innerText || '').trim().toLowerCase();
+            if (label) headerNodesByLabel[label] = header;
+        });
+        const orderedHeaderNodes = desiredOrder.map((label) => headerNodesByLabel[label]).filter(Boolean);
+        if (headerRow && orderedHeaderNodes.length === headerCells.length) {
+            orderedHeaderNodes.forEach((header) => headerRow.appendChild(header));
+            Array.from(body.querySelectorAll('tr')).forEach((row) => {
+                const productNumber = String(row.dataset.productNumber || '').trim();
+                const product = productsByNumber[productNumber] || {};
+                const existingCells = Array.from(row.children);
+                const usedCells = new Set();
+                const findCell = (predicate) => {
+                    const cell = existingCells.find((candidate) => !usedCells.has(candidate) && predicate(candidate));
+                    if (cell) usedCells.add(cell);
+                    return cell;
+                };
+                const makeCell = () => document.createElement('td');
+                const rowNumberCell = findCell((cell) => /^\s*(?:👆\s*)?#?\s*\d+\s*$/.test(cell.innerText || '')) || makeCell();
+                rowNumberCell.textContent = '# ' + String(rowNumberCell.innerText || '').replace(/[^0-9]/g, '');
+
+                let productCell = findCell((cell) => cell.querySelector && cell.querySelector('.ic3-product-link'));
+                if (!productCell) productCell = makeCell();
+                let productLink = productCell.querySelector('.ic3-product-link');
+                if (!productLink) {
+                    productLink = document.createElement('a');
+                    productLink.href = '#';
+                    productLink.className = 'ic3-product-link';
+                    productLink.style.cssText = 'font-weight:700;color:#1a4db3;text-decoration:underline;';
+                    productCell.textContent = '';
+                    productCell.appendChild(productLink);
+                }
+                productLink.dataset.productNumber = productNumber;
+                productLink.textContent = productNumber;
+
+                let descriptionCell = findCell((cell) => String(cell.innerText || '').trim() === String(product['Product Description'] || '').trim()) || makeCell();
+                descriptionCell.textContent = String(product['Product Description'] || '');
+                let nicknameCell = findCell((cell) => cell.dataset && cell.dataset.ic3NicknameCell === '1') || makeCell();
+                nicknameCell.dataset.ic3NicknameCell = '1';
+                let nicknameInput = nicknameCell.querySelector('.ic3-inline-nickname-input');
+                if (!nicknameInput) {
+                    nicknameInput = document.createElement('input');
+                    nicknameInput.type = 'text';
+                    nicknameInput.className = 'ic3-inline-nickname-input';
+                    nicknameInput.maxLength = 80;
+                    nicknameInput.placeholder = 'Add nickname';
+                    nicknameCell.textContent = '';
+                    nicknameCell.appendChild(nicknameInput);
+                }
+                nicknameInput.dataset.productNumber = productNumber;
+                nicknameInput.value = String(product['Product Nickname'] || '').trim();
+                nicknameCell.title = String(product['Product Description'] || '');
+                const brandCell = findCell((cell) => String(cell.innerText || '').trim() === String(product['Product Brand'] || '').trim()) || makeCell();
+                brandCell.textContent = String(product['Product Brand'] || '');
+                const packageCell = findCell((cell) => String(cell.innerText || '').trim() === String(product['Product Package Size'] || '').trim()) || makeCell();
+                packageCell.textContent = String(product['Product Package Size'] || '');
+                const categoryCell = findCell((cell) => cell.querySelector && cell.querySelector('span')) || makeCell();
+                categoryCell.innerHTML = '<span style="background:#e9ecef;padding:4px 8px;border-radius:4px;font-size:0.85em;font-weight:600;"></span>';
+                categoryCell.querySelector('span').textContent = String(product['Group Name'] || 'OTHER');
+                const subCell = findCell((cell) => String(cell.innerText || '').trim() === '-' || String(cell.innerText || '').trim() === '') || makeCell();
+                if (!subCell.innerText.trim()) subCell.textContent = '-';
+                const caseCell = findCell((cell) => cell.querySelector && cell.querySelector('.case-count-checkbox')) || makeCell();
+                const caseCheckbox = caseCell.querySelector('.case-count-checkbox');
+                if (caseCheckbox) caseCheckbox.dataset.productNum = productNumber;
+                const actionsCell = findCell((cell) => cell.classList && cell.classList.contains('action-buttons')) || makeCell();
+
+                [rowNumberCell, productCell, descriptionCell, nicknameCell, brandCell, packageCell, categoryCell, subCell, caseCell, actionsCell].forEach((cell) => row.appendChild(cell));
+            });
+        }
+        table.style.tableLayout = 'fixed';
+        Array.from(table.querySelectorAll('thead th')).forEach((header) => {
+            const label = (header.innerText || '').trim().toLowerCase();
+            const width = widthByLabel[label];
+            if (width) header.style.width = width;
+        });
+        table.querySelectorAll('.edit-product-btn').forEach((button) => {
+            button.style.padding = '3px 6px';
+            button.style.fontSize = '11px';
+            button.style.minHeight = '26px';
+            button.style.whiteSpace = 'nowrap';
+        });
+        if (!document.getElementById('ic3ProductTableResponsiveStyle')) {
+            const style = document.createElement('style');
+            style.id = 'ic3ProductTableResponsiveStyle';
+            style.textContent = [
+                '#productManagementTable { width:100%; table-layout:fixed; }',
+                '#productManagementTable th, #productManagementTable td { padding:6px 5px; }',
+                '#productManagementTable td:nth-child(3), #productManagementTable td:nth-child(4), #productManagementTable td:nth-child(5), #productManagementTable td:nth-child(6) { overflow:hidden; text-overflow:ellipsis; }',
+                '@media (max-width: 768px) {',
+                '  #products { overflow-x:hidden; }',
+                '  #productManagementTable { min-width:760px; font-size:12px; }',
+                '  #productManagementTable th, #productManagementTable td { padding:5px 4px; }',
+                '  #productManagementTable .ic3-inline-nickname-input { min-width:72px !important; font-size:12px; padding:3px 4px !important; }',
+                '  #productManagementTable .edit-product-btn { padding:2px 5px !important; font-size:10px !important; min-height:24px !important; }',
+                '  #productManagementTable th:nth-child(1), #productManagementTable td:nth-child(1) { width:32px !important; }',
+                '  #productManagementTable th:nth-child(2), #productManagementTable td:nth-child(2) { width:72px !important; }',
+                '  #productManagementTable th:nth-child(3), #productManagementTable td:nth-child(3) { width:190px !important; }',
+                '  #productManagementTable th:nth-child(4), #productManagementTable td:nth-child(4) { width:125px !important; }',
+                '  #productManagementTable th:nth-child(10), #productManagementTable td:nth-child(10) { width:58px !important; }',
+                '}'
+            ].join('\n');
+            (document.head || document.documentElement).appendChild(style);
+        }
+        table.querySelectorAll('th, td').forEach((cell) => {
+            cell.style.overflow = 'hidden';
+            cell.style.textOverflow = 'ellipsis';
+            cell.style.whiteSpace = 'nowrap';
+        });
+    }
+
+    function installInventoryNicknameLabels() {
+        const container = document.getElementById('categoriesContainer');
+        if (!container) return;
+        const products = window.__ic3ProductsForNickname || [];
+        if (!products.length) return;
+        const productsByNumber = {};
+        products.forEach((product) => {
+            const number = String(product['Product Number'] || '').trim();
+            if (number) productsByNumber[number] = product;
+        });
+
+        container.querySelectorAll('tbody tr').forEach((row) => {
+            const quantityInput = row.querySelector('input.quantity-input');
+            const productNumber = quantityInput ? String(quantityInput.id || '').replace(/^qty_/, '').trim() : '';
+            const product = productsByNumber[productNumber];
+            const itemCell = row.cells && row.cells[0];
+            if (!product || !itemCell || !productNumber) return;
+            const description = String(product['Product Description'] || '').trim();
+            const nickname = String(product['Product Nickname'] || '').trim();
+            const displayName = nickname || description;
+            if (!displayName) return;
+            if (itemCell.dataset.ic3InventoryLabel !== displayName) {
+                itemCell.textContent = displayName;
+                itemCell.dataset.ic3InventoryLabel = displayName;
+            }
+            itemCell.title = nickname ? description : '';
+        });
+    }
+
     function ensureProductDetailTab() {
         const tabsContainer = document.querySelector('.tabs');
         const container = document.querySelector('.container');
@@ -1926,6 +2178,7 @@ PRODUCT_DETAIL_SCRIPT = r"""
         const orderRows = Array.isArray(payload.order_history) ? payload.order_history : [];
         const inventoryRows = Array.isArray(payload.inventory_history) ? payload.inventory_history : [];
         const caseCountType = String(product.case_count_type || 'No');
+        const nickname = String(product.nickname || '');
         const locationLabel = String(payload.location_label || payload.location || state.location || '').trim();
         const editDisabled = isAllLocationsMode();
 
@@ -1941,6 +2194,13 @@ PRODUCT_DETAIL_SCRIPT = r"""
         html += '<button class="btn ic3LocationScopeBtn" data-scope="current" style="background:' + (state.locationScope === 'current' ? '#1f2937' : '#e5e7eb') + '; color:' + (state.locationScope === 'current' ? '#fff' : '#111827') + ';">Current Location</button>';
         html += '<button class="btn ic3LocationScopeBtn" data-scope="all" style="background:' + (state.locationScope === 'all' ? '#1f2937' : '#e5e7eb') + '; color:' + (state.locationScope === 'all' ? '#fff' : '#111827') + ';">All Locations</button>';
         html += '<span style="font-size:12px; color:#64748b;">Scope: <strong>' + escapeHtml(locationLabel || '-') + '</strong></span>';
+        html += '</div>';
+
+        html += '<div style="display:flex; align-items:end; gap:8px; flex-wrap:wrap; margin-bottom:12px;">';
+        html += '<div><label style="display:block; font-size:12px; color:#64748b;">Nickname</label>';
+        html += '<input id="ic3ProductNickname" type="text" maxlength="80" value="' + escapeHtml(nickname) + '" placeholder="Short name (optional)" style="padding:6px 8px; border:1px solid #cbd5e1; border-radius:6px; width:210px;" /></div>';
+        html += '<button class="btn" id="ic3SaveNickname" style="background:#059669; color:white;">Save Nickname</button>';
+        html += '<span id="ic3NicknameStatus" style="font-size:12px; color:#374151;"></span>';
         html += '</div>';
 
         html += '<div style="display:flex; align-items:end; gap:8px; flex-wrap:wrap; margin-bottom:12px;">';
@@ -2084,6 +2344,25 @@ PRODUCT_DETAIL_SCRIPT = r"""
     }
 
     document.addEventListener('click', function (event) {
+        const nicknameButton = event.target && event.target.closest ? event.target.closest('.ic3-inline-nickname') : null;
+        if (nicknameButton) {
+            event.preventDefault();
+            event.stopPropagation();
+            const productNumber = String(nicknameButton.dataset.productNumber || '').trim();
+            const current = nicknameButton.parentElement ? String(nicknameButton.parentElement.innerText || '').replace(/Edit\s*$/, '').trim() : '';
+            const nextNickname = window.prompt('Nickname (leave blank to use description):', current === '-' ? '' : current);
+            if (nextNickname === null || !productNumber) return;
+            fetch('/api/products/update-nickname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ product_number: productNumber, nickname: nextNickname.trim() })
+            }).then((response) => response.json()).then((result) => {
+                if (!result.success) throw new Error(result.message || 'Unable to save nickname.');
+                window.__ic3ProductsForNickname = null;
+                installProductNicknameColumn();
+            }).catch((error) => window.alert(error.message));
+            return;
+        }
         const link = event.target && event.target.closest ? event.target.closest('.ic3-product-link') : null;
         if (link) {
             event.preventDefault();
@@ -2130,6 +2409,26 @@ PRODUCT_DETAIL_SCRIPT = r"""
             }).catch((error) => {
                 if (status) status.textContent = 'Error: ' + error.message;
                 showToast('Case count update failed: ' + error.message, 'error');
+            });
+            return;
+        }
+
+        if (event.target && event.target.id === 'ic3SaveNickname') {
+            event.preventDefault();
+            const input = document.getElementById('ic3ProductNickname');
+            const status = document.getElementById('ic3NicknameStatus');
+            if (!state.productNumber) return;
+            if (status) status.textContent = 'Saving...';
+            postJson('/api/products/update-nickname', {
+                product_number: state.productNumber,
+                nickname: input ? String(input.value || '').trim() : '',
+            }).then(() => {
+                if (status) status.textContent = 'Saved.';
+                showToast('Nickname saved.', 'success');
+                loadProductDetail(state.productNumber, state.windowKey);
+            }).catch((error) => {
+                if (status) status.textContent = 'Error: ' + error.message;
+                showToast('Nickname update failed: ' + error.message, 'error');
             });
             return;
         }
@@ -2192,6 +2491,14 @@ PRODUCT_DETAIL_SCRIPT = r"""
     const runInstall = function () {
         ensureProductDetailTab();
         installProductLinks();
+        setTimeout(installProductNicknameColumn, 250);
+        setTimeout(installInventoryNicknameLabels, 300);
+        const categories = document.getElementById('categoriesContainer');
+        if (categories && !categories.dataset.ic3NicknameObserver) {
+            categories.dataset.ic3NicknameObserver = '1';
+            const observer = new MutationObserver(() => installInventoryNicknameLabels());
+            observer.observe(categories, { childList: true, subtree: true });
+        }
     };
 
     if (document.readyState === 'loading') {
@@ -2276,11 +2583,12 @@ MOBILE_UI_SCRIPT = r"""
         '  #ic3MobileViewToggle button.active { background: #2563eb; border-color: #1d4ed8; color: #ffffff; }',
         '  #ic3MobileCards { display: none; gap: 10px; margin-top: 8px; }',
         '  #ic3MobileCards.cards-visible { display: grid !important; grid-template-columns: 1fr; }',
-        '  .ic3-mobile-card { border: 1px solid #dbe4f0; background: #ffffff; border-radius: 10px; padding: 10px; box-shadow: 0 2px 6px rgba(15,23,42,0.06); }',
+        '  .ic3-mobile-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid #dbe4f0; background: #ffffff; border-radius: 10px; padding: 10px; box-shadow: 0 2px 6px rgba(15,23,42,0.06); }',
+        '  .ic3-mobile-info { min-width: 0; }',
         '  .ic3-mobile-category { font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }',
         '  .ic3-mobile-item { font-size: 0.95rem; font-weight: 700; color: #111827; line-height: 1.25; margin-bottom: 4px; }',
         '  .ic3-mobile-meta { font-size: 0.82rem; color: #6b7280; margin-bottom: 8px; }',
-        '  .ic3-mobile-controls { display: grid; grid-template-columns: minmax(94px, 120px) 1fr; gap: 8px; align-items: center; }',
+        '  .ic3-mobile-controls { display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 94px; }',
         '  .ic3-mobile-controls input { min-height: 40px; font-size: 1rem; width: 100%; padding: 6px 10px; border: 2px solid #d1d5db; border-radius: 8px; }',
         '  .ic3-mobile-controls button { min-height: 38px; font-size: 0.82rem; border-radius: 8px; }',
         '  .ic3-table-hidden-mobile { display: none !important; }',
@@ -2298,7 +2606,7 @@ MOBILE_UI_SCRIPT = r"""
     const mobileQuery = window.matchMedia('(max-width: 768px)');
     const storageKey = 'ic3-mobile-view-mode';
     const state = {
-        mode: localStorage.getItem(storageKey) === 'table' ? 'table' : 'cards',
+        mode: 'cards',
         scheduled: false,
     };
 
@@ -2384,6 +2692,23 @@ MOBILE_UI_SCRIPT = r"""
         };
     }
 
+    function selectQuantityOnFocus(input) {
+        if (!input || input.dataset.ic3SelectAllBound === '1') return;
+        input.dataset.ic3SelectAllBound = '1';
+        input.addEventListener('focus', function () {
+            window.requestAnimationFrame(function () {
+                try { input.select(); } catch (_) {}
+            });
+        });
+        input.addEventListener('click', function () {
+            try { input.select(); } catch (_) {}
+        });
+    }
+
+    function installQuantitySelectAll() {
+        document.querySelectorAll('input.quantity-input, #ic3MobileCards input[type="number"]').forEach(selectQuantityOnFocus);
+    }
+
     function renderCards() {
         const hosts = ensureMobileHosts();
         if (!hosts) {
@@ -2443,6 +2768,7 @@ MOBILE_UI_SCRIPT = r"""
                 data.qtyInput.value = cardQty.value;
                 data.qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
             });
+            selectQuantityOnFocus(cardQty);
 
             controls.appendChild(cardQty);
 
@@ -2459,9 +2785,12 @@ MOBILE_UI_SCRIPT = r"""
             }
             controls.appendChild(actionWrap);
 
-            card.appendChild(category);
-            card.appendChild(item);
-            card.appendChild(meta);
+            const info = document.createElement('div');
+            info.className = 'ic3-mobile-info';
+            info.appendChild(category);
+            info.appendChild(item);
+            info.appendChild(meta);
+            card.appendChild(info);
             card.appendChild(controls);
             cardsRoot.appendChild(card);
         });
@@ -2487,13 +2816,21 @@ MOBILE_UI_SCRIPT = r"""
         }
 
         hosts.toggle.style.display = 'grid';
-        renderCards();
+        const activeElement = document.activeElement;
+        const editingQuantity = activeElement && activeElement.matches && activeElement.matches('#ic3MobileCards input[type="number"]');
+        if (!editingQuantity) {
+            renderCards();
+        }
         const showCards = state.mode === 'cards';
         hosts.cards.classList.toggle('cards-visible', showCards);
         hosts.categories.classList.toggle('ic3-table-hidden-mobile', showCards);
     }
 
     function scheduleRefresh() {
+        const activeElement = document.activeElement;
+        if (activeElement && activeElement.matches && activeElement.matches('#ic3MobileCards input[type="number"]')) {
+            return;
+        }
         if (state.scheduled) {
             return;
         }
@@ -2515,12 +2852,17 @@ MOBILE_UI_SCRIPT = r"""
             el.addEventListener('input', scheduleRefresh);
             el.addEventListener('change', scheduleRefresh);
         });
+        installQuantitySelectAll();
 
         if (!document.body.dataset.ic3MobileObserverInstalled) {
             const observer = new MutationObserver(function () {
+                const activeElement = document.activeElement;
+                if (activeElement && activeElement.matches && activeElement.matches('#ic3MobileCards input[type="number"]')) {
+                    return;
+                }
                 scheduleRefresh();
             });
-            observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+            observer.observe(document.body, { childList: true, subtree: true });
             document.body.dataset.ic3MobileObserverInstalled = '1';
         }
     }
@@ -3625,6 +3967,45 @@ def _find_product_record_by_number(products_list_obj, product_number: str):
     return None
 
 
+def _next_global_product_number(products_list_obj):
+    used_numbers = set()
+    for product in products_list_obj or []:
+        if isinstance(product, dict):
+            number = _canonical_product_number(product.get("Product Number"))
+            if number:
+                used_numbers.add(number)
+    inventory_data_obj = globals().get("inventory_data") or {}
+    for location_data in inventory_data_obj.values() if isinstance(inventory_data_obj, dict) else []:
+        for day_data in location_data.values() if isinstance(location_data, dict) else []:
+            if isinstance(day_data, dict):
+                used_numbers.update(
+                    number for number in (_canonical_product_number(key) for key in day_data) if number
+                )
+
+    candidate = max((int(number) for number in used_numbers if number.isdigit()), default=0) + 1
+    while str(candidate) in used_numbers:
+        candidate += 1
+    return str(candidate)
+
+
+def _persist_products_runtime(products_list_obj):
+    save_products = globals().get("save_products_to_csv")
+    if callable(save_products):
+        try:
+            save_products()
+        except Exception:
+            logging.exception("Legacy IC3 product save failed")
+    try:
+        path = ROOT / "data" / "products_list.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(products_list_obj, handle, ensure_ascii=True, indent=2)
+        return True
+    except Exception:
+        logging.exception("Failed to persist IC3 products")
+        return False
+
+
 def _register_product_detail_endpoints(flask_app) -> None:
     if "get_product_detail_runtime" in flask_app.view_functions:
         return
@@ -3667,6 +4048,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
         product_payload = {
             "product_number": canonical_num,
             "description": str((product or {}).get("Product Description") or ""),
+            "nickname": str((product or {}).get("Product Nickname") or ""),
             "brand": str((product or {}).get("Product Brand") or ""),
             "package_size": str((product or {}).get("Product Package Size") or ""),
             "group_name": str((product or {}).get("Group Name") or ""),
@@ -3809,6 +4191,22 @@ def _register_product_detail_endpoints(flask_app) -> None:
                 return jsonify({"success": False, "message": "Failed to persist case count type."}), 500
 
         return jsonify({"success": True, "message": "Case count type updated."})
+
+    @flask_app.route("/api/products/update-nickname", methods=["POST"])
+    def update_nickname_runtime():
+        payload = request.get_json(silent=True) or {}
+        product_number = _canonical_product_number(payload.get("product_number"))
+        nickname = str(payload.get("nickname") or "").strip()[:80]
+        if not product_number:
+            return jsonify({"success": False, "message": "product_number is required."}), 400
+        products_list_obj = globals().get("products_list") or []
+        product = _find_product_record_by_number(products_list_obj, product_number)
+        if not product:
+            return jsonify({"success": False, "message": "Product not found."}), 404
+        product["Product Nickname"] = nickname
+        if not _persist_products_runtime(products_list_obj):
+            return jsonify({"success": False, "message": "Failed to persist nickname."}), 500
+        return jsonify({"success": True, "nickname": nickname})
 
     @flask_app.route("/api/products/update-order-quantity", methods=["POST"])
     def update_order_quantity_runtime():
@@ -4233,11 +4631,144 @@ def _install_usage_reports_patch() -> None:
             pass
 
 
+def _api_products_add_runtime():
+    payload = request.get_json(silent=True) or {}
+    description = str(payload.get("description") or "").strip()
+    if not description:
+        return jsonify({"success": False, "message": "Description is required."}), 400
+
+    products = globals().get("products_list") or []
+    requested_number = _canonical_product_number(payload.get("product_number"))
+    product_number = requested_number or _next_global_product_number(products)
+    if _find_product_record_by_number(products, product_number):
+        return jsonify({"success": False, "message": "That Product # is already in use."}), 409
+
+    product = {
+        "Product Number": product_number,
+        "Product Nickname": str(payload.get("nickname") or "").strip()[:80],
+        "Product Description": description,
+        "Product Brand": str(payload.get("brand") or "").strip(),
+        "Product Package Size": str(payload.get("package_size") or "").strip(),
+        "Group Name": str(payload.get("group_name") or "OTHER").strip() or "OTHER",
+        "Case Count Type": "Yes" if str(payload.get("case_count_type") or "").strip().lower() == "yes" else "No",
+    }
+    insert_position = payload.get("insert_position")
+    if isinstance(insert_position, int) and insert_position > 0:
+        products.insert(min(insert_position - 1, len(products)), product)
+    else:
+        products.append(product)
+    if not _persist_products_runtime(products):
+        products.remove(product)
+        return jsonify({"success": False, "message": "Failed to persist product."}), 500
+
+    return jsonify(
+        {
+            "success": True,
+            "message": f"Product {product_number} added.",
+            "product_number": product_number,
+            "product": product,
+        }
+    )
+
+
+def _api_products_update_nickname_runtime():
+    payload = request.get_json(silent=True) or {}
+    product_number = _canonical_product_number(payload.get("product_number"))
+    nickname = str(payload.get("nickname") or "").strip()[:80]
+    if not product_number:
+        return jsonify({"success": False, "message": "product_number is required."}), 400
+    products = globals().get("products_list") or []
+    product = _find_product_record_by_number(products, product_number)
+    if not product:
+        return jsonify({"success": False, "message": "Product not found."}), 404
+    product["Product Nickname"] = nickname
+    if not _persist_products_runtime(products):
+        return jsonify({"success": False, "message": "Failed to persist nickname."}), 500
+    return jsonify({"success": True, "nickname": nickname})
+
+
+def _api_products_update_nicknames_runtime():
+    payload = request.get_json(silent=True) or {}
+    updates = payload.get("updates") if isinstance(payload, dict) else []
+    if not isinstance(updates, list):
+        return jsonify({"success": False, "message": "updates must be a list."}), 400
+
+    products = globals().get("products_list") or []
+    normalized_updates = []
+    seen_numbers = set()
+    for update in updates:
+        if not isinstance(update, dict):
+            return jsonify({"success": False, "message": "Each nickname update must be an object."}), 400
+        product_number = _canonical_product_number(update.get("product_number"))
+        if not product_number or product_number in seen_numbers:
+            return jsonify({"success": False, "message": "Each update needs a unique product_number."}), 400
+        product = _find_product_record_by_number(products, product_number)
+        if not product:
+            return jsonify({"success": False, "message": f"Product {product_number} was not found."}), 404
+        seen_numbers.add(product_number)
+        normalized_updates.append((product, str(update.get("nickname") or "").strip()[:80]))
+
+    for product, nickname in normalized_updates:
+        product["Product Nickname"] = nickname
+    if normalized_updates and not _persist_products_runtime(products):
+        return jsonify({"success": False, "message": "Failed to persist nickname batch."}), 500
+    return jsonify({"success": True, "count": len(normalized_updates), "message": "Nicknames saved."})
+
+
+def _install_nickname_runtime_patch() -> None:
+    target_app = globals().get("app")
+    if target_app is None or getattr(target_app, "_ic3_nickname_runtime_patch", False):
+        return
+    update_rules = [rule for rule in target_app.url_map.iter_rules() if rule.rule == "/api/products/update-nickname"]
+    if update_rules:
+        target_app.view_functions[update_rules[0].endpoint] = _api_products_update_nickname_runtime
+    else:
+        target_app.add_url_rule(
+            "/api/products/update-nickname",
+            "api_products_update_nickname_runtime",
+            _api_products_update_nickname_runtime,
+            methods=["POST"],
+        )
+    bulk_rules = [rule for rule in target_app.url_map.iter_rules() if rule.rule == "/api/products/update-nicknames"]
+    if bulk_rules:
+        target_app.view_functions[bulk_rules[0].endpoint] = _api_products_update_nicknames_runtime
+    else:
+        target_app.add_url_rule(
+            "/api/products/update-nicknames",
+            "api_products_update_nicknames_runtime",
+            _api_products_update_nicknames_runtime,
+            methods=["POST"],
+        )
+
+    @target_app.after_request
+    def _inject_nickname_into_detail(response):
+        if request.path.startswith("/api/products/") and request.path.endswith("/detail") and "json" in (response.content_type or "").lower():
+            try:
+                payload = response.get_json(silent=True)
+                if isinstance(payload, dict) and isinstance(payload.get("product"), dict):
+                    number = _canonical_product_number(payload["product"].get("product_number"))
+                    product = _find_product_record_by_number(globals().get("products_list") or [], number)
+                    payload["product"]["nickname"] = str((product or {}).get("Product Nickname") or "")
+                    response.set_data(json.dumps(payload))
+                    response.headers.pop("Content-Length", None)
+            except Exception:
+                pass
+        return response
+
+    target_app._ic3_nickname_runtime_patch = True
+
+
 def _register_compat_inventory_endpoints(flask_app) -> None:
     if flask_app is None:
         return
 
     existing_rules = {rule.rule for rule in flask_app.url_map.iter_rules()}
+
+    product_add_rules = [rule for rule in flask_app.url_map.iter_rules() if rule.rule == "/api/products/add"]
+    if product_add_rules:
+        flask_app.view_functions[product_add_rules[0].endpoint] = _api_products_add_runtime
+    else:
+        flask_app.add_url_rule("/api/products/add", "api_products_add_runtime", _api_products_add_runtime, methods=["POST"])
 
     if "/api/products" not in existing_rules:
         @flask_app.route("/api/products", methods=["GET"])
@@ -4442,8 +4973,11 @@ def _find_latest_products_backup() -> Path | None:
 def _restore_runtime_data_fallbacks() -> None:
     # If compiled runtime started with empty globals, hydrate from persisted data.
     products_obj = globals().get("products_list")
-    if not isinstance(products_obj, list) or len(products_obj) == 0:
-        products_from_data = _load_json_if_present(ROOT / "data" / "products_list.json")
+    products_from_data = _load_json_if_present(ROOT / "data" / "products_list.json")
+    if isinstance(products_from_data, list) and products_from_data:
+        globals()["products_list"] = products_from_data
+        print(f"[ic3] Loaded products_list from data file ({len(products_from_data)} items)")
+    elif not isinstance(products_obj, list) or len(products_obj) == 0:
         if isinstance(products_from_data, list) and products_from_data:
             globals()["products_list"] = products_from_data
             print(f"[ic3] Restored products_list from data file ({len(products_from_data)} items)")
@@ -4664,6 +5198,7 @@ finally:
     globals()["__name__"] = _original_module_name
 _restore_runtime_data_fallbacks()
 _register_compat_inventory_endpoints(globals().get("app"))
+_install_nickname_runtime_patch()
 _register_invoice_import_log_endpoint(globals().get("app"))
 _register_productmix_sync_endpoints(globals().get("app"))
 _register_usage_reports_endpoints(globals().get("app"))

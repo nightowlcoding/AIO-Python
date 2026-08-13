@@ -7,6 +7,7 @@ import atexit
 import json
 import inspect
 import hashlib
+import hmac
 import os
 import re
 import sqlite3
@@ -3477,13 +3478,9 @@ def _apply_security_headers(response: Response) -> Response:
 
 
 def _rate_limit_key() -> str:
-    dexter_user = (request.headers.get("X-Dexter-User") or "").strip().lower()
-    if dexter_user:
-        return f"dexter-user:{dexter_user}"
-    forwarded_for = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
-    if forwarded_for:
-        return f"ip:{forwarded_for}"
-    return f"ip:{get_remote_address()}"
+    # Never trust attacker-controlled headers for rate limiting.
+    # The limiter should key on the real TCP peer address only.
+    return get_remote_address()
 
 limiter = Limiter(
     key_func=_rate_limit_key,
@@ -6070,6 +6067,61 @@ def api_shared_inventory_list_rename() -> Response:
     return jsonify({"ok": True, "message": "List renamed"})
 
 
+@app.route("/api/shared/inventory-default-groups/list-duplicate", methods=["POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_list_duplicate() -> Response:
+    payload = request.get_json(silent=True) or {}
+    list_name = str((payload or {}).get("name") or "").strip()
+    source_list_id = str((payload or {}).get("source_list_id") or "catch_all").strip() or "catch_all"
+    if not list_name:
+        return jsonify({"ok": False, "message": "List name is required"}), 400
+    if list_name.casefold() == "catch all":
+        return jsonify({"ok": False, "message": "Catch All is reserved"}), 400
+
+    selected_company_name = _selected_company_name_for_scope()
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
+    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    if any(str((group or {}).get("name") or "").strip().casefold() == list_name.casefold() for group in company_groups):
+        return jsonify({"ok": False, "message": "A list with that name already exists"}), 409
+
+    source_items: list[str] = []
+    if source_list_id == "catch_all":
+        catch_all_by_location = settings_context.get("catch_all_by_location") if isinstance(settings_context, dict) else {}
+        if isinstance(catch_all_by_location, dict):
+            selected_restaurant = _selected_restaurant_record_for_scope(_effective_company_scope(require_active=True))
+            for key in _inventory_location_key_candidates(selected_restaurant) + ["*"]:
+                if isinstance(catch_all_by_location.get(key), list):
+                    source_items = _normalize_product_id_list(catch_all_by_location[key])
+                    break
+    else:
+        source_group = next(
+            (group for group in company_groups if str((group or {}).get("id") or "").strip() == source_list_id),
+            None,
+        )
+        if source_group is None:
+            return jsonify({"ok": False, "message": "Source list not found"}), 404
+        source_items = _normalize_product_id_list(source_group.get("item_keys"))
+
+    new_group_id = f"grp_{uuid.uuid4().hex[:10]}"
+    company_groups.append({"id": new_group_id, "name": list_name, "item_keys": source_items})
+    config["company"] = company_groups
+    settings_obj["inventory_default_groups"] = config
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to duplicate list: {error_message}"}), 500
+    return jsonify({"ok": True, "id": new_group_id, "name": list_name, "count": len(source_items), "message": "List duplicated"})
+
+
 @app.route("/api/shared/inventory-default-groups/list-delete", methods=["POST"])
 @csrf.exempt
 @login_required
@@ -6164,6 +6216,54 @@ def api_shared_inventory_list_items() -> Response:
         return jsonify({"ok": False, "message": f"Failed to save list items: {error_message}"}), 500
 
     return jsonify({"ok": True, "count": len(item_keys), "message": "List items saved"})
+
+
+@app.route("/api/shared/inventory-default-groups/list-remove-item", methods=["POST"])
+@csrf.exempt
+@login_required
+def api_shared_inventory_list_remove_item() -> Response:
+    payload = request.get_json(silent=True) or {}
+    list_id = str((payload or {}).get("list_id") or "").strip()
+    product_number = str((payload or {}).get("product_number") or "").strip()
+    if not list_id or not product_number:
+        return jsonify({"ok": False, "message": "list_id and product_number are required"}), 400
+    if list_id == "catch_all":
+        return jsonify({"ok": False, "message": "Catch All is system-managed"}), 400
+
+    selected_company_name = _selected_company_name_for_scope()
+    settings_context = _load_inventory_settings_context_for_company(selected_company_name)
+    db_path = settings_context.get("db_path") if isinstance(settings_context, dict) else None
+    company_id = str(settings_context.get("company_id") or "") if isinstance(settings_context, dict) else ""
+    settings_obj = settings_context.get("settings") if isinstance(settings_context, dict) else {}
+    if not isinstance(settings_obj, dict):
+        settings_obj = {}
+    if not db_path or not company_id:
+        return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
+
+    config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
+    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    found = False
+    removed = False
+    for group in company_groups:
+        if str((group or {}).get("id") or "").strip() != list_id:
+            continue
+        found = True
+        current_items = _normalize_product_id_list(group.get("item_keys"))
+        next_items = [item for item in current_items if item != product_number]
+        removed = len(next_items) != len(current_items)
+        group["item_keys"] = next_items
+        break
+    if not found:
+        return jsonify({"ok": False, "message": "List not found"}), 404
+    if not removed:
+        return jsonify({"ok": True, "removed": False, "message": "Product was not in this list"})
+
+    config["company"] = company_groups
+    settings_obj["inventory_default_groups"] = config
+    ok, error_message = _persist_inventory_settings_record(db_path, company_id, settings_obj)
+    if not ok:
+        return jsonify({"ok": False, "message": f"Failed to remove product from list: {error_message}"}), 500
+    return jsonify({"ok": True, "removed": True, "message": "Product removed from list"})
 
 @app.route("/api/dashboard")
 @login_required
@@ -6637,9 +6737,47 @@ def manager_backup_status() -> Response:
 @login_required
 @role_required("Super Admin")
 def manager_backup_run_now() -> Response:
-    payload = _run_manager_backup("manual")
+    body = request.get_json(silent=True) or {}
+    requested_mode = str(body.get("mode") or "full").strip().lower()
+    mode = requested_mode if requested_mode in {"critical", "full"} else "full"
+    payload = _run_manager_backup("manual", mode=mode)
     status = 200 if payload.get("ok") else 500
     return jsonify(payload), status
+
+
+def _ops_backup_token_ok() -> bool:
+    expected = (os.environ.get("DEXTER_OPS_BACKUP_TOKEN") or "").strip()
+    if len(expected) < 24:
+        return False
+    supplied = (request.headers.get("X-Dexter-Ops-Token") or "").strip()
+    if not supplied:
+        auth_header = (request.headers.get("Authorization") or "").strip()
+        if auth_header.lower().startswith("bearer "):
+            supplied = auth_header[7:].strip()
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
+
+
+@app.route("/api/ops/backups/managerapp/status", methods=["GET"])
+@csrf.exempt
+@limiter.limit("30 per hour")
+def ops_manager_backup_status() -> Response:
+    if not _ops_backup_token_ok():
+        return jsonify({"ok": False, "message": "Unauthorized"}), 401
+    payload = _manager_backup_status_payload()
+    return jsonify(payload), (200 if payload.get("ok") else 503)
+
+
+@app.route("/api/ops/backups/managerapp/run", methods=["POST"])
+@csrf.exempt
+@limiter.limit("12 per hour")
+def ops_manager_backup_run_now() -> Response:
+    if not _ops_backup_token_ok():
+        return jsonify({"ok": False, "message": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    requested_mode = str(body.get("mode") or "full").strip().lower()
+    mode = requested_mode if requested_mode in {"critical", "full"} else "full"
+    payload = _run_manager_backup("manual", mode=mode)
+    return jsonify(payload), (200 if payload.get("ok") else 500)
 
 
 def _copy_file_with_backup(src: Path, dst: Path, backup_root: Path) -> dict[str, Any]:
@@ -6710,6 +6848,17 @@ def _manager_backup_paths() -> dict[str, Path]:
     persistent_root = _render_data_root if _render_data_root.exists() else ROOT
     manager_root = persistent_root / "managerapp"
     nas_root_raw = (os.environ.get("DEXTER_NAS_BACKUP_ROOT") or DEFAULT_NAS_BACKUP_ROOT).strip()
+
+    def data_root(env_key: str, folder: str) -> Path:
+        override = (os.environ.get(env_key) or "").strip()
+        if override:
+            return Path(override)
+        # Prefer the persistent disk copy on Render; the repo checkout is ephemeral.
+        persistent_candidate = persistent_root / folder
+        if persistent_candidate.exists():
+            return persistent_candidate
+        return ROOT / folder
+
     return {
         "persistent_root": persistent_root,
         "manager_root": manager_root,
@@ -6720,11 +6869,11 @@ def _manager_backup_paths() -> dict[str, Path]:
         "rbac_db_path": RBAC_DB_PATH,
         "ic3_data_path": Path(os.environ.get("IC3_DATA_DIR") or (ROOT / "Inventory Control 3" / "data")),
         "productmix_root": Path(os.environ.get("PM_DB_DIR") or (ROOT / "ProductMixRestaurantDB")),
-        "inventory_data_root": ROOT / "inventory_data",
-        "daily_logs_root": ROOT / "daily_logs",
-        "uploads_root": ROOT / "uploads",
-        "order_invoices_root": ROOT / "OrderInvoices",
-        "reports_root": ROOT / "reports",
+        "inventory_data_root": data_root("DEXTER_INVENTORY_DATA_DIR", "inventory_data"),
+        "daily_logs_root": data_root("DEXTER_DAILY_LOGS_DIR", "daily_logs"),
+        "uploads_root": data_root("DEXTER_UPLOADS_DIR", "uploads"),
+        "order_invoices_root": data_root("DEXTER_ORDER_INVOICES_DIR", "OrderInvoices"),
+        "reports_root": data_root("DEXTER_REPORTS_DIR", "reports"),
         "nas_backup_root": Path(nas_root_raw),
     }
 
@@ -6777,7 +6926,8 @@ def _manager_backup_status_payload() -> dict[str, Any]:
         age_seconds = -1
 
     payload["last_backup_age_seconds"] = age_seconds
-    stale_threshold = int(cfg["interval_minutes"]) * 60 * 2
+    slots_per_day = max(1, len(cfg["critical_schedule_times"]))
+    stale_threshold = int((24 * 60 / slots_per_day) * 60 * 2)
     if age_seconds < 0 or age_seconds > stale_threshold:
         payload["ok"] = False
         payload["message"] = "Last backup is stale"

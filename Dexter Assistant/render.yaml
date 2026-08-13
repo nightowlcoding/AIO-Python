@@ -43,3 +43,6 @@ services:
         value: "0"
       - key: DEXTER_NAS_BACKUP_REQUIRED
         value: "0"
+      # Set the value in the Render dashboard; used by deploy/backup_production.py.
+      - key: DEXTER_OPS_BACKUP_TOKEN
+        sync: false
