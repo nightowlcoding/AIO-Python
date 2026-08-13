@@ -1176,16 +1176,22 @@ function installDailyLogInputAcceleration(scope = document) {
     });
 }
 
+// Pinned to the date/location this page instance was loaded with. Reading the
+// live dateSelector value here is wrong: changing the date field fires
+// beforeunload (via navigation) before the value resets, which was saving the
+// OLD page's data under the NEW date's draft key and "poisoning" every date
+// you switched to with stale data from whatever date you switched from.
+const DAILY_LOG_LOADED_DATE = '{{ date }}';
+const DAILY_LOG_LOADED_LOCATION_ID = '{{ selected_location_id or "" }}';
+
 function getDailyLogDraftKey() {
-    const date = document.getElementById('dateSelector')?.value || '{{ date }}';
-    const locationId = document.getElementById('locationSelector')?.value || '{{ selected_location_id or "" }}';
-    return ['dx_daily_log_draft', date, locationId || 'none'].join(':');
+    return ['dx_daily_log_draft', DAILY_LOG_LOADED_DATE, DAILY_LOG_LOADED_LOCATION_ID || 'none'].join(':');
 }
 
 function getDailyLogLiveContext() {
     return {
-        date: document.getElementById('dateSelector')?.value || '{{ date }}',
-        locationId: document.getElementById('locationSelector')?.value || '{{ selected_location_id or "" }}'
+        date: DAILY_LOG_LOADED_DATE,
+        locationId: DAILY_LOG_LOADED_LOCATION_ID
     };
 }
 
