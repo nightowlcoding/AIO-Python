@@ -1,0 +1,2 @@
+Deploy trigger marker - bump this file's content to force a fresh Render deploy hook call.
+Last bump: 2026-08-18
