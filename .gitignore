@@ -16,6 +16,16 @@ runtime_logs/
 *.log.old
 Dexter Assistant/deploy/snapshots/
 Dexter Assistant/deploy/__pycache__/
+# Runtime application data belongs on the persistent storage/backup system,
+# not in source-control commits.
+Dexter Assistant/Manager App/manager_app.db
+Dexter Assistant/Dexter Assistant/Manager App/manager_app.db
+Dexter Assistant/ProductMixRestaurantDB/product_mix.db
+Dexter Assistant/dexter_assistant_rbac.db
+Restaurant Management/uploads/
+Restaurant Management/results/
+expense_output/
+pdf_input/
 # Local sibling archive root (in case it ever lands inside the workspace)
 AIO-Python-Archive/
 AIO-Python-PreOverhaul-Backup-*/
