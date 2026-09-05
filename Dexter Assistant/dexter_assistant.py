@@ -3645,11 +3645,11 @@ try:
     if _autosync_enabled:
         _autosync_scheduler = create_auto_sync_scheduler(app, ROOT.parent, interval_minutes=_autosync_interval)
         if _autosync_scheduler:
-            print(f"[dexter] Auto-sync git scheduler enabled (interval: {_autosync_interval} minutes)", file=sys.stderr)
+            _startup_log(f"[dexter] Auto-sync git scheduler enabled (interval: {_autosync_interval} minutes)")
         else:
-            print("[dexter] Auto-sync scheduler not available (APScheduler not installed)", file=sys.stderr)
+            _startup_log("[dexter] Auto-sync scheduler not available (APScheduler not installed)")
     else:
-        print("[dexter] Auto-sync git scheduler disabled via DEXTER_AUTOSYNC_ENABLED=0", file=sys.stderr)
+        _startup_log("[dexter] Auto-sync git scheduler disabled via DEXTER_AUTOSYNC_ENABLED=0")
 except ImportError as e:
     print(f"[dexter] Warning: Could not import auto_sync_git module: {e}", file=sys.stderr)
 except Exception as e:
