@@ -67,6 +67,64 @@
             gap: 8px;
         }
 
+        html.dx-embedded .portal-brand {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        html.dx-embedded .portal-brand__logo {
+            width: 30px;
+            height: 30px;
+            flex: 0 0 30px;
+            object-fit: contain;
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            background: #ffffff;
+            padding: 2px;
+        }
+
+        html.dx-embedded .portal-brand__location,
+        html.dx-embedded .portal-brand__section {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        html.dx-embedded .portal-brand__location {
+            color: #0f172a;
+            font-size: 0.95rem;
+            font-weight: 800;
+        }
+
+        html.dx-embedded .portal-brand__section {
+            color: #64748b;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        html.dx-embedded #settingsMenuToggle {
+            color: #ffffff !important;
+            background: #0f766e;
+            border: 1px solid #115e59;
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-weight: 700;
+            line-height: 1.2;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+        }
+
+        html.dx-embedded #settingsMenuToggle:hover,
+        html.dx-embedded #settingsMenuToggle:focus {
+            background: #115e59;
+            color: #ffffff !important;
+            box-shadow: 0 0 0 0.15rem rgba(15, 118, 110, 0.22);
+        }
+
         html.dx-embedded .navbar-brand img {
             height: 24px !important;
             margin-right: 6px !important;
@@ -186,8 +244,10 @@
                            id="operationsMenuToggle"
                            role="button"
                            data-bs-toggle="dropdown"
-                           aria-expanded="false">
-                            <i class="bi bi-list"></i> Menu
+                           aria-expanded="false"
+                           aria-label="Menu"
+                           title="Menu">
+                            <i class="bi bi-list"></i> <span class="btn-label">Menu</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="operationsMenuToggle">
                             <li>
