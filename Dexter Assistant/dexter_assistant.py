@@ -5441,19 +5441,10 @@ def _storage_health_snapshot() -> dict[str, Any]:
 
 @app.route("/api/health")
 def api_health() -> Response:
-    try:
-        storage = _storage_health_snapshot()
-        return jsonify({"ok": True, "storage": storage})
-    except Exception as exc:
-        print(f"[api_health] Warning: degraded health probe: {type(exc).__name__}: {exc}", file=sys.stderr)
-        degraded = {
-            "ok": False,
-            "error": f"{type(exc).__name__}: {exc}",
-            "persistent_root": str(_render_data_root),
-            "auth_root": str(AUTH_STORAGE_ROOT),
-        }
-        # Always return 200 so platform health checks do not convert transient issues into full outages.
-        return jsonify({"ok": True, "storage": degraded}), 200
+    # Render uses this endpoint as a liveness check during zero-downtime deploys.
+    # Keep it independent of SQLite and mounted-disk work, which can briefly lock
+    # while the previous instance exits.
+    return jsonify({"ok": True}), 200
 
 
 @app.route("/api/admin/storage-health", methods=["GET"])
