@@ -44,6 +44,18 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
+
+# Set DEXTER_QUIET=0 to see verbose startup diagnostics; default only shows the final address.
+QUIET_STARTUP = os.environ.get("DEXTER_QUIET", "1") != "0"
+
+
+def _startup_log(message: str) -> None:
+    if not QUIET_STARTUP:
+        print(message, file=sys.stderr)
+
+
+import warnings
+warnings.filterwarnings("ignore", message="Using the in-memory storage for tracking rate limits")
 CONFIG_PATH = ROOT / "dexter_assistant_config.json"
 RUNTIME_LOG_DIR = ROOT / "runtime_logs"
 FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
@@ -4509,6 +4521,30 @@ def admin_companies_active(company_id: int) -> Response:
 
     is_active = str(request.form.get("is_active", "1")).strip() == "1"
     ok, msg = set_company_active_state(actor_id, int(company_id), is_active)
+    key = "message" if ok else "error"
+    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+
+@app.route("/admin/companies/<int:company_id>/delete", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_companies_delete(company_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/companies?error=Session+expired")
+
+    ok, msg = soft_delete_company(actor_id, int(company_id))
+    key = "message" if ok else "error"
+    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+
+@app.route("/admin/companies/<int:company_id>/restore", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_companies_restore(company_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return redirect("/admin/companies?error=Session+expired")
+
+    ok, msg = restore_company(actor_id, int(company_id))
     key = "message" if ok else "error"
     return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
 
