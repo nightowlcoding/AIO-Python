@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 import os
+import re
 import pandas as pd
 from datetime import date, datetime
 from openpyxl import load_workbook
@@ -16,8 +17,70 @@ RESULTS_FOLDER = os.path.join(BASE_DIR, 'results')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
-def process_payroll(csv_path, include_kingsville_only_row=False):
+def get_last_csv_date(df, original_filename=""):
+    # Prefer explicit date-like columns from the CSV.
+    candidate_columns = [
+        col for col in df.columns
+        if any(keyword in str(col).strip().lower() for keyword in ["date", "day", "week ending"])
+    ]
+
+    for col in candidate_columns:
+        parsed_dates = pd.to_datetime(df[col], errors='coerce')
+        parsed_dates = parsed_dates.dropna()
+        if not parsed_dates.empty:
+            return parsed_dates.max().date()
+
+    # Fallback: scan the filename for date-like tokens and use the latest value.
+    # Use digit-based lookarounds instead of \b so underscore-glued suffixes
+    # (e.g. a "_1" appended to avoid overwriting a duplicate upload) don't
+    # swallow the boundary and cause the date to go undetected.
+    patterns = [
+        r"(?<!\d)\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?!\d)",
+        r"(?<!\d)\d{4}[_/-]\d{1,2}[_/-]\d{1,2}(?!\d)",
+        r"(?<!\d)\d{1,2}[_/-]\d{1,2}[_/-]\d{2,4}(?!\d)",
+    ]
+    found_dates = []
+    for pattern in patterns:
+        for token in re.findall(pattern, original_filename):
+            normalized_token = token.replace('_', '-')
+            parsed = pd.to_datetime(normalized_token, errors='coerce')
+            if not pd.isna(parsed):
+                found_dates.append(parsed)
+
+    if found_dates:
+        return max(found_dates).date()
+
+    # Final fallback so filename generation always succeeds.
+    return datetime.today().date()
+
+
+def build_report_filename(report_date, location):
+    date_str = report_date.strftime("%m-%d-%y")
+    safe_location = re.sub(r'[<>:"/\\|?*]', '-', str(location)).strip()
+    safe_location = re.sub(r'\s+', ' ', safe_location).rstrip('. ')
+    if not safe_location:
+        safe_location = "Unknown Location"
+    return f"LaborReport {date_str} - {safe_location}.xlsx"
+
+
+def get_restaurant_location(df, fallback_location):
+    location_columns = [
+        col for col in df.columns
+        if any(keyword in str(col).strip().lower() for keyword in ["location", "restaurant", "store"])
+    ]
+
+    for col in location_columns:
+        non_empty = df[col].dropna().astype(str).str.strip()
+        non_empty = non_empty[non_empty != ""]
+        if not non_empty.empty:
+            return non_empty.iloc[-1]
+
+    return fallback_location
+
+def process_payroll(csv_path, include_kingsville_only_row=False, fallback_location=""):
     df = pd.read_csv(csv_path)
+    report_date = get_last_csv_date(df, os.path.basename(csv_path))
+    report_location = get_restaurant_location(df, fallback_location)
     columns_to_extract = [
         'Employee', 'Job Title', 'Regular Hours', 'Overtime Hours',
         'Declared Tips', 'Non-Cash Tips', 'Total Tips'
@@ -51,15 +114,6 @@ def process_payroll(csv_path, include_kingsville_only_row=False):
         'Total Tips': 0
     }
     new_row2 = {
-        'Employee': 'Victor Moreno',
-        'Job Title': 'Director of Catering',
-        'Regular Hours': 0,
-        'Overtime Hours': 0,
-        'Declared Tips': 0,
-        'Non-Cash Tips': 0,
-        'Total Tips': 0
-    }
-    new_row3 = {
         'Employee': 'Lesli Rodriguez',
         'Job Title': 'Media Admin',
         'Regular Hours': 20,
@@ -68,7 +122,7 @@ def process_payroll(csv_path, include_kingsville_only_row=False):
         'Non-Cash Tips': 0,
         'Total Tips': 0
     }
-    new_row4 = {
+    new_row3 = {
         'Employee': 'Maria Julia Martinez Villalta',
         'Job Title': '',
         'Regular Hours': 0,
@@ -77,9 +131,18 @@ def process_payroll(csv_path, include_kingsville_only_row=False):
         'Non-Cash Tips': 0,
         'Total Tips': 0
     }
-    custom_rows = [new_row, new_row2, new_row3]
+    new_row4 = {
+        'Employee': 'Ysidro T Villarreal',
+        'Job Title': '',
+        'Regular Hours': 40,
+        'Overtime Hours': 0,
+        'Declared Tips': 0,
+        'Non-Cash Tips': 0,
+        'Total Tips': 0
+    }
+    custom_rows = [new_row, new_row2]
     if include_kingsville_only_row:
-        custom_rows.append(new_row4)
+        custom_rows.extend([new_row3, new_row4])
     extracted_data = pd.concat([extracted_data, pd.DataFrame(custom_rows)], ignore_index=True)
 
     # Calculate totals
@@ -106,7 +169,7 @@ def process_payroll(csv_path, include_kingsville_only_row=False):
     ot_pct = (ot_hours / total_hours) if total_hours > 0 else 0
     # Replace zeros with empty string for display
     sorted_data = sorted_data.replace(0, "")
-    return reg_hours, ot_hours, total_hours, ot_pct, sorted_data
+    return reg_hours, ot_hours, total_hours, ot_pct, sorted_data, report_date, report_location
 
 def save_to_excel(df, out_path):
     from openpyxl.styles import PatternFill, Font
@@ -165,12 +228,16 @@ def process():
         filename1 = secure_filename(file1.filename)
         path1 = os.path.join(UPLOAD_FOLDER, filename1)
         file1.save(path1)
-        reg1, ot1, total1, pct1, df1 = process_payroll(path1, include_kingsville_only_row=True)
+        reg1, ot1, total1, pct1, df1, report_date1, report_location1 = process_payroll(
+            path1,
+            include_kingsville_only_row=True,
+            fallback_location="Kingsville"
+        )
         summary1 = f"Total hours for the BHB Kingsville for the week is {total1:.2f} of which {ot1:.2f} or {pct1:.2%} is considered overtime."
         summary_row1 = pd.DataFrame([{col: "" for col in df1.columns}])
         summary_row1.iloc[0, 0] = summary1
         df1_with_summary = pd.concat([df1, summary_row1], ignore_index=True)
-        out1 = f"BHB_Kingsville_sorted_{filename1.replace('.csv', '')}.xlsx"
+        out1 = build_report_filename(report_date1, report_location1)
         out1_path = os.path.join(RESULTS_FOLDER, out1)
         save_to_excel(df1_with_summary, out1_path)
         summary += summary1 + "\n"
@@ -180,12 +247,16 @@ def process():
         filename2 = secure_filename(file2.filename)
         path2 = os.path.join(UPLOAD_FOLDER, filename2)
         file2.save(path2)
-        reg2, ot2, total2, pct2, df2 = process_payroll(path2, include_kingsville_only_row=False)
+        reg2, ot2, total2, pct2, df2, report_date2, report_location2 = process_payroll(
+            path2,
+            include_kingsville_only_row=False,
+            fallback_location="Alice"
+        )
         summary2 = f"Total hours for the BHB Alice for the week is {total2:.2f} of which {ot2:.2f} or {pct2:.2%} is considered overtime."
         summary_row2 = pd.DataFrame([{col: "" for col in df2.columns}])
         summary_row2.iloc[0, 0] = summary2
         df2_with_summary = pd.concat([df2, summary_row2], ignore_index=True)
-        out2 = f"BHB_Alice_sorted_{filename2.replace('.csv', '')}.xlsx"
+        out2 = build_report_filename(report_date2, report_location2)
         out2_path = os.path.join(RESULTS_FOLDER, out2)
         save_to_excel(df2_with_summary, out2_path)
         summary += summary2 + "\n"
