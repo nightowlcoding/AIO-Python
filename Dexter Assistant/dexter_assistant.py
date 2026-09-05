@@ -555,6 +555,7 @@ def _attempt_auth_store_recovery(reason: Exception | None = None) -> bool:
         migrate_add_company_email_settings_v1()
         migrate_add_login_lockout_fields_v1()
         migrate_add_user_location_assignments_v1()
+        migrate_add_company_deletion_v1()
         ensure_default_super_admin_user()
         print("[auth_recovery] Auth store recovery succeeded", file=sys.stderr)
         return True
@@ -914,6 +915,22 @@ def migrate_add_user_location_assignments_v1() -> None:
         if _is_migration_complete(conn, migration_key):
             return
 
+        _mark_migration_complete(conn, migration_key)
+        conn.commit()
+    finally:
+        conn.close()
+
+def migrate_add_company_deletion_v1() -> None:
+    migration_key = "company_deletion_v1"
+    conn = get_rbac_db_connection()
+    try:
+        if _is_migration_complete(conn, migration_key):
+            return
+        try:
+            conn.execute("ALTER TABLE companies ADD COLUMN deleted_at TEXT")
+        except Exception:
+            pass
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_deleted_at ON companies(deleted_at)")
         _mark_migration_complete(conn, migration_key)
         conn.commit()
     finally:
@@ -1506,7 +1523,10 @@ def _get_actor_context(conn: sqlite3.Connection, actor_user_id: int) -> sqlite3.
 def list_companies(active_only: bool = False) -> list[dict[str, Any]]:
     conn = get_rbac_db_connection()
     try:
-        where_sql = "WHERE c.is_active = 1" if active_only else ""
+        where_clauses = ["c.deleted_at IS NULL"]
+        if active_only:
+            where_clauses.append("c.is_active = 1")
+        where_sql = "WHERE " + " AND ".join(where_clauses)
         rows = conn.execute(
             f"""
             SELECT c.id, c.name, c.slug, c.is_active, c.created_at, c.updated_at,
@@ -1522,6 +1542,39 @@ def list_companies(active_only: bool = False) -> list[dict[str, Any]]:
             """
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+def list_deleted_companies(retention_days: int = 30) -> list[dict[str, Any]]:
+    conn = get_rbac_db_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT c.id, c.name, c.slug, c.deleted_at,
+                   COALESCE(user_counts.total_users, 0) AS total_users
+            FROM companies c
+            LEFT JOIN (
+                SELECT company_id, COUNT(*) AS total_users
+                FROM users
+                GROUP BY company_id
+            ) AS user_counts ON user_counts.company_id = c.id
+            WHERE c.deleted_at IS NOT NULL
+            ORDER BY c.deleted_at ASC
+            """
+        ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                deleted_at = datetime.fromisoformat(str(item["deleted_at"]))
+                purge_at = deleted_at + timedelta(days=retention_days)
+                item["purge_at"] = purge_at.strftime("%Y-%m-%d")
+                item["days_remaining"] = max(0, (purge_at - datetime.now()).days)
+            except Exception:
+                item["purge_at"] = ""
+                item["days_remaining"] = None
+            result.append(item)
+        return result
     finally:
         conn.close()
 
@@ -1690,6 +1743,126 @@ def set_company_active_state(actor_user_id: int, company_id: int, is_active: boo
             company_id=int(company_id),
         )
         return True, "Company updated."
+    finally:
+        conn.close()
+
+def soft_delete_company(actor_user_id: int, company_id: int) -> tuple[bool, str]:
+    conn = get_rbac_db_connection()
+    try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or str(actor["role_name"]) != "Super Admin":
+            return False, "Only Super Admin can delete companies."
+
+        company = conn.execute(
+            "SELECT id, name, deleted_at FROM companies WHERE id = ? LIMIT 1",
+            (int(company_id),),
+        ).fetchone()
+        if not company:
+            return False, "Company not found."
+        if company["deleted_at"] is not None:
+            return False, "Company is already pending deletion."
+
+        remaining_row = conn.execute(
+            "SELECT COUNT(*) AS total FROM companies WHERE deleted_at IS NULL",
+        ).fetchone()
+        if int(remaining_row["total"] if remaining_row else 0) <= 1:
+            return False, "Cannot delete the last remaining company."
+
+        conn.execute(
+            "UPDATE companies SET is_active = 0, deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+            (int(company_id),),
+        )
+        conn.execute(
+            "UPDATE users SET is_active = 0, updated_at = datetime('now') WHERE company_id = ?",
+            (int(company_id),),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "delete_company",
+            "companies",
+            int(company_id),
+            json.dumps({"name": str(company["name"]), "retention_days": 30}),
+            company_id=int(company_id),
+        )
+        return True, f"Company '{company['name']}' deleted. It will be permanently purged in 30 days unless restored."
+    finally:
+        conn.close()
+
+def restore_company(actor_user_id: int, company_id: int) -> tuple[bool, str]:
+    conn = get_rbac_db_connection()
+    try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or str(actor["role_name"]) != "Super Admin":
+            return False, "Only Super Admin can restore companies."
+
+        company = conn.execute(
+            "SELECT id, name, deleted_at FROM companies WHERE id = ? LIMIT 1",
+            (int(company_id),),
+        ).fetchone()
+        if not company:
+            return False, "Company not found."
+        if company["deleted_at"] is None:
+            return False, "Company is not pending deletion."
+
+        conn.execute(
+            "UPDATE companies SET is_active = 1, deleted_at = NULL, updated_at = datetime('now') WHERE id = ?",
+            (int(company_id),),
+        )
+        conn.execute(
+            "UPDATE users SET is_active = 1, updated_at = datetime('now') WHERE company_id = ?",
+            (int(company_id),),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "restore_company",
+            "companies",
+            int(company_id),
+            json.dumps({"name": str(company["name"])}),
+            company_id=int(company_id),
+        )
+        return True, f"Company '{company['name']}' restored."
+    finally:
+        conn.close()
+
+def purge_expired_deleted_companies(retention_days: int = 30) -> None:
+    conn = get_rbac_db_connection()
+    try:
+        expired = conn.execute(
+            """
+            SELECT id, name FROM companies
+            WHERE deleted_at IS NOT NULL
+              AND deleted_at <= datetime('now', ?)
+            """,
+            (f"-{int(retention_days)} days",),
+        ).fetchall()
+
+        for company in expired:
+            target_id = int(company["id"])
+            target_name = str(company["name"])
+            try:
+                user_ids = [int(r["id"]) for r in conn.execute("SELECT id FROM users WHERE company_id = ?", (target_id,)).fetchall()]
+                if user_ids:
+                    placeholders = ",".join("?" * len(user_ids))
+                    conn.execute(f"DELETE FROM audit_logs WHERE actor_user_id IN ({placeholders})", user_ids)
+                conn.execute("DELETE FROM audit_logs WHERE company_id = ?", (target_id,))
+                conn.execute("DELETE FROM tasks WHERE company_id = ?", (target_id,))
+                conn.execute("DELETE FROM user_location_assignments WHERE company_id = ?", (target_id,))
+                conn.execute("DELETE FROM users WHERE company_id = ?", (target_id,))
+                conn.execute("DELETE FROM company_profiles WHERE company_id = ?", (target_id,))
+                conn.execute("DELETE FROM company_email_settings WHERE company_id = ?", (target_id,))
+                conn.execute("DELETE FROM companies WHERE id = ?", (target_id,))
+                conn.commit()
+
+                company_dir = COMPANY_STORAGE_ROOT / str(target_id)
+                if company_dir.exists():
+                    shutil.rmtree(company_dir, ignore_errors=True)
+
+                print(f"[dexter] Purged company #{target_id} ({target_name}) after {retention_days}-day retention.", file=sys.stderr)
+            except Exception as exc:
+                conn.rollback()
+                print(f"[dexter] Warning: Failed to purge company #{target_id} ({target_name}): {exc}", file=sys.stderr)
     finally:
         conn.close()
 
@@ -3499,6 +3672,7 @@ try:
     migrate_add_company_email_settings_v1()
     migrate_add_login_lockout_fields_v1()
     migrate_add_user_location_assignments_v1()
+    migrate_add_company_deletion_v1()
     ensure_default_super_admin_user()
 except Exception as e:
     error_msg = f"{type(e).__name__}: {str(e)}"
@@ -4175,6 +4349,7 @@ def admin_companies_page() -> Response:
         render_template(
             "admin_companies.html",
             companies=list_companies(),
+            pending_deletion=list_deleted_companies(),
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
         )
