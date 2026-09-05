@@ -270,7 +270,11 @@ def _dexter_admin_users_url() -> str:
 
 def _load_shared_restaurants_from_productmix(company_name: str = "") -> list[dict]:
     """Return shared restaurant options from ProductMix Restaurant Setup."""
-    pm_db_path = Path(__file__).resolve().parent.parent / 'ProductMixRestaurantDB' / 'product_mix.db'
+    configured_pm_dir = (os.environ.get('PM_DB_DIR') or '').strip()
+    if configured_pm_dir:
+        pm_db_path = Path(configured_pm_dir) / 'product_mix.db'
+    else:
+        pm_db_path = Path(__file__).resolve().parent.parent / 'ProductMixRestaurantDB' / 'product_mix.db'
     if not pm_db_path.exists():
         return []
 
