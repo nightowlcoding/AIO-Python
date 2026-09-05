@@ -3122,7 +3122,7 @@ def _get_recent_product_mix_uploads(restaurant=None, limit=12, search_text="", s
         FROM product_mix_uploads u
         JOIN restaurants r ON r.id = u.restaurant_id
         {where_sql}
-        ORDER BY u.id DESC
+        ORDER BY COALESCE(u.report_start_date, u.report_end_date, '') DESC, u.id DESC
     """
     if limit is None:
         rows = conn.execute(query, params).fetchall()

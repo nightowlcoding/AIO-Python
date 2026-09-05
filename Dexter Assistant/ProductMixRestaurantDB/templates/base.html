@@ -28,6 +28,71 @@
 
   <!-- App-specific overrides (kept last) -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  <style>
+    .dx-page-context-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .dx-page-context-header__text {
+      min-width: 0;
+    }
+
+    .dx-page-context-header__scope {
+      display: block;
+      color: #6b7280;
+      font-size: 0.92rem;
+      line-height: 1.2;
+      margin-bottom: 0.2rem;
+    }
+
+    .dx-page-context-header__page {
+      color: #111827;
+      font-size: 1.65rem;
+      font-weight: 700;
+      line-height: 1.15;
+      margin: 0;
+    }
+
+    .dx-page-context-header__logo {
+      height: 100px;
+      width: auto;
+      max-width: 260px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .dx-page-context-header__logo-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      text-decoration: none;
+      padding: 0.2rem;
+    }
+
+    .dx-page-context-header__logo-link:hover,
+    .dx-page-context-header__logo-link:focus {
+      border-color: #9ca3af;
+      box-shadow: 0 0 0 0.14rem rgba(34, 66, 122, 0.18);
+    }
+
+    @media (max-width: 768px) {
+      .dx-page-context-header__page {
+        font-size: 1.35rem;
+      }
+
+      .dx-page-context-header__logo {
+        height: 78px;
+        max-width: 180px;
+      }
+    }
+  </style>
 </head>
 <body>
   {% set active_endpoint = request.endpoint or '' %}
@@ -101,6 +166,35 @@
       {% endif %}
     </div>
   </nav>
+
+  {% if current_user.is_authenticated %}
+  {% set page_name_map = {
+    'index': 'Product Mix',
+    'reports_page': 'Reports & Analytics',
+    'reports_production_page': 'Reports & Analytics',
+    'reports_categories_page': 'Reports & Analytics',
+    'reports_weekly_usage_page': 'Reports & Analytics',
+    'reports_analytics_page': 'Reports & Analytics',
+    'production_list_page': 'Production List',
+    'restaurant_setup': 'Restaurant Setup',
+    'admin_dashboard': 'Admin Dashboard'
+  } %}
+  {% set endpoint_name = request.endpoint or '' %}
+  {% set current_page_name = page_name_map.get(endpoint_name) or (endpoint_name.replace('_', ' ')|title if endpoint_name else 'Product Mix') %}
+  {% set heading_location = (restaurant.name + (' - ' + restaurant.location if restaurant.location else '')) if restaurant is defined and restaurant else '' %}
+  {% set heading_scope = heading_location or branding_company_name or 'Product Mix' %}
+  <div class="container-fluid mt-3 mb-2">
+    <div class="dx-page-context-header">
+      <div class="dx-page-context-header__text">
+        <small class="dx-page-context-header__scope">{{ heading_scope }}</small>
+        <h1 class="dx-page-context-header__page">{{ current_page_name }}</h1>
+      </div>
+      <a class="dx-page-context-header__logo-link" href="{{ url_for('index') }}" aria-label="Go to Product Mix" title="Go to Product Mix">
+        <img class="dx-page-context-header__logo" src="{{ branding_logo_url }}" alt="Company logo" />
+      </a>
+    </div>
+  </div>
+  {% endif %}
 
   <main class="container-fluid app-shell mt-2 px-3 px-lg-4 pb-4">
     {% with messages = get_flashed_messages(with_categories=true) %}
