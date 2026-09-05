@@ -2656,6 +2656,126 @@ def set_user_location_assignments(
     finally:
         conn.close()
 
+def delete_user_account(actor_user_id: int, target_user_id: int) -> tuple[bool, str]:
+    conn = get_rbac_db_connection()
+    try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or int(actor["is_active"]) != 1:
+            return False, "Actor is invalid or inactive."
+
+        actor_role = str(actor["role_name"])
+        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
+
+        target = conn.execute(
+            """
+            SELECT u.id, u.username, u.company_id, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE u.id = ?
+            LIMIT 1
+            """,
+            (int(target_user_id),),
+        ).fetchone()
+        if not target:
+            return False, "User not found."
+
+        target_company_id = int(target["company_id"]) if target["company_id"] is not None else None
+
+        if actor_role == "Manager":
+            if actor_company_id is None or target_company_id != actor_company_id:
+                return False, "Manager can only manage users in the same company."
+            if str(target["role_name"]) == "Super Admin":
+                return False, "Manager cannot manage Super Admin users."
+        elif actor_role != "Super Admin":
+            return False, "Only Super Admin or Manager can delete users."
+
+        if int(actor_user_id) == int(target["id"]):
+            return False, "You cannot delete your own account."
+
+        if str(target["role_name"]) == "Super Admin" and _active_super_admin_count(conn) <= 1:
+            return False, "Cannot delete the last active Super Admin."
+
+        target_username = str(target["username"])
+        target_role_name = str(target["role_name"])
+
+        try:
+            conn.execute("DELETE FROM user_location_assignments WHERE user_id = ?", (int(target_user_id),))
+            conn.execute("DELETE FROM users WHERE id = ?", (int(target_user_id),))
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return False, "Cannot delete: this user has audit history. Deactivate instead."
+
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "delete_user",
+            "users",
+            int(target_user_id),
+            json.dumps({"username": target_username, "role": target_role_name}),
+            company_id=target_company_id,
+        )
+        return True, "User deleted."
+    finally:
+        conn.close()
+
+def admin_reset_user_password(actor_user_id: int, target_user_id: int, new_password: str) -> tuple[bool, str]:
+    if len(new_password or "") < 8:
+        return False, "Password must be at least 8 characters."
+
+    conn = get_rbac_db_connection()
+    try:
+        actor = _get_actor_context(conn, actor_user_id)
+        if not actor or int(actor["is_active"]) != 1:
+            return False, "Actor is invalid or inactive."
+
+        actor_role = str(actor["role_name"])
+        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
+
+        target = conn.execute(
+            """
+            SELECT u.id, u.username, u.company_id, r.name AS role_name
+            FROM users u
+            JOIN roles r ON r.id = u.role_id
+            WHERE u.id = ?
+            LIMIT 1
+            """,
+            (int(target_user_id),),
+        ).fetchone()
+        if not target:
+            return False, "User not found."
+
+        target_company_id = int(target["company_id"]) if target["company_id"] is not None else None
+
+        if actor_role == "Manager":
+            if actor_company_id is None or target_company_id != actor_company_id:
+                return False, "Manager can only manage users in the same company."
+            if str(target["role_name"]) == "Super Admin":
+                return False, "Manager cannot manage Super Admin users."
+        elif actor_role != "Super Admin":
+            return False, "Only Super Admin or Manager can reset passwords."
+
+        conn.execute(
+            """
+            UPDATE users
+            SET password_hash = ?, updated_at = datetime('now'),
+                password_reset_token = NULL, password_reset_expires = NULL
+            WHERE id = ?
+            """,
+            (generate_password_hash(new_password), int(target_user_id)),
+        )
+        conn.commit()
+        add_audit_log(
+            actor_user_id,
+            "admin_reset_password",
+            "users",
+            int(target_user_id),
+            json.dumps({"username": str(target["username"])}),
+            company_id=target_company_id,
+        )
+        return True, "Password reset."
+    finally:
+        conn.close()
+
 def create_task_record(
     actor_user_id: int,
     title: str,
@@ -4678,6 +4798,45 @@ def admin_users_locations(user_id: int) -> Response:
     ok, msg = set_user_location_assignments(actor_id, int(user_id), request.form.getlist("restaurant_ids"))
     key = "message" if ok else "error"
     return _redirect_admin_users(**{key: msg})
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_users_delete(user_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return _redirect_admin_users(error="Session expired")
+
+    if current_role_name() == "Super Admin":
+        scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
+        if scope_error:
+            return _redirect_admin_users(error=scope_error)
+
+    ok, msg = delete_user_account(actor_id, int(user_id))
+    key = "message" if ok else "error"
+    return _redirect_admin_users(**{key: msg})
+
+@app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@login_required
+@role_required("Super Admin", "Manager")
+def admin_users_reset_password(user_id: int) -> Response:
+    actor_id = current_user_id()
+    if actor_id is None:
+        return _redirect_admin_users(error="Session expired")
+
+    if current_role_name() == "Super Admin":
+        scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
+        if scope_error:
+            return _redirect_admin_users(error=scope_error)
+
+    new_password = str(request.form.get("new_password") or "").strip()
+    if not new_password:
+        new_password = secrets.token_urlsafe(9)
+
+    ok, msg = admin_reset_user_password(actor_id, int(user_id), new_password)
+    if not ok:
+        return _redirect_admin_users(error=msg)
+    return _redirect_admin_users(message=f"Password reset. New password: {new_password} (copy this now — it will not be shown again)")
 
 @app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
 @login_required
