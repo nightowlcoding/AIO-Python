@@ -1298,6 +1298,9 @@ def _api_status_from_outcome(ok: bool, message: str, default_error_status: int =
     return int(default_error_status)
 
 def _productmix_db_path() -> Path:
+    configured_pm_dir = (os.environ.get("PM_DB_DIR") or "").strip()
+    if configured_pm_dir:
+        return Path(configured_pm_dir) / "product_mix.db"
     productmix_cfg = CONFIG.get("apps", {}).get("productmix", {})
     productmix_cwd = str(productmix_cfg.get("cwd") or "ProductMixRestaurantDB").strip() or "ProductMixRestaurantDB"
     return ROOT / productmix_cwd / "product_mix.db"
