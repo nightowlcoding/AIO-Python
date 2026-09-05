@@ -31,7 +31,7 @@ from typing import Any
 from email.message import EmailMessage
 from email.utils import formataddr, parsedate_to_datetime
 from urllib.error import URLError
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 from urllib.request import urlopen
 
 import requests
@@ -44,18 +44,6 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
-
-# Set DEXTER_QUIET=0 to see verbose startup diagnostics; default only shows the final address.
-QUIET_STARTUP = os.environ.get("DEXTER_QUIET", "1") != "0"
-
-
-def _startup_log(message: str) -> None:
-    if not QUIET_STARTUP:
-        print(message, file=sys.stderr)
-
-
-import warnings
-warnings.filterwarnings("ignore", message="Using the in-memory storage for tracking rate limits")
 CONFIG_PATH = ROOT / "dexter_assistant_config.json"
 RUNTIME_LOG_DIR = ROOT / "runtime_logs"
 FRONT_DOOR_FAVICON = ROOT / "favicon.svg"
@@ -81,10 +69,10 @@ else:
     _default_auth_storage_root = ROOT
 
 AUTH_STORAGE_ROOT = Path(os.environ.get("DEXTER_AUTH_DATA_DIR") or str(_default_auth_storage_root))
-_startup_log(f"[dexter] AUTH_STORAGE_ROOT set to: {AUTH_STORAGE_ROOT} (absolute: {AUTH_STORAGE_ROOT.resolve()})")
+print(f"[dexter] AUTH_STORAGE_ROOT set to: {AUTH_STORAGE_ROOT} (absolute: {AUTH_STORAGE_ROOT.resolve()})", file=sys.stderr)
 try:
     AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
-    _startup_log(f"[dexter] AUTH_STORAGE_ROOT directory created/verified")
+    print(f"[dexter] AUTH_STORAGE_ROOT directory created/verified", file=sys.stderr)
 except OSError as e:
     print(f"[dexter] ERROR: Could not create AUTH_STORAGE_ROOT {AUTH_STORAGE_ROOT}: {e}", file=sys.stderr)
     fallback_candidates = [ROOT, Path(tempfile.gettempdir()) / "dexter-auth"]
@@ -461,7 +449,7 @@ def _find_writable_db_path() -> Path:
             RBAC_DB_PATH = db_path
             with _RBAC_DB_PATH_LOCK:
                 _RBAC_DB_PATH_VERIFIED = db_path
-            _startup_log(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}")
+            print(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}", file=sys.stderr)
             return db_path
         except (OSError, sqlite3.OperationalError) as e:
             print(f"[get_rbac_db_connection] Path not writable ({db_path.resolve()}): {e}", file=sys.stderr)
@@ -567,7 +555,6 @@ def _attempt_auth_store_recovery(reason: Exception | None = None) -> bool:
         migrate_add_company_email_settings_v1()
         migrate_add_login_lockout_fields_v1()
         migrate_add_user_location_assignments_v1()
-        migrate_add_company_deletion_v1()
         ensure_default_super_admin_user()
         print("[auth_recovery] Auth store recovery succeeded", file=sys.stderr)
         return True
@@ -927,22 +914,6 @@ def migrate_add_user_location_assignments_v1() -> None:
         if _is_migration_complete(conn, migration_key):
             return
 
-        _mark_migration_complete(conn, migration_key)
-        conn.commit()
-    finally:
-        conn.close()
-
-def migrate_add_company_deletion_v1() -> None:
-    migration_key = "company_deletion_v1"
-    conn = get_rbac_db_connection()
-    try:
-        if _is_migration_complete(conn, migration_key):
-            return
-        try:
-            conn.execute("ALTER TABLE companies ADD COLUMN deleted_at TEXT")
-        except Exception:
-            pass
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_companies_deleted_at ON companies(deleted_at)")
         _mark_migration_complete(conn, migration_key)
         conn.commit()
     finally:
@@ -1535,10 +1506,7 @@ def _get_actor_context(conn: sqlite3.Connection, actor_user_id: int) -> sqlite3.
 def list_companies(active_only: bool = False) -> list[dict[str, Any]]:
     conn = get_rbac_db_connection()
     try:
-        where_clauses = ["c.deleted_at IS NULL"]
-        if active_only:
-            where_clauses.append("c.is_active = 1")
-        where_sql = "WHERE " + " AND ".join(where_clauses)
+        where_sql = "WHERE c.is_active = 1" if active_only else ""
         rows = conn.execute(
             f"""
             SELECT c.id, c.name, c.slug, c.is_active, c.created_at, c.updated_at,
@@ -1554,39 +1522,6 @@ def list_companies(active_only: bool = False) -> list[dict[str, Any]]:
             """
         ).fetchall()
         return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-def list_deleted_companies(retention_days: int = 30) -> list[dict[str, Any]]:
-    conn = get_rbac_db_connection()
-    try:
-        rows = conn.execute(
-            """
-            SELECT c.id, c.name, c.slug, c.deleted_at,
-                   COALESCE(user_counts.total_users, 0) AS total_users
-            FROM companies c
-            LEFT JOIN (
-                SELECT company_id, COUNT(*) AS total_users
-                FROM users
-                GROUP BY company_id
-            ) AS user_counts ON user_counts.company_id = c.id
-            WHERE c.deleted_at IS NOT NULL
-            ORDER BY c.deleted_at ASC
-            """
-        ).fetchall()
-        result = []
-        for row in rows:
-            item = dict(row)
-            try:
-                deleted_at = datetime.fromisoformat(str(item["deleted_at"]))
-                purge_at = deleted_at + timedelta(days=retention_days)
-                item["purge_at"] = purge_at.strftime("%Y-%m-%d")
-                item["days_remaining"] = max(0, (purge_at - datetime.now()).days)
-            except Exception:
-                item["purge_at"] = ""
-                item["days_remaining"] = None
-            result.append(item)
-        return result
     finally:
         conn.close()
 
@@ -1755,126 +1690,6 @@ def set_company_active_state(actor_user_id: int, company_id: int, is_active: boo
             company_id=int(company_id),
         )
         return True, "Company updated."
-    finally:
-        conn.close()
-
-def soft_delete_company(actor_user_id: int, company_id: int) -> tuple[bool, str]:
-    conn = get_rbac_db_connection()
-    try:
-        actor = _get_actor_context(conn, actor_user_id)
-        if not actor or str(actor["role_name"]) != "Super Admin":
-            return False, "Only Super Admin can delete companies."
-
-        company = conn.execute(
-            "SELECT id, name, deleted_at FROM companies WHERE id = ? LIMIT 1",
-            (int(company_id),),
-        ).fetchone()
-        if not company:
-            return False, "Company not found."
-        if company["deleted_at"] is not None:
-            return False, "Company is already pending deletion."
-
-        remaining_row = conn.execute(
-            "SELECT COUNT(*) AS total FROM companies WHERE deleted_at IS NULL",
-        ).fetchone()
-        if int(remaining_row["total"] if remaining_row else 0) <= 1:
-            return False, "Cannot delete the last remaining company."
-
-        conn.execute(
-            "UPDATE companies SET is_active = 0, deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
-            (int(company_id),),
-        )
-        conn.execute(
-            "UPDATE users SET is_active = 0, updated_at = datetime('now') WHERE company_id = ?",
-            (int(company_id),),
-        )
-        conn.commit()
-        add_audit_log(
-            actor_user_id,
-            "delete_company",
-            "companies",
-            int(company_id),
-            json.dumps({"name": str(company["name"]), "retention_days": 30}),
-            company_id=int(company_id),
-        )
-        return True, f"Company '{company['name']}' deleted. It will be permanently purged in 30 days unless restored."
-    finally:
-        conn.close()
-
-def restore_company(actor_user_id: int, company_id: int) -> tuple[bool, str]:
-    conn = get_rbac_db_connection()
-    try:
-        actor = _get_actor_context(conn, actor_user_id)
-        if not actor or str(actor["role_name"]) != "Super Admin":
-            return False, "Only Super Admin can restore companies."
-
-        company = conn.execute(
-            "SELECT id, name, deleted_at FROM companies WHERE id = ? LIMIT 1",
-            (int(company_id),),
-        ).fetchone()
-        if not company:
-            return False, "Company not found."
-        if company["deleted_at"] is None:
-            return False, "Company is not pending deletion."
-
-        conn.execute(
-            "UPDATE companies SET is_active = 1, deleted_at = NULL, updated_at = datetime('now') WHERE id = ?",
-            (int(company_id),),
-        )
-        conn.execute(
-            "UPDATE users SET is_active = 1, updated_at = datetime('now') WHERE company_id = ?",
-            (int(company_id),),
-        )
-        conn.commit()
-        add_audit_log(
-            actor_user_id,
-            "restore_company",
-            "companies",
-            int(company_id),
-            json.dumps({"name": str(company["name"])}),
-            company_id=int(company_id),
-        )
-        return True, f"Company '{company['name']}' restored."
-    finally:
-        conn.close()
-
-def purge_expired_deleted_companies(retention_days: int = 30) -> None:
-    conn = get_rbac_db_connection()
-    try:
-        expired = conn.execute(
-            """
-            SELECT id, name FROM companies
-            WHERE deleted_at IS NOT NULL
-              AND deleted_at <= datetime('now', ?)
-            """,
-            (f"-{int(retention_days)} days",),
-        ).fetchall()
-
-        for company in expired:
-            target_id = int(company["id"])
-            target_name = str(company["name"])
-            try:
-                user_ids = [int(r["id"]) for r in conn.execute("SELECT id FROM users WHERE company_id = ?", (target_id,)).fetchall()]
-                if user_ids:
-                    placeholders = ",".join("?" * len(user_ids))
-                    conn.execute(f"DELETE FROM audit_logs WHERE actor_user_id IN ({placeholders})", user_ids)
-                conn.execute("DELETE FROM audit_logs WHERE company_id = ?", (target_id,))
-                conn.execute("DELETE FROM tasks WHERE company_id = ?", (target_id,))
-                conn.execute("DELETE FROM user_location_assignments WHERE company_id = ?", (target_id,))
-                conn.execute("DELETE FROM users WHERE company_id = ?", (target_id,))
-                conn.execute("DELETE FROM company_profiles WHERE company_id = ?", (target_id,))
-                conn.execute("DELETE FROM company_email_settings WHERE company_id = ?", (target_id,))
-                conn.execute("DELETE FROM companies WHERE id = ?", (target_id,))
-                conn.commit()
-
-                company_dir = COMPANY_STORAGE_ROOT / str(target_id)
-                if company_dir.exists():
-                    shutil.rmtree(company_dir, ignore_errors=True)
-
-                print(f"[dexter] Purged company #{target_id} ({target_name}) after {retention_days}-day retention.", file=sys.stderr)
-            except Exception as exc:
-                conn.rollback()
-                print(f"[dexter] Warning: Failed to purge company #{target_id} ({target_name}): {exc}", file=sys.stderr)
     finally:
         conn.close()
 
@@ -2668,126 +2483,6 @@ def set_user_location_assignments(
     finally:
         conn.close()
 
-def delete_user_account(actor_user_id: int, target_user_id: int) -> tuple[bool, str]:
-    conn = get_rbac_db_connection()
-    try:
-        actor = _get_actor_context(conn, actor_user_id)
-        if not actor or int(actor["is_active"]) != 1:
-            return False, "Actor is invalid or inactive."
-
-        actor_role = str(actor["role_name"])
-        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
-
-        target = conn.execute(
-            """
-            SELECT u.id, u.username, u.company_id, r.name AS role_name
-            FROM users u
-            JOIN roles r ON r.id = u.role_id
-            WHERE u.id = ?
-            LIMIT 1
-            """,
-            (int(target_user_id),),
-        ).fetchone()
-        if not target:
-            return False, "User not found."
-
-        target_company_id = int(target["company_id"]) if target["company_id"] is not None else None
-
-        if actor_role == "Manager":
-            if actor_company_id is None or target_company_id != actor_company_id:
-                return False, "Manager can only manage users in the same company."
-            if str(target["role_name"]) == "Super Admin":
-                return False, "Manager cannot manage Super Admin users."
-        elif actor_role != "Super Admin":
-            return False, "Only Super Admin or Manager can delete users."
-
-        if int(actor_user_id) == int(target["id"]):
-            return False, "You cannot delete your own account."
-
-        if str(target["role_name"]) == "Super Admin" and _active_super_admin_count(conn) <= 1:
-            return False, "Cannot delete the last active Super Admin."
-
-        target_username = str(target["username"])
-        target_role_name = str(target["role_name"])
-
-        try:
-            conn.execute("DELETE FROM user_location_assignments WHERE user_id = ?", (int(target_user_id),))
-            conn.execute("DELETE FROM users WHERE id = ?", (int(target_user_id),))
-        except sqlite3.IntegrityError:
-            conn.rollback()
-            return False, "Cannot delete: this user has audit history. Deactivate instead."
-
-        conn.commit()
-        add_audit_log(
-            actor_user_id,
-            "delete_user",
-            "users",
-            int(target_user_id),
-            json.dumps({"username": target_username, "role": target_role_name}),
-            company_id=target_company_id,
-        )
-        return True, "User deleted."
-    finally:
-        conn.close()
-
-def admin_reset_user_password(actor_user_id: int, target_user_id: int, new_password: str) -> tuple[bool, str]:
-    if len(new_password or "") < 8:
-        return False, "Password must be at least 8 characters."
-
-    conn = get_rbac_db_connection()
-    try:
-        actor = _get_actor_context(conn, actor_user_id)
-        if not actor or int(actor["is_active"]) != 1:
-            return False, "Actor is invalid or inactive."
-
-        actor_role = str(actor["role_name"])
-        actor_company_id = int(actor["company_id"]) if actor["company_id"] is not None else None
-
-        target = conn.execute(
-            """
-            SELECT u.id, u.username, u.company_id, r.name AS role_name
-            FROM users u
-            JOIN roles r ON r.id = u.role_id
-            WHERE u.id = ?
-            LIMIT 1
-            """,
-            (int(target_user_id),),
-        ).fetchone()
-        if not target:
-            return False, "User not found."
-
-        target_company_id = int(target["company_id"]) if target["company_id"] is not None else None
-
-        if actor_role == "Manager":
-            if actor_company_id is None or target_company_id != actor_company_id:
-                return False, "Manager can only manage users in the same company."
-            if str(target["role_name"]) == "Super Admin":
-                return False, "Manager cannot manage Super Admin users."
-        elif actor_role != "Super Admin":
-            return False, "Only Super Admin or Manager can reset passwords."
-
-        conn.execute(
-            """
-            UPDATE users
-            SET password_hash = ?, updated_at = datetime('now'),
-                password_reset_token = NULL, password_reset_expires = NULL
-            WHERE id = ?
-            """,
-            (generate_password_hash(new_password), int(target_user_id)),
-        )
-        conn.commit()
-        add_audit_log(
-            actor_user_id,
-            "admin_reset_password",
-            "users",
-            int(target_user_id),
-            json.dumps({"username": str(target["username"])}),
-            company_id=target_company_id,
-        )
-        return True, "Password reset."
-    finally:
-        conn.close()
-
 def create_task_record(
     actor_user_id: int,
     title: str,
@@ -3550,7 +3245,7 @@ class AppManager:
 
         t = threading.Thread(target=_watch, name="dexter-watchdog", daemon=True)
         t.start()
-        _startup_log("[dexter watchdog] Started — checking every %ds." % interval)
+        print("[dexter watchdog] Started — checking every %ds." % interval, file=sys.stderr)
 
 CONFIG = load_config()
 
@@ -3657,11 +3352,11 @@ try:
     if _autosync_enabled:
         _autosync_scheduler = create_auto_sync_scheduler(app, ROOT.parent, interval_minutes=_autosync_interval)
         if _autosync_scheduler:
-            _startup_log(f"[dexter] Auto-sync git scheduler enabled (interval: {_autosync_interval} minutes)")
+            print(f"[dexter] Auto-sync git scheduler enabled (interval: {_autosync_interval} minutes)", file=sys.stderr)
         else:
-            _startup_log("[dexter] Auto-sync scheduler not available (APScheduler not installed)")
+            print("[dexter] Auto-sync scheduler not available (APScheduler not installed)", file=sys.stderr)
     else:
-        _startup_log("[dexter] Auto-sync git scheduler disabled via DEXTER_AUTOSYNC_ENABLED=0")
+        print("[dexter] Auto-sync git scheduler disabled via DEXTER_AUTOSYNC_ENABLED=0", file=sys.stderr)
 except ImportError as e:
     print(f"[dexter] Warning: Could not import auto_sync_git module: {e}", file=sys.stderr)
 except Exception as e:
@@ -3804,7 +3499,6 @@ try:
     migrate_add_company_email_settings_v1()
     migrate_add_login_lockout_fields_v1()
     migrate_add_user_location_assignments_v1()
-    migrate_add_company_deletion_v1()
     ensure_default_super_admin_user()
 except Exception as e:
     error_msg = f"{type(e).__name__}: {str(e)}"
@@ -4481,7 +4175,6 @@ def admin_companies_page() -> Response:
         render_template(
             "admin_companies.html",
             companies=list_companies(),
-            pending_deletion=list_deleted_companies(),
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
         )
@@ -4521,30 +4214,6 @@ def admin_companies_active(company_id: int) -> Response:
 
     is_active = str(request.form.get("is_active", "1")).strip() == "1"
     ok, msg = set_company_active_state(actor_id, int(company_id), is_active)
-    key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
-
-@app.route("/admin/companies/<int:company_id>/delete", methods=["POST"])
-@login_required
-@role_required("Super Admin")
-def admin_companies_delete(company_id: int) -> Response:
-    actor_id = current_user_id()
-    if actor_id is None:
-        return redirect("/admin/companies?error=Session+expired")
-
-    ok, msg = soft_delete_company(actor_id, int(company_id))
-    key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
-
-@app.route("/admin/companies/<int:company_id>/restore", methods=["POST"])
-@login_required
-@role_required("Super Admin")
-def admin_companies_restore(company_id: int) -> Response:
-    actor_id = current_user_id()
-    if actor_id is None:
-        return redirect("/admin/companies?error=Session+expired")
-
-    ok, msg = restore_company(actor_id, int(company_id))
     key = "message" if ok else "error"
     return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
 
@@ -4834,45 +4503,6 @@ def admin_users_locations(user_id: int) -> Response:
     ok, msg = set_user_location_assignments(actor_id, int(user_id), request.form.getlist("restaurant_ids"))
     key = "message" if ok else "error"
     return _redirect_admin_users(**{key: msg})
-
-@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
-@login_required
-@role_required("Super Admin", "Manager")
-def admin_users_delete(user_id: int) -> Response:
-    actor_id = current_user_id()
-    if actor_id is None:
-        return _redirect_admin_users(error="Session expired")
-
-    if current_role_name() == "Super Admin":
-        scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
-        if scope_error:
-            return _redirect_admin_users(error=scope_error)
-
-    ok, msg = delete_user_account(actor_id, int(user_id))
-    key = "message" if ok else "error"
-    return _redirect_admin_users(**{key: msg})
-
-@app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
-@login_required
-@role_required("Super Admin", "Manager")
-def admin_users_reset_password(user_id: int) -> Response:
-    actor_id = current_user_id()
-    if actor_id is None:
-        return _redirect_admin_users(error="Session expired")
-
-    if current_role_name() == "Super Admin":
-        scope_error = _ensure_target_in_super_admin_scope(_company_id_for_user(int(user_id)), "user")
-        if scope_error:
-            return _redirect_admin_users(error=scope_error)
-
-    new_password = str(request.form.get("new_password") or "").strip()
-    if not new_password:
-        new_password = secrets.token_urlsafe(9)
-
-    ok, msg = admin_reset_user_password(actor_id, int(user_id), new_password)
-    if not ok:
-        return _redirect_admin_users(error=msg)
-    return _redirect_admin_users(message=f"Password reset. New password: {new_password} (copy this now — it will not be shown again)")
 
 @app.route("/admin/users/<int:user_id>/resend-invite", methods=["POST"])
 @login_required
@@ -5294,8 +4924,6 @@ def portal_app(name: str) -> Response:
             or (selected_restaurant or {}).get("name")
             or app_cfg["display_name"]
         ).strip()
-        if resolved_name == "managerapp":
-            raw_url = f"{raw_url}?{urlencode({'portal_embed': '1', 'portal_location': current_location_name})}"
         switch_notice = ""
         if switched:
             separator = "&" if "?" in raw_url else "?"
@@ -7011,10 +6639,6 @@ def _proxy(name: str, path: str) -> Response:
             def _rewrite_attr(match: re.Match[str]) -> str:
                 attr = match.group("attr")
                 quoted_path = match.group("path")
-                if quoted_path.startswith("/branding/"):
-                    return f"{attr}{quoted_path}"
-                if quoted_path.startswith("/portal") or quoted_path.startswith("/admin"):
-                    return f"{attr}{quoted_path}"
                 if quoted_path.startswith("/app/managerapp/"):
                     return f"{attr}{quoted_path}"
                 if quoted_path == "/":
@@ -7511,8 +7135,9 @@ def _start_manager_backup_scheduler() -> None:
     t = threading.Thread(target=_loop, name="dexter-manager-backup", daemon=True)
     t.start()
     _MGR_BACKUP_THREAD_STARTED = True
-    _startup_log(
-        f"[dexter backup] Manager backup scheduler started (critical: {', '.join(cfg['critical_schedule_times'])}, full: {cfg['full_backup_time']}, keep: {cfg['keep_snapshots']})"
+    print(
+        f"[dexter backup] Manager backup scheduler started (critical: {', '.join(cfg['critical_schedule_times'])}, full: {cfg['full_backup_time']}, keep: {cfg['keep_snapshots']})",
+        file=sys.stderr,
     )
 
 
@@ -7520,32 +7145,6 @@ try:
     _start_manager_backup_scheduler()
 except Exception as e:
     print(f"[dexter backup] Warning: Failed to initialize manager backup scheduler: {e}", file=sys.stderr)
-
-_COMPANY_PURGE_THREAD_STARTED = False
-
-def _start_company_purge_scheduler() -> None:
-    global _COMPANY_PURGE_THREAD_STARTED
-    if _COMPANY_PURGE_THREAD_STARTED:
-        return
-
-    def _loop() -> None:
-        while True:
-            try:
-                purge_expired_deleted_companies()
-            except Exception as exc:
-                print(f"[dexter] Warning: Company purge sweep failed: {exc}", file=sys.stderr)
-            time.sleep(6 * 60 * 60)
-
-    t = threading.Thread(target=_loop, name="dexter-company-purge", daemon=True)
-    t.start()
-    _COMPANY_PURGE_THREAD_STARTED = True
-    _startup_log("[dexter] Company purge scheduler started (checks every 6h, 30-day retention).")
-
-
-try:
-    _start_company_purge_scheduler()
-except Exception as e:
-    print(f"[dexter] Warning: Failed to initialize company purge scheduler: {e}", file=sys.stderr)
 
 
 @app.route("/api/admin/migrate-local-data", methods=["POST"])
@@ -7705,23 +7304,18 @@ if __name__ == "__main__":
 
     debug_mode = os.environ.get("PM_DEBUG", "0") == "1"
     ssl_context = "adhoc" if use_ssl else None
-
-    def _print_address(extra: str = "") -> None:
-        print(f"\n==> Dexter Assistant is running at {scheme}://{host}:{port}{extra}\n", file=sys.stderr)
-
     if debug_mode:
-        _print_address(" (DEBUG mode)")
+        print(f"[dexter] Running in DEBUG mode on {scheme}://{host}:{port}", file=sys.stderr)
         app.run(host=host, port=port, debug=True, ssl_context=ssl_context)
     else:
         if use_ssl:
-            _print_address(" (SSL/HTTPS)")
+            print(f"[dexter] SSL enabled. Running Flask HTTPS server on {scheme}://{host}:{port}", file=sys.stderr)
             app.run(host=host, port=port, debug=False, ssl_context=ssl_context)
         else:
             try:
                 from waitress import serve  # type: ignore[import]
-                _print_address()
+                print(f"[dexter] Running via waitress on {host}:{port} (threads=8)", file=sys.stderr)
                 serve(app, host=host, port=port, threads=8)
             except ImportError:
                 print("[dexter] waitress not installed — falling back to Flask dev server.", file=sys.stderr)
-                _print_address()
                 app.run(host=host, port=port, debug=False)
