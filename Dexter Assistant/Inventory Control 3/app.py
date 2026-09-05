@@ -1582,6 +1582,83 @@ OVERRIDE_SCRIPT = r"""
 </script>
 """
 
+INVENTORY_HEADER_SCRIPT = r"""
+<script>
+(function () {
+    if (window.__ic3InventoryHeaderInstalled) return;
+    window.__ic3InventoryHeaderInstalled = true;
+
+    const style = document.createElement('style');
+    style.id = 'ic3-inventory-header-style';
+    style.textContent = [
+        '.ic3-inventory-header { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:20px; align-items:start; padding:28px 30px 22px; background:#f8fafc; color:#0f172a; text-align:left; border-bottom:1px solid #dbe4ef; }',
+        '.ic3-inventory-header__context { margin:0 0 8px; color:#64748b; font-size:1.05rem; line-height:1.25; }',
+        '.ic3-inventory-header__title { margin:0; font-size:2.25rem; line-height:1.1; font-weight:800; }',
+        '.ic3-inventory-header__logo { width:112px; height:112px; object-fit:contain; border:1px solid #cbd5e1; border-radius:12px; background:#ffffff; padding:6px; }',
+        '.ic3-inventory-header__date { grid-column:1 / -1; display:flex; align-items:center; gap:10px; margin:0; }',
+        '.ic3-inventory-header__date label { display:none; }',
+        '.ic3-inventory-header__date input { min-height:44px; padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:1rem; }',
+        '.ic3-inventory-header__date .btn { min-height:44px; padding:8px 14px; }',
+        '#inventory > .location-selector { display:none !important; }',
+        '@media (max-width: 768px) {',
+        '  .ic3-inventory-header { grid-template-columns:minmax(0,1fr) 76px; gap:12px; padding:20px 16px 16px; }',
+        '  .ic3-inventory-header__context { font-size:0.95rem; margin-bottom:5px; }',
+        '  .ic3-inventory-header__title { font-size:1.75rem !important; }',
+        '  .ic3-inventory-header__logo { width:76px; height:76px; border-radius:10px; }',
+        '  .ic3-inventory-header__date { display:grid !important; grid-template-columns:minmax(0,1fr) auto !important; gap:8px !important; }',
+        '  .ic3-inventory-header__date input, .ic3-inventory-header__date .btn { width:100% !important; min-height:44px !important; margin:0 !important; }',
+        '}'
+    ].join('\n');
+    (document.head || document.documentElement).appendChild(style);
+
+    function installHeader() {
+        const header = document.querySelector('.header');
+        const inventory = document.getElementById('inventory');
+        const dateSelector = document.querySelector('#inventory .date-selector');
+        if (!header || !inventory || !dateSelector || header.dataset.ic3InventoryHeader === '1') return;
+
+        header.dataset.ic3InventoryHeader = '1';
+        header.classList.add('ic3-inventory-header');
+        header.textContent = '';
+
+        const titleGroup = document.createElement('div');
+        const context = document.createElement('p');
+        context.className = 'ic3-inventory-header__context';
+        context.id = 'ic3InventoryHeaderContext';
+        context.textContent = 'Selected location';
+        const title = document.createElement('h1');
+        title.className = 'ic3-inventory-header__title';
+        title.textContent = 'Inventory Control';
+        titleGroup.append(context, title);
+
+        const logo = document.createElement('img');
+        logo.className = 'ic3-inventory-header__logo';
+        logo.src = '/branding/company-logo';
+        logo.alt = 'Company logo';
+
+        dateSelector.classList.add('ic3-inventory-header__date');
+        header.append(titleGroup, logo, dateSelector);
+
+        fetch('/api/dexter/context')
+            .then(response => response.ok ? response.json() : null)
+            .then(contextData => {
+                if (!contextData) return;
+                const companyName = String(contextData.company_name || '').trim();
+                const locationName = String(contextData.restaurant_name || contextData.restaurant_location || '').trim();
+                context.textContent = [companyName, locationName].filter(Boolean).join(' - ') || 'Selected location';
+            })
+            .catch(() => {});
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', installHeader);
+    } else {
+        installHeader();
+    }
+})();
+</script>
+"""
+
 PRODUCT_DETAIL_SCRIPT = r"""
 <script>
 (function () {
@@ -2975,6 +3052,9 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
 
     if "__ic3MobileUiInstalled" not in updated and "</body>" in updated:
         updated = updated.replace("</body>", MOBILE_UI_SCRIPT + "\n</body>", 1)
+
+    if "__ic3InventoryHeaderInstalled" not in updated and "</body>" in updated:
+        updated = updated.replace("</body>", INVENTORY_HEADER_SCRIPT + "\n</body>", 1)
 
     if "__ic3ProductMixSyncUiInstalled" not in updated and "</body>" in updated:
         updated = updated.replace(

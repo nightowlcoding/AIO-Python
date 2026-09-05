@@ -154,6 +154,16 @@ main {
     color: #9ca3af;
 }
 
+#dailyLogForm input[type="number"]::-webkit-outer-spin-button,
+#dailyLogForm input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+#dailyLogForm input[type="number"] {
+    -moz-appearance: textfield;
+}
+
 .employee-form-actions {
     margin-top: 0.75rem;
 }
@@ -187,6 +197,23 @@ main {
 
 .daily-log-summary .fs-4 {
     line-height: 1.05;
+}
+
+.daily-log-summary-metric {
+    font-size: 0.875rem;
+    line-height: 1.35;
+}
+
+.daily-log-summary-metric .fw-semibold {
+    font-size: 1rem;
+}
+
+.daily-log-totals-table {
+    font-size: 0.875rem;
+}
+
+.daily-log-totals-table td {
+    line-height: 1.35;
 }
 
 .bulk-entry-mobile-cards {
@@ -335,6 +362,32 @@ main {
     .bulk-card-details {
         border-top: 1px solid rgba(34, 66, 122, 0.12);
         padding-top: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    #dailyLogForm .form-control-sm,
+    #dailyLogForm .form-select-sm {
+        min-height: 40px;
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+    }
+
+    #dailyLogForm .form-label.small {
+        font-size: 0.875rem;
+    }
+
+    #dailyLogForm .form-label.small.mb-0 {
+        margin-bottom: 0.25rem !important;
+    }
+
+    .daily-log-totals-table {
+        font-size: 0.875rem;
+    }
+
+    .daily-log-totals-table td {
+        padding-top: 0.15rem !important;
+        padding-bottom: 0.15rem !important;
     }
 }
 
