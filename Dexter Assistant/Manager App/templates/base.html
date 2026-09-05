@@ -187,7 +187,7 @@
             color: #0f172a !important;
         }
 
-        html.dx-embedded main.mt-4 {
+        html.dx-embedded main {
             margin-top: 0.35rem !important;
         }
 
@@ -223,6 +223,110 @@
         html.dx-groups-overlay #backButton {
             display: none !important;
         }
+
+        @media (max-width: 640px) {
+            html.dx-embedded .portal-brand {
+                max-width: none;
+            }
+
+            html.dx-embedded .portal-brand__section {
+                font-size: 0.75rem;
+            }
+        }
+
+        /* Menu/Settings/Back live in the top navbar on desktop only; on phone
+           widths they move to a bottom action footer (see #thumbFooterNav)
+           so they're reachable with one thumb. */
+        @media (max-width: 768px) {
+            #thumbNavGroup {
+                display: none !important;
+            }
+        }
+
+        #thumbFooterNav {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            #thumbFooterNav {
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+                padding: 0.6rem 0.75rem;
+                padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
+                background: #f8f9fa;
+                border-top: 1px solid rgba(0, 0, 0, 0.08);
+            }
+
+            #thumbFooterNav .btn {
+                min-height: 44px;
+            }
+        }
+
+        .dx-page-context-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .dx-page-context-header__text {
+            min-width: 0;
+        }
+
+        .dx-page-context-header__scope {
+            display: block;
+            color: #6b7280;
+            font-size: 0.92rem;
+            line-height: 1.2;
+            margin-bottom: 0.2rem;
+        }
+
+        .dx-page-context-header__page {
+            color: #111827;
+            font-size: 1.65rem;
+            font-weight: 700;
+            line-height: 1.15;
+            margin: 0;
+        }
+
+        .dx-page-context-header__logo {
+            height: 100px;
+            width: auto;
+            max-width: 260px;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .dx-page-context-header__logo-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+            background: #ffffff;
+            text-decoration: none;
+            padding: 0.2rem;
+        }
+
+        .dx-page-context-header__logo-link:hover,
+        .dx-page-context-header__logo-link:focus {
+            border-color: #9ca3af;
+            box-shadow: 0 0 0 0.14rem rgba(34, 66, 122, 0.18);
+        }
+
+        @media (max-width: 768px) {
+            .dx-page-context-header__page {
+                font-size: 1.35rem;
+            }
+
+            .dx-page-context-header__logo {
+                height: 78px;
+                max-width: 180px;
+            }
+        }
     </style>
 
     {% block extra_css %}{% endblock %}
@@ -235,7 +339,7 @@
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('daily_log') }}">
                 <span class="d-none d-md-inline">Manager App</span>
             </a>
-            <div class="d-flex align-items-center ms-auto gap-2 flex-wrap">
+            <div class="d-flex align-items-center ms-auto gap-2 flex-wrap" id="thumbNavGroup">
                 {% if not is_overlay_mode %}
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
@@ -280,9 +384,31 @@
                     </li>
                 </ul>
                 {% endif %}
+                {% if request.headers.get('X-Dexter-Auth') == '1' %}
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle btn btn-sm" href="#" id="settingsMenuToggle" role="button"
+                           data-bs-toggle="dropdown" aria-expanded="false" aria-label="Settings" title="Settings">
+                            <i class="bi bi-gear"></i> <span class="btn-label">Settings</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="settingsMenuToggle">
+                            <li>
+                                <a class="dropdown-item" href="#" data-top-url="/portal?hub=1" onclick="return navigatePortalTop(event, this.dataset.topUrl);">
+                                    <i class="bi bi-grid-1x2"></i> Dexter Hub
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="#" data-top-url="/admin" onclick="return navigatePortalTop(event, this.dataset.topUrl);">
+                                    <i class="bi bi-shield-lock"></i> Admin
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                {% endif %}
                 {% if not is_overlay_mode %}
-                <button id="backButton" type="button" class="btn btn-light btn-sm fw-semibold" onclick="window.history.length > 1 ? window.history.back() : window.location.href='{{ url_for('dashboard') }}'">
-                    <i class="bi bi-arrow-left"></i> Back
+                <button id="backButton" type="button" class="btn btn-light btn-sm fw-semibold" aria-label="Back" title="Back" onclick="window.history.length > 1 ? window.history.back() : window.location.href='{{ url_for('dashboard') }}'">
+                    <i class="bi bi-arrow-left"></i> <span class="btn-label">Back</span>
                 </button>
                 {% endif %}
             </div>
@@ -313,10 +439,111 @@
         {% endwith %}
     </div>
     
+    {% if current_user.is_authenticated %}
+    {% set page_name_map = {
+        'dashboard': 'Dashboard',
+        'daily_log': 'Daily Operations Log',
+        'employees': 'Employee Management',
+        'reports': 'Reports & Analytics',
+        'settings': 'Company Settings',
+        'audit_log': 'Recent Activity',
+        'locations': 'Locations',
+        'cash_manager': 'Cash Manager',
+        'manage_users': 'User Management',
+        'users': 'User Management',
+        'employee_profile': 'Employee Profile',
+        'inventory_groups': 'Inventory Groups'
+    } %}
+    {% set endpoint_name = request.endpoint or '' %}
+    {% set current_page_name = page_name_map.get(endpoint_name) or (endpoint_name.replace('_', ' ')|title if endpoint_name else 'Manager App') %}
+    {% set heading_company = (request.headers.get('X-Dexter-Company-Name') or (company.name if company is defined and company and company.name else ''))|trim %}
+    {% set heading_location = (request.headers.get('X-Dexter-Restaurant-Location') or request.headers.get('X-Dexter-Restaurant-Name') or (selected_location_name if selected_location_name is defined else ''))|trim %}
+    {% set heading_scope = (heading_company + ' - ' + heading_location) if (heading_company and heading_location and heading_company != heading_location and (heading_company|lower not in heading_location|lower)) else (heading_location or heading_company or 'Current Location') %}
+    <div class="container-fluid mt-3 mb-2">
+        <div class="dx-page-context-header">
+            <div class="dx-page-context-header__text">
+                <small class="dx-page-context-header__scope">{{ heading_scope }}</small>
+                <h1 class="dx-page-context-header__page">{{ current_page_name }}</h1>
+            </div>
+            <a class="dx-page-context-header__logo-link" href="{{ url_for('dashboard') }}" aria-label="Go to Dashboard" title="Go to Dashboard">
+                <img class="dx-page-context-header__logo" src="/branding/company-logo" alt="Company logo" />
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Main Content -->
-    <main class="{% if current_user.is_authenticated %}container-fluid{% endif %} mt-4">
+    <main class="{% if current_user.is_authenticated %}container-fluid mt-2{% else %}mt-4{% endif %}">
         {% block content %}{% endblock %}
     </main>
+
+    {% if current_user.is_authenticated %}
+    <!-- Bottom action footer: Menu/Settings/Back, phone widths only, for one-thumb reach -->
+    <div id="thumbFooterNav">
+        {% if not is_overlay_mode %}
+        <div class="dropup">
+            <a class="btn btn-sm btn-dark dropdown-toggle" href="#" id="operationsMenuToggleMobile" role="button"
+               data-bs-toggle="dropdown" aria-expanded="false" aria-label="Menu" title="Menu">
+                <i class="bi bi-list"></i> Menu
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="operationsMenuToggleMobile">
+                <li>
+                    <a class="dropdown-item {% if request.endpoint == 'daily_log' %}active{% endif %}" href="{{ url_for('daily_log') }}">
+                        <i class="bi bi-calendar-check"></i> Daily Log
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item {% if request.endpoint == 'employees' %}active{% endif %}" href="{{ url_for('employees') }}">
+                        <i class="bi bi-people"></i> Employees
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item {% if request.endpoint == 'reports' %}active{% endif %}" href="{{ url_for('reports') }}">
+                        <i class="bi bi-graph-up"></i> Reports
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item {% if request.endpoint == 'audit_log' %}active{% endif %}" href="{{ url_for('audit_log') }}">
+                        <i class="bi bi-activity"></i> Recent Activity
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
+                        <i class="bi bi-building"></i> Company Info
+                    </a>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+        {% if request.headers.get('X-Dexter-Auth') == '1' %}
+        <div class="dropup">
+            <a class="btn btn-sm" href="#" id="settingsMenuToggleMobile" role="button"
+               data-bs-toggle="dropdown" aria-expanded="false" aria-label="Settings" title="Settings"
+               style="color:#fff;background:#0f766e;">
+                <i class="bi bi-gear"></i> Settings
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="settingsMenuToggleMobile">
+                <li>
+                    <a class="dropdown-item" href="#" data-top-url="/portal?hub=1" onclick="return navigatePortalTop(event, this.dataset.topUrl);">
+                        <i class="bi bi-grid-1x2"></i> Dexter Hub
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" data-top-url="/admin" onclick="return navigatePortalTop(event, this.dataset.topUrl);">
+                        <i class="bi bi-shield-lock"></i> Admin
+                    </a>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+        {% if not is_overlay_mode %}
+        <button id="backButtonMobile" type="button" class="btn btn-light btn-sm fw-semibold" aria-label="Back" title="Back" onclick="window.history.length > 1 ? window.history.back() : window.location.href='{{ url_for('dashboard') }}'">
+            <i class="bi bi-arrow-left"></i> Back
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Footer -->
     <footer class="footer mt-auto py-3 bg-light">
@@ -331,6 +558,25 @@
     <script src="{{ url_for('static', filename='dexter-ui/theme.js') }}"></script>
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        function navigatePortalTop(event, href) {
+            if (event) event.preventDefault();
+            var target = href || '/portal';
+            if (/^\//.test(target)) {
+                target = window.location.origin + target;
+            }
+            try {
+                if (window.top && window.top !== window) {
+                    window.top.location.href = target;
+                    return false;
+                }
+            } catch (_error) {
+                // Fall through to same-window navigation.
+            }
+            window.location.href = target;
+            return false;
+        }
+    </script>
 
     {% block extra_js %}{% endblock %}
 </body>

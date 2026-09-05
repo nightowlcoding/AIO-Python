@@ -1065,6 +1065,95 @@ def save_daily_log(company_id, log_data, location_id=None):
         writer.writerow(['Cash in Drawer', log_data.get('drawer_total', 0)])
         writer.writerow(['DEPOSIT AMOUNT', log_data.get('deposit_amount', 0)])
 
+
+def _normalize_employee_name(name: str) -> str:
+    return re.sub(r'\s+', ' ', str(name or '').strip()).lower()
+
+
+def _merge_employee_names_in_daily_logs(company_id, location_id, official_name, alias_names):
+    """Rewrite historical Daily Log employee names to a canonical official name."""
+    official_clean = re.sub(r'\s+', ' ', str(official_name or '').strip())
+    official_key = _normalize_employee_name(official_clean)
+    alias_keys = {
+        _normalize_employee_name(alias)
+        for alias in (alias_names or [])
+        if _normalize_employee_name(alias)
+    }
+    alias_keys.discard(official_key)
+
+    if location_id:
+        data_dir = f"company_data/{company_id}/locations/{location_id}/daily_logs"
+    else:
+        data_dir = f"company_data/{company_id}/daily_logs"
+
+    if not os.path.isdir(data_dir):
+        return {
+            'files_scanned': 0,
+            'files_updated': 0,
+            'rows_updated': 0,
+            'data_dir': data_dir,
+            'errors': ['Daily log directory not found.'],
+        }
+
+    files_scanned = 0
+    files_updated = 0
+    rows_updated = 0
+    errors = []
+
+    for filename in os.listdir(data_dir):
+        if not filename.lower().endswith('.csv'):
+            continue
+
+        files_scanned += 1
+        filepath = os.path.join(data_dir, filename)
+
+        try:
+            with open(filepath, 'r', newline='') as f:
+                rows = list(csv.reader(f))
+        except Exception as exc:
+            errors.append(f"{filename}: read failed ({exc})")
+            continue
+
+        section = None
+        file_changed = False
+
+        for row in rows:
+            if not row:
+                continue
+
+            marker = str(row[0]).strip()
+            if marker == 'Employee Entries':
+                section = 'employees'
+                continue
+            if marker in ['Cash Drawer Count', 'Shift Drawer Checkpoints', 'Deductions', 'Cash Deductions', 'Tax Exempt', 'Deposit Summary']:
+                section = marker
+                continue
+
+            if section == 'employees':
+                if marker == 'Name':
+                    continue
+                if _normalize_employee_name(marker) in alias_keys:
+                    row[0] = official_clean
+                    rows_updated += 1
+                    file_changed = True
+
+        if file_changed:
+            try:
+                with open(filepath, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(rows)
+                files_updated += 1
+            except Exception as exc:
+                errors.append(f"{filename}: write failed ({exc})")
+
+    return {
+        'files_scanned': files_scanned,
+        'files_updated': files_updated,
+        'rows_updated': rows_updated,
+        'data_dir': data_dir,
+        'errors': errors,
+    }
+
 def load_daily_log(company_id, date_str, location_id=None, shift=None):
     """Load daily log from CSV file - matching desktop dailylog.py format"""
     if location_id:
@@ -1818,8 +1907,11 @@ def create_company():
 def dashboard():
     """Main dashboard"""
     company = db.get_company(current_user.current_company_id)
-    selected_location = _resolve_effective_location_id(
-        _effective_location_options(current_user.current_company_id)
+    locations_list = _effective_location_options(current_user.current_company_id)
+    selected_location = _resolve_effective_location_id(locations_list)
+    selected_location_name = next(
+        (loc.get('name') for loc in locations_list if str(loc.get('id')) == str(selected_location)),
+        None
     )
     
     # Get today's sales from daily log
@@ -1848,7 +1940,8 @@ def dashboard():
         user_count=len(users),
         today_sales=today_sales,
         cash_on_hand=cash_on_hand,
-        selected_location_id=selected_location
+        selected_location_id=selected_location,
+        selected_location_name=selected_location_name
     )
 
 
@@ -3005,6 +3098,57 @@ def api_save_employees():
 
         return jsonify({'success': True})
     
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/merge-employees', methods=['POST'])
+@login_required
+@company_required
+def api_merge_employees():
+    """Merge aliases into one official employee name and rewrite historical Daily Logs."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        official_name = re.sub(r'\s+', ' ', str(payload.get('official_name') or '').strip())
+        alias_names = payload.get('alias_names') or []
+
+        if not official_name:
+            return jsonify({'success': False, 'error': 'Official employee name is required.'}), 400
+        if not isinstance(alias_names, list):
+            return jsonify({'success': False, 'error': 'alias_names must be an array.'}), 400
+
+        alias_names = [re.sub(r'\s+', ' ', str(name).strip()) for name in alias_names if str(name).strip()]
+        if not alias_names:
+            return jsonify({
+                'success': True,
+                'official_name': official_name,
+                'files_scanned': 0,
+                'files_updated': 0,
+                'rows_updated': 0,
+                'message': 'No aliases provided; nothing to rewrite.'
+            })
+
+        company_id = current_user.current_company_id
+        requested_location = request.args.get('location_id') or (payload.get('location_id') if isinstance(payload, dict) else None)
+        location_id = str(requested_location).strip() if requested_location else _resolve_effective_location_id(_effective_location_options(company_id))
+
+        result = _merge_employee_names_in_daily_logs(company_id, location_id, official_name, alias_names)
+
+        if result.get('errors'):
+            return jsonify({
+                'success': False,
+                'error': 'Daily Log rewrite encountered file errors.',
+                'details': result.get('errors', []),
+                **result,
+            }), 500
+
+        return jsonify({
+            'success': True,
+            'official_name': official_name,
+            'location_id': location_id,
+            **result,
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

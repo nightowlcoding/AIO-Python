@@ -4,15 +4,6 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h1 class="mb-4">
-                <i class="bi bi-speedometer2"></i> Dashboard
-                <small class="text-muted">{{ company.name }}</small>
-            </h1>
-        </div>
-    </div>
-
     <!-- KPI & Quick Navigation Row -->
     <div class="row g-3 mb-4" id="kpiRow" style="align-items: stretch;">
         <!-- Yesterday's Sales -->
@@ -65,12 +56,6 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-3">
-                            <a href="{{ url_for('daily_log') }}" class="btn btn-outline-primary w-100 py-3">
-                                <i class="bi bi-calendar-check d-block mb-2" style="font-size: 2rem;"></i>
-                                Daily Log
-                            </a>
-                        </div>
                         <div class="col-md-3">
                             <a href="{{ url_for('employees') }}{% if selected_location_id %}?location_id={{ selected_location_id }}{% endif %}" class="btn btn-outline-info w-100 py-3">
                                 <i class="bi bi-people d-block mb-2" style="font-size: 2rem;"></i>

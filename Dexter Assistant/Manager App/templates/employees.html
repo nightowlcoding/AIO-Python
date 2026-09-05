@@ -9,24 +9,10 @@
     window.archiveRetentionDays = Number("{{ archive_retention_days or 30 }}") || 30;
 </script>
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-people"></i> Employee Management</h1>
-        {% if locations %}
-        <select class="form-select" id="locationSelector" onchange="changeLocation(this.value)" style="width: auto;">
-            <option value="">Select Location</option>
-            {% for location in locations %}
-            <option value="{{ location.id }}" {% if location.id == selected_location_id %}selected{% endif %}>
-                {{ location.name }}
-            </option>
-            {% endfor %}
-        </select>
-        {% endif %}
-    </div>
-    
     {% if not selected_location_id and locations %}
     <div class="alert alert-warning">
         <i class="bi bi-exclamation-triangle"></i>
-        <strong>Please select a location</strong> to view or manage employees.
+        <strong>No location is selected for this session.</strong> Switch location from Dexter Hub, then come back to Employee Management.
     </div>
     {% elif not locations %}
     <div class="alert alert-info">
@@ -70,9 +56,19 @@
             <!-- Quick Add Employee Form -->
             <div class="card mb-3 border-success">
                 <div class="card-header bg-success bg-opacity-10">
-                    <h6 class="mb-0 text-success"><i class="bi bi-plus-circle"></i> Quick Add Employee</h6>
+                    <button class="btn btn-link text-success fw-semibold p-0 text-decoration-none d-flex align-items-center gap-2"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#quickAddCollapse"
+                            aria-expanded="false"
+                            aria-controls="quickAddCollapse"
+                            id="quickAddToggleBtn">
+                        <i class="bi bi-plus-circle"></i>
+                        <span>Quick Add Employee</span>
+                        <i class="bi bi-chevron-down" id="quickAddChevron"></i>
+                    </button>
                 </div>
-                <div class="card-body">
+                <div class="card-body collapse" id="quickAddCollapse">
                     <form id="quickAddForm" onsubmit="addEmployee(event)">
                         <div class="row g-3">
                             <div class="col-md-3">
@@ -113,34 +109,40 @@
                             <span class="badge bg-primary" id="employeeCount">0</span>
                         </h6>
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleSelectAllEmployees()">
+                            <div class="btn-group" role="group" aria-label="Sort employees">
+                                <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 small" id="sortEmployeesAscBtn" onclick="setEmployeeSort('asc')">
+                                    <i class="bi bi-sort-alpha-down"></i> A-Z
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 small" id="sortEmployeesDescBtn" onclick="setEmployeeSort('desc')">
+                                    <i class="bi bi-sort-alpha-up"></i> Z-A
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 small" onclick="toggleSelectAllEmployees()">
                                 <i class="bi bi-check2-square"></i> Select All
                             </button>
-                            <button type="button" class="btn btn-warning btn-sm" onclick="archiveSelectedEmployees()">
+                            <button type="button" class="btn btn-warning btn-sm py-0 px-2 small" onclick="archiveSelectedEmployees()">
                                 <i class="bi bi-archive"></i> Archive Selected
+                            </button>
+                            <button type="button" class="btn btn-info btn-sm py-0 px-2 small" onclick="openMergeEmployeesModal()">
+                                <i class="bi bi-intersect"></i> Merge Selected
                             </button>
                         </div>
                     </div>
                 </div>
                 <div class="card-body p-0">
+                    <div class="px-3 pt-2 pb-1 text-muted small">Tap an employee name to open profile.</div>
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
                                 <tr>
                                     <th style="width:40px;"><input type="checkbox" id="selectAllEmployees" onchange="toggleSelectAllEmployees(this.checked)"></th>
-                                    <th>#</th>
-                                    <th>First Name</th>
-                                    <th>Last Name</th>
-                                    <th>Job Title</th>
-                                    <th>Date of Hire</th>
-                                    <th>Days Employed</th>
-                                    <th>Actions</th>
+                                    <th>Employee</th>
                                 </tr>
                             </thead>
                             <tbody id="employeeTableBody">
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">
-                                        No employees added yet. Use the Quick Add form above to get started.
+                                    <td colspan="2" class="text-center text-muted py-4">
+                                        No employees added yet. Expand Quick Add Employee to get started.
                                     </td>
                                 </tr>
                             </tbody>
@@ -273,12 +275,38 @@
             </div>
         </div>
     </div>
+
+    <div id="employeeMergeModal" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="z-index: 1055; background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px);">
+        <div class="d-flex align-items-center justify-content-center w-100 h-100 p-3">
+            <div class="card shadow" style="max-width: 560px; width: 100%;">
+                <div class="card-header bg-info text-white d-flex align-items-center justify-content-between">
+                    <div>
+                        <strong>Merge Employees</strong>
+                        <div class="small opacity-75">Choose the official employee name Dexter should keep.</div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" aria-label="Close" onclick="closeMergeEmployeesModal()"></button>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2 text-muted small">Selected employees:</p>
+                    <ul id="mergeEmployeeSelectionList" class="small mb-3"></ul>
+                    <label for="mergeOfficialEmployeeSelect" class="form-label">Official employee name</label>
+                    <select id="mergeOfficialEmployeeSelect" class="form-select"></select>
+                    <div class="form-text mt-2">Dexter will keep this employee as the main record and merge selected entries under it.</div>
+                    <div class="d-flex gap-2 justify-content-end mt-3">
+                        <button type="button" class="btn btn-outline-secondary" onclick="closeMergeEmployeesModal()">Cancel</button>
+                        <button type="button" class="btn btn-info text-white" onclick="mergeSelectedEmployeesConfirm()">Merge Employees</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
 // Employee list storage
 let employees = [];
 let removedEmployees = [];
+let employeeSortDirection = 'asc';
 
 function employeeStorageScope() {
     const companyId = String(window.currentCompanyId || 'global').trim() || 'global';
@@ -380,22 +408,29 @@ function updateEmployeeTable() {
     const tbody = document.getElementById('employeeTableBody');
     const countBadge = document.getElementById('employeeCount');
     const selectedIds = getSelectedEmployeeIds();
+    const sortedEmployees = [...employees].sort((a, b) => {
+        const aName = `${String(a && a.firstName || '').trim()} ${String(a && a.lastName || '').trim()}`.toLowerCase();
+        const bName = `${String(b && b.firstName || '').trim()} ${String(b && b.lastName || '').trim()}`.toLowerCase();
+        if (aName < bName) return employeeSortDirection === 'asc' ? -1 : 1;
+        if (aName > bName) return employeeSortDirection === 'asc' ? 1 : -1;
+        return 0;
+    });
     
     countBadge.textContent = employees.length;
+    updateSortButtons();
     
     if (employees.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="text-center text-muted py-4">
-                    No employees added yet. Use the Quick Add form above to get started.
+                <td colspan="2" class="text-center text-muted py-4">
+                    No employees added yet. Expand Quick Add Employee to get started.
                 </td>
             </tr>
         `;
         return;
     }
     
-    tbody.innerHTML = employees.map((emp, index) => {
-        const daysEmployed = calculateDaysEmployed(emp.dateOfHire);
+    tbody.innerHTML = sortedEmployees.map((emp, index) => {
         const companyId = window.currentCompanyId || '';
         const empFileName = `${escapeHtml(emp.firstName)}_${escapeHtml(emp.lastName)}.json`;
         const selectedLocationId = encodeURIComponent(window.selectedLocationId || '');
@@ -404,20 +439,8 @@ function updateEmployeeTable() {
         return `
             <tr class="employee-row" style="cursor:pointer" onclick="window.location.href='${profileUrl}'">
             <td><input type="checkbox" class="employee-select" value="${emp.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); syncSelectAllState();"></td>
-                <td>${index + 1}</td>
-                <td>${escapeHtml(emp.firstName)}</td>
-                <td>${escapeHtml(emp.lastName)}</td>
-                <td>${escapeHtml(emp.jobTitle || '-')}</td>
-                <td>${emp.dateOfHire}</td>
-                <td>${daysEmployed} days</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="event.stopPropagation(); editEmployee(${emp.id});" title="Edit employee">
-                        <i class="bi bi-pencil-square"></i> Edit
-                    </button>
-                    <button class="btn btn-sm btn-warning me-1" onclick="event.stopPropagation(); archiveEmployee(${emp.id});" title="Archive employee">
-                        <i class="bi bi-archive"></i> Archive
-                    </button>
-                    <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); window.location.href='${profileUrl}';">View Profile</button>
+                    <div class="fw-semibold">${escapeHtml(emp.firstName)} ${escapeHtml(emp.lastName)}</div>
                 </td>
             </tr>
         `;
@@ -426,6 +449,50 @@ function updateEmployeeTable() {
     syncSelectAllState();
 }
 
+function setEmployeeSort(direction) {
+    employeeSortDirection = direction === 'desc' ? 'desc' : 'asc';
+    updateEmployeeTable();
+}
+
+function updateSortButtons() {
+    const ascBtn = document.getElementById('sortEmployeesAscBtn');
+    const descBtn = document.getElementById('sortEmployeesDescBtn');
+    if (!ascBtn || !descBtn) {
+        return;
+    }
+
+    if (employeeSortDirection === 'asc') {
+        ascBtn.classList.remove('btn-outline-primary');
+        ascBtn.classList.add('btn-primary');
+        descBtn.classList.remove('btn-primary');
+        descBtn.classList.add('btn-outline-primary');
+    } else {
+        descBtn.classList.remove('btn-outline-primary');
+        descBtn.classList.add('btn-primary');
+        ascBtn.classList.remove('btn-primary');
+        ascBtn.classList.add('btn-outline-primary');
+    }
+}
+
+
+        function bindQuickAddChevron() {
+            const collapseEl = document.getElementById('quickAddCollapse');
+            const chevronEl = document.getElementById('quickAddChevron');
+            if (!collapseEl || !chevronEl || collapseEl.dataset.chevronBound === '1') {
+                return;
+            }
+            collapseEl.dataset.chevronBound = '1';
+
+            collapseEl.addEventListener('shown.bs.collapse', () => {
+                chevronEl.classList.remove('bi-chevron-down');
+                chevronEl.classList.add('bi-chevron-up');
+            });
+
+            collapseEl.addEventListener('hidden.bs.collapse', () => {
+                chevronEl.classList.remove('bi-chevron-up');
+                chevronEl.classList.add('bi-chevron-down');
+            });
+        }
 function editEmployee(id) {
     const employee = employees.find(emp => emp.id === id);
     if (!employee) {
@@ -575,6 +642,137 @@ function archiveSelectedEmployees() {
     updateRemovedEmployeeTable();
     saveAllData();
     showToast('Archived', `${selectedEmployees.length} employee(s) moved to archived employees.`, 'warning');
+}
+
+function openMergeEmployeesModal() {
+    const selectedIds = getSelectedEmployeeIds().map((value) => Number(value));
+    if (selectedIds.length < 2) {
+        alert('Select at least two employees to merge.');
+        return;
+    }
+
+    const selectedEmployees = employees.filter((employee) => selectedIds.includes(Number(employee.id)));
+    if (selectedEmployees.length < 2) {
+        alert('Could not find enough selected employees to merge.');
+        return;
+    }
+
+    const modal = document.getElementById('employeeMergeModal');
+    const listEl = document.getElementById('mergeEmployeeSelectionList');
+    const selectEl = document.getElementById('mergeOfficialEmployeeSelect');
+    if (!modal || !listEl || !selectEl) {
+        return;
+    }
+
+    listEl.innerHTML = selectedEmployees.map((emp) => {
+        const fullName = `${escapeHtml(emp.firstName)} ${escapeHtml(emp.lastName)}`;
+        return `<li data-emp-id="${emp.id}">${fullName}</li>`;
+    }).join('');
+
+    selectEl.innerHTML = selectedEmployees.map((emp) => {
+        const fullName = `${escapeHtml(emp.firstName)} ${escapeHtml(emp.lastName)}`;
+        return `<option value="${emp.id}">${fullName}</option>`;
+    }).join('');
+
+    modal.classList.remove('d-none');
+}
+
+function closeMergeEmployeesModal() {
+    const modal = document.getElementById('employeeMergeModal');
+    if (modal) {
+        modal.classList.add('d-none');
+    }
+}
+
+async function mergeSelectedEmployeesConfirm() {
+    const selectEl = document.getElementById('mergeOfficialEmployeeSelect');
+    if (!selectEl) {
+        return;
+    }
+
+    const officialId = Number(selectEl.value);
+    const selectedIds = getSelectedEmployeeIds().map((value) => Number(value));
+    if (!selectedIds.includes(officialId)) {
+        alert('Please select an official employee from the selected list.');
+        return;
+    }
+
+    const selectedEmployees = employees.filter((employee) => selectedIds.includes(Number(employee.id)));
+    if (selectedEmployees.length < 2) {
+        alert('Select at least two employees to merge.');
+        return;
+    }
+
+    const officialEmployee = selectedEmployees.find((employee) => Number(employee.id) === officialId);
+    if (!officialEmployee) {
+        alert('Official employee not found.');
+        return;
+    }
+
+    const mergedCandidates = selectedEmployees.filter((employee) => Number(employee.id) !== officialId);
+    const officialName = `${officialEmployee.firstName} ${officialEmployee.lastName}`;
+    const mergedFromNames = mergedCandidates.map((candidate) => `${candidate.firstName} ${candidate.lastName}`);
+
+    // Keep the earliest hire date, and prefer a non-empty job title if missing.
+    mergedCandidates.forEach((candidate) => {
+        if ((!officialEmployee.jobTitle || !String(officialEmployee.jobTitle).trim()) && candidate.jobTitle) {
+            officialEmployee.jobTitle = candidate.jobTitle;
+        }
+        if (candidate.dateOfHire) {
+            if (!officialEmployee.dateOfHire || String(candidate.dateOfHire) < String(officialEmployee.dateOfHire)) {
+                officialEmployee.dateOfHire = candidate.dateOfHire;
+            }
+        }
+    });
+
+    officialEmployee.mergedFrom = Array.isArray(officialEmployee.mergedFrom) ? officialEmployee.mergedFrom : [];
+    officialEmployee.mergedFrom = Array.from(new Set([...officialEmployee.mergedFrom, ...mergedFromNames]));
+
+    const mergeButton = document.querySelector('#employeeMergeModal .btn.btn-info');
+    if (mergeButton) {
+        mergeButton.disabled = true;
+    }
+
+    let historicalRenameSummary = '';
+    try {
+        const mergeParams = new URLSearchParams();
+        if (window.selectedLocationId) {
+            mergeParams.set('location_id', window.selectedLocationId);
+        }
+        const mergeUrl = `api/merge-employees${mergeParams.toString() ? `?${mergeParams.toString()}` : ''}`;
+        const mergeResponse = await fetch(mergeUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                official_name: officialName,
+                alias_names: mergedFromNames
+            })
+        });
+        const mergeResult = await mergeResponse.json();
+        if (!mergeResponse.ok || !mergeResult.success) {
+            throw new Error((mergeResult && mergeResult.error) || 'Historical Daily Log rename failed.');
+        }
+        historicalRenameSummary = ` Daily Logs updated: ${mergeResult.rows_updated || 0} entr${(mergeResult.rows_updated || 0) === 1 ? 'y' : 'ies'} across ${mergeResult.files_updated || 0} file${(mergeResult.files_updated || 0) === 1 ? '' : 's'}.`;
+    } catch (error) {
+        showToast('Merge Blocked', `Roster was not changed because Daily Log rename failed: ${error.message}`, 'warning');
+        if (mergeButton) {
+            mergeButton.disabled = false;
+        }
+        return;
+    }
+
+    employees = employees.filter((employee) => !selectedIds.includes(Number(employee.id)) || Number(employee.id) === officialId);
+
+    closeMergeEmployeesModal();
+    if (mergeButton) {
+        mergeButton.disabled = false;
+    }
+    updateEmployeeTable();
+    saveAllData();
+
+    showToast('Merged', `${mergedCandidates.length} employee record(s) merged under ${officialName}.${historicalRenameSummary}`, 'success');
 }
 
 function purgeExpiredArchivedEmployees() {
@@ -1098,6 +1296,7 @@ function loadEmployeesFromBackend() {
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('dateOfHire').value = today;
+    bindQuickAddChevron();
 
     showEmployeeSection();
     
@@ -1112,9 +1311,6 @@ document.addEventListener('DOMContentLoaded', function() {
     purgeExpiredArchivedEmployees();
 });
 
-function changeLocation(locationId) {
-    window.location.href = '{{ url_for("employees") }}?location_id=' + locationId;
-}
 </script>
 {% endif %}
 {% endblock %}
