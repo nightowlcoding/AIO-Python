@@ -276,7 +276,7 @@ def create_auto_sync_scheduler(app, repo_root: Path, interval_minutes: int = 30)
         return scheduler
     
     except ImportError:
-        logger.warning("APScheduler not installed. Auto-sync scheduler not available.")
+        logger.info("APScheduler not installed. Auto-sync scheduler not available.")
         return None
 
 

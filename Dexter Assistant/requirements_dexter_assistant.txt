@@ -3,6 +3,7 @@ python-dotenv>=1.0
 requests>=2.31
 gunicorn>=21.2
 waitress>=3.0
+tzdata>=2024.1
 flask-login>=0.6
 flask-limiter>=3.8
 flask-wtf>=1.2

@@ -293,15 +293,9 @@
             var vh = window.innerHeight - used;
             var isMobile = window.innerWidth <= 820;
             var minHeight = isMobile ? 360 : 420;
-            if (isMobile) {
-                // Disable iframe internal scroll so iOS can't trap touches inside it.
-                frame.setAttribute('scrolling', 'no');
-            } else {
-                frame.removeAttribute('scrolling');
-            }
-            // Try to size the iframe to its content (same-origin), so the OUTER
-            // page scrolls naturally on mobile instead of trapping touches
-            // inside the iframe (which iOS rubber-bands back).
+            // Keep iframe non-scrolling and grow it with content so the outer
+            // page owns vertical scrolling consistently on desktop and mobile.
+            frame.setAttribute('scrolling', 'no');
             try {
                 var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
                 if (doc && doc.body) {
@@ -310,7 +304,9 @@
                         doc.documentElement ? doc.documentElement.scrollHeight : 0
                     );
                     if (contentH && contentH > 50) {
-                        frame.style.height = Math.max(contentH, vh, minHeight) + 'px';
+                        var maxSafeHeight = Math.max(vh * 8, 12000);
+                        var nextHeight = Math.min(Math.max(contentH, vh, minHeight), maxSafeHeight);
+                        frame.style.height = nextHeight + 'px';
                         return;
                     }
                 }

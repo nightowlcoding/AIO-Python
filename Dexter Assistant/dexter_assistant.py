@@ -31,7 +31,7 @@ from typing import Any
 from email.message import EmailMessage
 from email.utils import formataddr, parsedate_to_datetime
 from urllib.error import URLError
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import urlopen
 
 import requests
@@ -81,10 +81,10 @@ else:
     _default_auth_storage_root = ROOT
 
 AUTH_STORAGE_ROOT = Path(os.environ.get("DEXTER_AUTH_DATA_DIR") or str(_default_auth_storage_root))
-print(f"[dexter] AUTH_STORAGE_ROOT set to: {AUTH_STORAGE_ROOT} (absolute: {AUTH_STORAGE_ROOT.resolve()})", file=sys.stderr)
+_startup_log(f"[dexter] AUTH_STORAGE_ROOT set to: {AUTH_STORAGE_ROOT} (absolute: {AUTH_STORAGE_ROOT.resolve()})")
 try:
     AUTH_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
-    print(f"[dexter] AUTH_STORAGE_ROOT directory created/verified", file=sys.stderr)
+    _startup_log(f"[dexter] AUTH_STORAGE_ROOT directory created/verified")
 except OSError as e:
     print(f"[dexter] ERROR: Could not create AUTH_STORAGE_ROOT {AUTH_STORAGE_ROOT}: {e}", file=sys.stderr)
     fallback_candidates = [ROOT, Path(tempfile.gettempdir()) / "dexter-auth"]
@@ -3550,7 +3550,7 @@ class AppManager:
 
         t = threading.Thread(target=_watch, name="dexter-watchdog", daemon=True)
         t.start()
-        print("[dexter watchdog] Started — checking every %ds." % interval, file=sys.stderr)
+        _startup_log("[dexter watchdog] Started — checking every %ds." % interval)
 
 CONFIG = load_config()
 
@@ -5294,6 +5294,8 @@ def portal_app(name: str) -> Response:
             or (selected_restaurant or {}).get("name")
             or app_cfg["display_name"]
         ).strip()
+        if resolved_name == "managerapp":
+            raw_url = f"{raw_url}?{urlencode({'portal_embed': '1', 'portal_location': current_location_name})}"
         switch_notice = ""
         if switched:
             separator = "&" if "?" in raw_url else "?"

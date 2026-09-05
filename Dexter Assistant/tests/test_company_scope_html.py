@@ -276,6 +276,37 @@ class CompanyScopeHtmlTests(unittest.TestCase):
         with self.client.session_transaction() as sess:
             self.assertEqual(sess[_dexter.SESSION_USER_KEY]["role_name"], "Manager")
 
+    def test_manager_portal_uses_compact_embedded_header_context(self) -> None:
+        self._set_session_user(
+            user_id=self.ids["manager_id"],
+            role_name="Manager",
+            company_id=self.ids["alpha_company_id"],
+            selected_company_id=self.ids["alpha_company_id"],
+        )
+
+        with patch.object(_dexter.MANAGER, "start", return_value={"ok": True}):
+            response = self.client.get("/portal/managerapp")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertNotIn('id="topbar"', html)
+        self.assertIn('portal_embed=1', html)
+        self.assertIn('portal_location=Daily+Log', html)
+
+    def test_non_manager_portal_keeps_shell_header(self) -> None:
+        self._set_session_user(
+            user_id=self.ids["manager_id"],
+            role_name="Manager",
+            company_id=self.ids["alpha_company_id"],
+            selected_company_id=self.ids["alpha_company_id"],
+        )
+
+        with patch.object(_dexter.MANAGER, "start", return_value={"ok": True}):
+            response = self.client.get("/portal/productmix")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="topbar"', response.get_data(as_text=True))
+
     def test_security_headers_present_on_login_page(self) -> None:
         res = self.client.get("/auth/login")
         self.assertEqual(res.status_code, 200)
