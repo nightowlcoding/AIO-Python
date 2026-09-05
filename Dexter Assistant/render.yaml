@@ -26,7 +26,7 @@ services:
       - key: PM_DB_DIR
         value: /dexter-data/pm
       - key: DEXTER_AUTH_DATA_DIR
-        value: /dexter-data/managerapp/auth
+        value: /dexter-data/auth
       - key: DEXTER_MGR_BACKUP_ENABLED
         value: "0"
       - key: DEXTER_MGR_BACKUP_INTERVAL_MINUTES
