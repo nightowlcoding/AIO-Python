@@ -449,7 +449,7 @@ def _find_writable_db_path() -> Path:
             RBAC_DB_PATH = db_path
             with _RBAC_DB_PATH_LOCK:
                 _RBAC_DB_PATH_VERIFIED = db_path
-            print(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}", file=sys.stderr)
+            _startup_log(f"[get_rbac_db_connection] Using database path: {db_path.resolve()}")
             return db_path
         except (OSError, sqlite3.OperationalError) as e:
             print(f"[get_rbac_db_connection] Path not writable ({db_path.resolve()}): {e}", file=sys.stderr)
