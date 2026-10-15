@@ -252,6 +252,11 @@
   </div>
   {% endif %}
 
+  {% if is_focus_mode and production_report_rows %}
+  {% set ic3_group = production_report_rows[0] %}
+  {% include '_ic3_item_history.html' %}
+  {% endif %}
+
   <div class="col-12">
     <div class="card production-report-filters">
       <div class="card-header"><i class="bi bi-funnel-fill me-2"></i>Filters</div>
@@ -380,7 +385,11 @@
         <div class="card mb-3 production-group-card" data-total-units="{{ '%.6f'|format(group.total_units or 0) }}">
           <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
+              {% if group.production_item_id and not is_focus_mode %}
+              <a class="fw-semibold fs-5 link-primary text-decoration-none" href="{{ url_for('reports_production_page', search=upload_filters.search, view=report_view or 'compact', start_date=upload_filters.start_date, end_date=upload_filters.end_date, location_id=upload_filters.location_id, focus_item_id=group.production_item_id) }}" title="Open ingredient history and IC3 item link">{{ group.production_item_name }}</a>
+              {% else %}
               <span class="fw-semibold fs-5">{{ group.production_item_name }}</span>
+              {% endif %}
               <div class="d-flex flex-wrap gap-1 mt-1 compact-kpi">
                 <span class="badge text-bg-light border">Total Units {{ group.total_units|comma }}</span>
                 <span class="badge text-bg-light border">Cases Exact {{ '%.2f'|format(group.cases_exact) }}</span>

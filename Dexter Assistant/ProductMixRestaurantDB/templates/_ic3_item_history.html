@@ -1,0 +1,203 @@
+<section class="col-12" aria-labelledby="ic3-history-title" id="ic3-item-history"
+         data-api-url="{{ '/app/productmix' if request.headers.get('X-Dexter-Company-Name') else '' }}{{ url_for('production_item_ic3', item_id=ic3_group.production_item_id, location_id=upload_filters.location_id, start_date=upload_filters.start_date, end_date=upload_filters.end_date) }}"
+         data-csrf-token="{{ csrf_token }}">
+  <div class="border-top border-bottom py-3">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div style="min-width:0; overflow-wrap:anywhere">
+        <h2 class="h5 mb-1" id="ic3-history-title"><i class="bi bi-box-seam me-2"></i>IC3: {{ ic3_group.production_item_name }}</h2>
+        <div class="small text-muted">{{ restaurant.location }} | {{ upload_filters.start_date or 'Beginning of history' }} to {{ upload_filters.end_date or 'End of history' }}</div>
+        <div class="mt-2"><span class="small text-muted">Linked IC3 Item:</span> <span id="ic3-linked-item">Loading...</span></div>
+        <div class="small text-muted" id="ic3-unit-label"></div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 production-interactive">
+        <button class="btn btn-sm btn-outline-primary" type="button" id="ic3-choose" disabled><i class="bi bi-link-45deg me-1"></i><span>Link IC3 Item</span></button>
+        <button class="btn btn-sm btn-outline-danger" type="button" id="ic3-remove" hidden title="Remove only the ProductMix link"><i class="bi bi-link-45deg me-1"></i>Remove Link</button>
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="ic3-refresh" title="Refresh IC3 history"><i class="bi bi-arrow-clockwise"></i><span class="visually-hidden">Refresh IC3 history</span></button>
+      </div>
+    </div>
+    <div id="ic3-status" class="small mb-2" role="status" aria-live="polite">Loading IC3 history...</div>
+    <form id="ic3-link-form" class="border-top py-3 production-interactive" hidden>
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-8">
+          <label class="form-label small" for="ic3-search">Search IC3 Items</label>
+          <input id="ic3-search" class="form-control" type="search" placeholder="Name, nickname, or product number" autocomplete="off">
+        </div>
+        <div class="col-12">
+          <label class="form-label small" for="ic3-catalog">Corresponding IC3 Item</label>
+          <select id="ic3-catalog" class="form-select" size="6" required style="height:180px; max-width:100%" aria-describedby="ic3-catalog-status"></select>
+          <div id="ic3-catalog-status" class="small text-muted mt-1" role="status"></div>
+          <div id="ic3-selection" class="small mt-1" style="overflow-wrap:anywhere"></div>
+        </div>
+        <div class="col-auto"><button id="ic3-save" class="btn btn-sm btn-primary" type="submit" disabled><i class="bi bi-check2 me-1"></i>Save Link</button></div>
+        <div class="col-auto"><button id="ic3-cancel" class="btn btn-sm btn-outline-secondary" type="button"><i class="bi bi-x-lg me-1"></i>Cancel</button></div>
+      </div>
+    </form>
+    <div id="ic3-history-data" hidden>
+      <div class="row g-3 mb-3">
+        <div class="col-6"><div class="small text-muted">Supplier Purchased Quantity (IC3 Units)</div><div class="h4 mb-0" id="ic3-purchased"></div></div>
+        <div class="col-6"><div class="small text-muted">Saved Inventory Count Dates</div><div class="h4 mb-0" id="ic3-count-dates"></div></div>
+      </div>
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <h3 class="h6">Supplier Purchases</h3>
+          <div class="table-responsive" style="max-height:320px">
+            <table class="table table-sm mb-0"><thead><tr><th scope="col">Recorded Date</th><th scope="col" class="text-end">IC3 Quantity</th></tr></thead><tbody id="ic3-order-rows"></tbody></table>
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <h3 class="h6">Inventory Counts</h3>
+          <div class="table-responsive" style="max-height:320px">
+            <table class="table table-sm mb-0"><thead><tr><th scope="col">Count Date</th><th scope="col" class="text-end">IC3 Quantity On Hand</th></tr></thead><tbody id="ic3-inventory-rows"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<script>
+(function () {
+  const root = document.getElementById('ic3-item-history');
+  const field = function (name) { return document.getElementById('ic3-' + name); };
+  const endpoint = new URL(root.dataset.apiUrl, document.baseURI);
+  const portalPrefix = location.pathname.match(/^(.*\/app\/productmix)\//);
+  if (portalPrefix && !endpoint.pathname.startsWith(portalPrefix[1] + '/')) {
+    endpoint.pathname = portalPrefix[1] + endpoint.pathname;
+  }
+  let catalog = [];
+  let link = null;
+  let busy = false;
+  const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
+
+  function message(text, error) {
+    field('status').textContent = text;
+    field('status').classList.toggle('text-danger', !!error);
+  }
+  function setBusy(value) {
+    busy = value;
+    field('choose').disabled = value;
+    field('remove').disabled = value;
+    field('refresh').disabled = value;
+    field('save').disabled = value || !field('catalog').value;
+  }
+  async function callApi(options, wantCatalog) {
+    const target = new URL(endpoint);
+    if (wantCatalog) target.searchParams.set('catalog', '1');
+    const response = await fetch(target, Object.assign({ credentials: 'same-origin', signal: AbortSignal.timeout(12000) }, options || {}));
+    const payload = await response.json();
+    if (!response.ok || payload.error) throw new Error(payload.error || 'IC3 request failed.');
+    return payload;
+  }
+  function renderRows(target, rows) {
+    target.replaceChildren();
+    if (!rows.length) {
+      const cell = document.createElement('td');
+      cell.colSpan = 2;
+      cell.className = 'text-muted';
+      cell.textContent = 'No records in this period.';
+      const row = document.createElement('tr');
+      row.append(cell);
+      target.append(row);
+    }
+    rows.forEach(function (entry) {
+      const row = document.createElement('tr');
+      const day = document.createElement('td');
+      const quantity = document.createElement('td');
+      day.textContent = entry.date;
+      quantity.textContent = number.format(entry.quantity);
+      quantity.className = 'text-end';
+      row.append(day, quantity);
+      target.append(row);
+    });
+  }
+  async function loadHistory() {
+    setBusy(true);
+    field('history-data').hidden = true;
+    message('Loading IC3 history...');
+    try {
+      const payload = await callApi();
+      link = payload.link;
+      field('linked-item').textContent = link ? link.description + ' (#' + link.ic3_product_number + ')' : 'Not linked';
+      field('unit-label').textContent = link ? 'Package: ' + (link.package_size || 'Not recorded') + ' | Quantities in IC3 native units' : '';
+      field('choose').querySelector('span').textContent = link ? 'Change IC3 Item' : 'Link IC3 Item';
+      field('remove').hidden = !link;
+      if (payload.history_error) {
+        message(payload.history_error, true);
+      } else if (!link) {
+        message('No IC3 item linked.');
+      } else {
+        field('history-data').hidden = false;
+        field('purchased').textContent = number.format(payload.history.total_order_qty);
+        field('count-dates').textContent = payload.history.inventory_count_dates;
+        renderRows(field('order-rows'), payload.history.order_history);
+        renderRows(field('inventory-rows'), payload.history.inventory_history);
+        message('');
+      }
+    } catch (error) {
+      message(error.message || 'IC3 request failed.', true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function selectionChanged() {
+    const selected = catalog.find(function (entry) { return entry.product_number === field('catalog').value; });
+    field('selection').textContent = selected ? selected.description + ' | #' + selected.product_number + ' | ' + (selected.package_size || 'Package not recorded') : '';
+    field('save').disabled = busy || !selected;
+  }
+  function filterCatalog() {
+    const previous = field('catalog').value || (link && link.ic3_product_number);
+    const tokens = field('search').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const matching = catalog.filter(function (entry) {
+      const text = [entry.description, entry.nickname, entry.product_number, entry.package_size, entry.brand].join(' ').toLowerCase();
+      return tokens.every(function (token) { return text.includes(token); });
+    });
+    field('catalog').replaceChildren();
+    matching.forEach(function (entry) {
+      const option = document.createElement('option');
+      option.value = entry.product_number;
+      option.textContent = entry.description + (entry.nickname ? ' / ' + entry.nickname : '') + ' | #' + entry.product_number + ' | ' + entry.package_size;
+      field('catalog').append(option);
+    });
+    field('catalog').value = matching.some(function (entry) { return entry.product_number === previous; }) ? previous : '';
+    field('catalog-status').textContent = matching.length + ' matching items';
+    selectionChanged();
+  }
+  field('choose').addEventListener('click', async function () {
+    field('link-form').hidden = false;
+    field('search').value = '';
+    setBusy(true);
+    field('catalog-status').textContent = 'Loading IC3 item list...';
+    try {
+      const payload = await callApi(null, true);
+      catalog = payload.catalog;
+      filterCatalog();
+      field('search').focus();
+    } catch (error) {
+      catalog = [];
+      filterCatalog();
+      field('catalog-status').textContent = error.message;
+    } finally {
+      setBusy(false);
+    }
+  });
+  field('search').addEventListener('input', filterCatalog);
+  field('catalog').addEventListener('change', selectionChanged);
+  field('cancel').addEventListener('click', function () { field('link-form').hidden = true; });
+  async function save(action) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await callApi({ method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': root.dataset.csrfToken }, body: JSON.stringify({ action: action, product_number: field('catalog').value }) });
+      field('link-form').hidden = true;
+      await loadHistory();
+    } catch (error) {
+      message(error.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  field('link-form').addEventListener('submit', function (event) { event.preventDefault(); save('save'); });
+  field('remove').addEventListener('click', function () { if (confirm('Remove this ProductMix link? IC3 data will not change.')) save('remove'); });
+  field('refresh').addEventListener('click', loadHistory);
+  loadHistory();
+})();
+</script>

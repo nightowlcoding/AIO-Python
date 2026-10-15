@@ -5,7 +5,6 @@ from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, current_user, login_user, logout_user, login_required
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-import pandas as pd
 import gc
 import math
 import io
@@ -24,6 +23,7 @@ import warnings
 import statistics
 import webbrowser
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib import request as urllib_request
 from pathlib import Path
 from datetime import datetime, timedelta
 from jinja2 import TemplateNotFound
@@ -1380,6 +1380,8 @@ def _create_composite_indexes(cursor):
         ("idx_pmsi_restaurant_date", "product_mix_source_items", "restaurant_id, report_start_date"),
         ("idx_pipm_restaurant_source", "product_item_production_mappings", "restaurant_id, source_item_name"),
         ("idx_pi_restaurant_name", "production_items", "restaurant_id, item_name"),
+        ("idx_pi_restaurant_normalized_name", "production_items", "restaurant_id, LOWER(TRIM(item_name))"),
+        ("idx_ali_restaurant_normalized_name", "all_levels_items", "restaurant_id, LOWER(TRIM(item_name))"),
         ("idx_wua_restaurant_type", "weekly_usage_averages", "restaurant_id, order_type"),
         ("idx_wua_restaurant_range", "weekly_usage_averages", "restaurant_id, range_start_date, range_end_date"),
     ]
@@ -1448,9 +1450,28 @@ def get_db_connection():
     return conn
 
 
+def _init_ic3_item_links(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS production_item_ic3_links (
+            restaurant_id INTEGER NOT NULL,
+            production_item_id INTEGER NOT NULL,
+            ic3_product_number TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            package_size TEXT NOT NULL DEFAULT '',
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (restaurant_id, production_item_id),
+            FOREIGN KEY (restaurant_id) REFERENCES restaurants(id),
+            FOREIGN KEY (production_item_id) REFERENCES production_items(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
+    _init_ic3_item_links(conn)
 
     cursor.execute(
         """
@@ -2067,6 +2088,8 @@ def _find_existing_upload_for_restaurant_day(conn, restaurant_id, day_iso):
 
 
 def _process_uploaded_product_mix_file(file_storage, restaurant):
+    import pandas as pd
+
     if not _is_allowed_upload_mimetype(file_storage):
         return None, {"error": f"{file_storage.filename}: Invalid file type"}, 400
 
@@ -2544,6 +2567,207 @@ def _resolve_report_restaurant(location_id_raw, fallback_restaurant=None):
     row = conn.execute("SELECT * FROM restaurants WHERE id = ?", (restaurant_id,)).fetchone()
     conn.close()
     return dict(row) if row else active_restaurant
+
+
+def _ic3_product_number(value):
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d+\.0+", text):
+        text = str(int(text.split(".")[0]))
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,60}", text):
+        raise ValueError("Invalid IC3 product number.")
+    return text
+
+
+def _request_ic3_json(restaurant, path, params=None):
+    location = str(restaurant.get("location") or "").strip()
+    company = str(restaurant.get("name") or "").strip()
+    if not location or location.lower() in {"all", "__all__", "*"} or not company:
+        raise ValueError("A specific company and location are required for IC3.")
+    portal_request = has_request_context() and bool(request.headers.get("X-Dexter-Company-Name")) and not os.environ.get("PM_IC3_BASE_URL")
+    if portal_request:
+        dexter_port = os.environ.get("DEXTER_PORT") or os.environ.get("PORT") or "5080"
+        base_url = os.environ.get("PM_DEXTER_BASE_URL", f"http://127.0.0.1:{dexter_port}").rstrip("/") + "/app/ic3"
+    else:
+        base_url = os.environ.get("PM_IC3_BASE_URL", "http://127.0.0.1:5003").rstrip("/")
+    parsed_url = urlsplit(base_url)
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname or parsed_url.username or parsed_url.password or parsed_url.query or parsed_url.fragment:
+        raise ValueError("The IC3 connection must use a trusted internal HTTP service URL.")
+
+    class NoRedirect(urllib_request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    if portal_request:
+        params = {**(params or {}), "location_id": str(restaurant["id"])}
+    target = base_url + path
+    if params is not None:
+        target += "?" + urlencode(params)
+    upstream_headers = {
+        "Accept": "application/json",
+        "X-Dexter-Company-Name": company,
+        "X-Dexter-Restaurant-Id": str(restaurant["id"]),
+        "X-Dexter-Restaurant-Name": company,
+        "X-Dexter-Restaurant-Location": location,
+    }
+    if portal_request:
+        cookie = request.headers.get("Cookie")
+        if not cookie:
+            raise ValueError("Your Dexter session has expired. Reopen ProductMix from the portal.")
+        upstream_headers["Cookie"] = cookie
+    upstream_request = urllib_request.Request(target, headers=upstream_headers)
+    try:
+        with urllib_request.build_opener(NoRedirect()).open(upstream_request, timeout=5) as response:
+            body = response.read(4 * 1024 * 1024 + 1)
+        if len(body) > 4 * 1024 * 1024:
+            raise ValueError("IC3 response is too large.")
+        return json.loads(body)
+    except (OSError, ValueError) as exc:
+        app.logger.warning("IC3 lookup failed: %s", type(exc).__name__)
+        raise ValueError("IC3 is unavailable or returned an invalid response. The saved link has not changed.") from exc
+
+
+def _get_ic3_catalog(restaurant):
+    payload = _request_ic3_json(restaurant, "/api/products")
+    if not isinstance(payload, list):
+        raise ValueError("IC3 returned an invalid item list.")
+    products = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        try:
+            number = _ic3_product_number(row.get("Product Number"))
+        except ValueError:
+            continue
+        products[number] = {
+            "product_number": number,
+            "description": str(row.get("Product Description") or ""),
+            "nickname": str(row.get("Product Nickname") or ""),
+            "package_size": str(row.get("Product Package Size") or ""),
+            "brand": str(row.get("Product Brand") or ""),
+        }
+    return sorted(products.values(), key=lambda row: (row["description"].lower(), row["product_number"]))
+
+
+def _get_ic3_item_history(restaurant, number, start_date, end_date):
+    payload = _request_ic3_json(restaurant, f"/api/products/{_ic3_product_number(number)}/detail", {
+        "start_date": start_date, "end_date": end_date,
+    })
+    location = str(restaurant["location"]).strip()
+    if not isinstance(payload, dict) or payload.get("success") is not True or payload.get("location") != location:
+        raise ValueError("IC3 returned history for an unexpected location.")
+    product = payload.get("product")
+    if not isinstance(product, dict) or _ic3_product_number(product.get("product_number")) != number:
+        raise ValueError("IC3 returned history for an unexpected product.")
+    if "start_date" not in payload or "end_date" not in payload or (payload.get("start_date") or "") != start_date or (payload.get("end_date") or "") != end_date:
+        raise ValueError("IC3 needs an update before it can return this report's exact dates.")
+    histories = {}
+    for key in ("order_history", "inventory_history"):
+        rows = payload.get(key)
+        if not isinstance(rows, list):
+            raise ValueError("IC3 returned invalid history.")
+        by_date = {}
+        for row in rows:
+            if not isinstance(row, dict) or row.get("location") != location:
+                raise ValueError("IC3 returned history for an unexpected location.")
+            day = str(row.get("date") or "")
+            try:
+                valid_day = datetime.strptime(day, "%Y-%m-%d").date().isoformat() == day
+                quantity = float(row["quantity"])
+            except (ValueError, TypeError, KeyError):
+                raise ValueError("IC3 returned an invalid date or quantity.")
+            if not valid_day or not math.isfinite(quantity) or (start_date and day < start_date) or (end_date and day > end_date):
+                raise ValueError("IC3 returned history outside the selected period.")
+            if day in by_date:
+                raise ValueError("IC3 returned duplicate daily entries for this product.")
+            by_date[day] = {"date": day, "quantity": quantity}
+        histories[key] = [by_date[day] for day in sorted(by_date)]
+    return {
+        **histories,
+        "total_order_qty": sum(row["quantity"] for row in histories["order_history"]),
+        "inventory_count_dates": len(histories["inventory_history"]),
+        "product": payload["product"],
+        "location": location,
+    }
+
+
+@app.route("/api/production-items/<int:item_id>/ic3", methods=["GET", "POST"])
+@login_required
+def production_item_ic3(item_id):
+    raw_location = str(request.args.get("location_id") or "").strip()
+    restaurant = _resolve_report_restaurant(raw_location)
+    company = _get_selected_company_name()
+    if not raw_location.isdigit() or not restaurant or int(restaurant["id"]) != int(raw_location) or not _has_access_to_restaurant_id(int(raw_location)):
+        return jsonify({"error": "You cannot access this location."}), 403
+    if company and restaurant["name"] != company:
+        return jsonify({"error": "This location is outside the selected company."}), 403
+    if FORMULA_MODE and not current_user.is_authenticated and not request.headers.get("X-Dexter-Company-Name"):
+        return jsonify({"error": "Open this comparison through the Dexter portal."}), 403
+    if not str(restaurant.get("location") or "").strip():
+        return jsonify({"error": "This restaurant needs a location name before linking IC3."}), 400
+    if request.method == "POST" and not _is_csrf_valid(request.headers.get("X-CSRF-Token")):
+        return jsonify({"error": "Invalid CSRF token. Reload the report and try again."}), 400
+
+    start_date = str(request.args.get("start_date") or "").strip()
+    end_date = str(request.args.get("end_date") or "").strip()
+    for bound in (start_date, end_date):
+        if bound:
+            try:
+                if datetime.strptime(bound, "%Y-%m-%d").date().isoformat() != bound:
+                    raise ValueError()
+            except ValueError:
+                return jsonify({"error": "Dates must use YYYY-MM-DD."}), 400
+    if start_date and end_date and start_date > end_date:
+        return jsonify({"error": "Start date must not exceed end date."}), 400
+
+    conn = get_db_connection()
+    try:
+        item = conn.execute("SELECT id FROM production_items WHERE id = ? AND restaurant_id = ?", (item_id, restaurant["id"])).fetchone()
+        if not item:
+            return jsonify({"error": "Production item was not found in this location."}), 404
+        link_row = conn.execute("SELECT * FROM production_item_ic3_links WHERE restaurant_id = ? AND production_item_id = ?", (restaurant["id"], item_id)).fetchone()
+        link = dict(link_row) if link_row else None
+        if request.method == "POST":
+            body = request.get_json(silent=True)
+            if not isinstance(body, dict) or body.get("action") not in {"save", "remove"}:
+                return jsonify({"error": "Choose Save or Remove."}), 400
+            if body["action"] == "remove":
+                conn.execute("DELETE FROM production_item_ic3_links WHERE restaurant_id = ? AND production_item_id = ?", (restaurant["id"], item_id))
+            else:
+                try:
+                    number = _ic3_product_number(body.get("product_number"))
+                    catalog = _get_ic3_catalog(restaurant)
+                except ValueError as exc:
+                    return jsonify({"error": str(exc)}), 400
+                selected = next((row for row in catalog if row["product_number"] == number), None)
+                if not selected:
+                    return jsonify({"error": "Choose an item from the IC3 item list."}), 400
+                conn.execute(
+                    """INSERT INTO production_item_ic3_links
+                       (restaurant_id, production_item_id, ic3_product_number, description, package_size)
+                       VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT(restaurant_id, production_item_id) DO UPDATE SET
+                       ic3_product_number = excluded.ic3_product_number,
+                       description = excluded.description, package_size = excluded.package_size,
+                       updated_at = CURRENT_TIMESTAMP""",
+                    (restaurant["id"], item_id, number, selected["description"], selected["package_size"]),
+                )
+            conn.commit()
+            return jsonify({"success": True})
+    finally:
+        conn.close()
+
+    if request.args.get("catalog") == "1":
+        try:
+            return jsonify({"link": link, "catalog": _get_ic3_catalog(restaurant)})
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 502
+    if not link:
+        return jsonify({"link": None, "history": None})
+    try:
+        history = _get_ic3_item_history(restaurant, link["ic3_product_number"], start_date, end_date)
+        return jsonify({"link": link, "history": history})
+    except ValueError as exc:
+        return jsonify({"link": link, "history": None, "history_error": str(exc)})
 
 
 def _get_uncategorized_source_items(restaurant=None, start_date=None, end_date=None, search_text="", limit=100):
@@ -4726,6 +4950,8 @@ _ALL_LEVELS_TAB_NAMES = ["All Levels", "All levels", "all levels", "ALL LEVELS"]
 
 
 def _open_product_mix_workbook(file_storage):
+    import pandas as pd
+
     file_storage.stream.seek(0)
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -4744,6 +4970,8 @@ def _read_all_levels_sheet(file_storage):
       - data_df   : DataFrame of data rows (header row dropped), integer-indexed columns
       - headers_dict : dict mapping column letter -> detected header string from row 0
     """
+    import pandas as pd
+
     wb = _open_product_mix_workbook(file_storage)
     try:
         sheet_name = next((s for s in _ALL_LEVELS_TAB_NAMES if s in wb.sheet_names), None)
@@ -4784,6 +5012,8 @@ def _process_all_levels_file(file_storage, restaurant, manual_start_date=None, m
     Existing items are matched by name; new dated records are appended.
     Duplicate upload of the same file is silently ignored (UNIQUE guard on item_id+upload_id).
     """
+    import pandas as pd
+
     if not _is_allowed_upload_mimetype(file_storage):
         return None, {"error": f"{file_storage.filename}: Invalid file type"}, 400
 
@@ -4946,6 +5176,8 @@ init_db()
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _safe_float(val):
+    import pandas as pd
+
     if pd.isna(val):
         return 0.0
     try:
@@ -4955,6 +5187,8 @@ def _safe_float(val):
 
 
 def process_category(df, cat_name, cat_data):
+    import pandas as pd
+
     items = cat_data["items"]
     case_qty = cat_data["case_quantity"]
     is_weight = cat_data.get("is_weight_based", False)

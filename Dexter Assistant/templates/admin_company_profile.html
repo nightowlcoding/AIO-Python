@@ -5,6 +5,7 @@
 </head><body>
 <h1>Company Profile</h1>
 <p class="sub">Manage branding and business contact details for the currently selected company.</p>
+{% include "_backup_banner.html" %}
 {% if message %}<div class="msg ok">{{ message }}</div>{% endif %}
 {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
 
@@ -46,5 +47,99 @@
     <div class="meta" style="width:100%">Last updated: {{ profile.updated_at or 'n/a' }}</div>
     <button type="submit">Save Company Profile</button>
 </form>
+
+{% if backup %}
+<style>.bk{width:100%}.bk h2{font-size:1.05rem;margin:0 0 4px}.bk table{width:100%;border-collapse:collapse;font-size:.88rem;margin:8px 0}.bk th,.bk td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--edge)}.bk th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.bk .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.bk a{color:var(--accent);font-weight:600}</style>
+<div class="row" id="data-backup"><div class="bk">
+    <h2>Company Data Backup</h2>
+    <p class="sub">Download everything {{ profile.company_name }} has entered: daily logs, inventory counts, orders, product mix uploads, employee files and records. Only this company's data is included. Passwords are never included.</p>
+    {% if backup.building %}<div class="msg ok">A backup is being built. <a href="/admin/company-profile#data-backup">Refresh</a> to check.</div>{% endif %}
+    {% for j in backup.company_jobs if j.status == 'failed' %}<div class="msg err">Backup started {{ j.started_at }} failed: {{ j.error }}</div>{% endfor %}
+    <div class="actions">
+        <form method="post" action="/admin/exports/company">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" {% if backup.building %}disabled{% endif %}>Create Company Backup</button>
+        </form>
+        <span class="meta">Last backup: {{ backup.company_exports[0].created if backup.company_exports else 'never' }}</span>
+    </div>
+    {% if backup.company_exports %}
+    <table><thead><tr><th>File</th><th>Created</th><th>Size</th><th></th></tr></thead><tbody>
+    {% for f in backup.company_exports %}<tr><td>{{ f.name }}</td><td>{{ f.created }}</td><td>{{ f.size_label }}</td><td><a href="/admin/exports/download/company/{{ f.name }}">Download</a></td></tr>{% endfor %}
+    </tbody></table>
+    {% endif %}
+    {% for j in backup.company_jobs if j.status == 'done' and j.warnings %}{% if loop.first %}<details class="meta"><summary>Notes from the latest backup</summary><ul>{% for w in j.warnings %}<li>{{ w }}</li>{% endfor %}</ul></details>{% endif %}{% endfor %}
+
+    <h2 style="margin-top:16px">Automatic Cloud Backup</h2>
+    {% set dest = backup.cloud_destination %}
+    {% if dest %}
+        <p class="sub">Every {{ backup.interval_days }} days a company backup is saved to <strong>{{ dest.provider_label }}</strong> ({{ dest.account_email }}), folder "Dexter Backups - {{ profile.company_name }}". Connected by {{ dest.connected_by_name }} on {{ dest.connected_at }} UTC.</p>
+        <p class="meta">Last upload: {{ dest.last_upload_at ~ ' UTC (' ~ dest.last_upload_file ~ ')' if dest.last_upload_at else 'not yet' }}
+        {% if dest.last_error %}<br /><span class="pill pill-off">Last attempt failed</span> {{ dest.last_attempt_at }} UTC: {{ dest.last_error }}{% endif %}</p>
+        <div class="actions">
+            <form method="post" action="/admin/backups/cloud/run">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit" {% if backup.building %}disabled{% endif %}>Back Up to {{ dest.provider_label }} Now</button>
+            </form>
+            <form method="post" action="/admin/backups/cloud/disconnect" onsubmit="return confirm('Disconnect {{ dest.provider_label }}? Automatic backups will stop.')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit" style="background:#6b7280">Disconnect</button>
+            </form>
+        </div>
+    {% elif backup.cloud_providers %}
+        <p class="sub">Connect the company's own Google Drive or OneDrive. Dexter can only see the backup folder it creates, nothing else in the account.</p>
+        <div class="actions">
+        {% for key, label in backup.cloud_providers %}
+            <form method="post" action="/admin/backups/cloud/connect/{{ key }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <button type="submit">Connect {{ label }}</button>
+            </form>
+        {% endfor %}
+        </div>
+    {% else %}
+        <p class="meta"><span class="pill pill-off">Not set up</span> Set DEXTER_TOKEN_ENC_KEY plus GOOGLE_OAUTH_CLIENT_ID/SECRET and/or MS_OAUTH_CLIENT_ID/SECRET on the server.</p>
+    {% endif %}
+
+    <h2 style="margin-top:16px">Restore from Backup</h2>
+    <p class="sub">Upload a company backup ZIP. You'll see a preview before anything changes, and a safety backup is taken first.</p>
+    {% for j in backup.restore_jobs %}
+        {% if j.status == 'running' %}<div class="msg ok">Restore started {{ j.started_at }} is running...</div>
+        {% elif j.status == 'failed' %}<div class="msg err">Restore started {{ j.started_at }} failed: {{ j.error }}. Some data may be partly restored; the newest backup listed above was taken just before the restore.</div>
+        {% elif j.report %}<div class="msg ok">Restore finished {{ j.finished_at }}: {{ j.report.files_restored }} files, {{ j.report.inventory_dates_restored }} inventory dates{% for t, r in j.report.productmix.items() %}, {{ t }} {{ r.restored }}{% endfor %}{% if j.report.dexter.tasks %}, tasks {{ j.report.dexter.tasks.restored }}{% endif %}. Safety backup: {{ j.report.safety_backup }}</div>{% endif %}
+    {% endfor %}
+    <form method="post" action="/admin/restore/upload" enctype="multipart/form-data" class="actions">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="file" name="backup_zip" accept=".zip" required />
+        <button type="submit" {% if backup.building %}disabled{% endif %}>Upload and Preview</button>
+    </form>
+</div></div>
+
+<div class="row"><div class="bk">
+    <h2>System Backups (internal)</h2>
+    <p class="sub">The full system backup contains <strong>every company's</strong> data. Never share it with a customer.
+    Older shared files (daily logs, uploads, order invoices) without a company can be <a href="/admin/legacy-files" style="color:var(--accent);font-weight:600">assigned to a company</a> so they appear in its backups.</p>
+    {% for j in backup.system_jobs if j.status == 'failed' %}<div class="msg err">System backup started {{ j.started_at }} failed: {{ j.error }}</div>{% endfor %}
+    <div class="actions">
+        <form method="post" action="/admin/exports/system">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" {% if backup.building %}disabled{% endif %}>Create Full System Backup</button>
+        </form>
+        {% for f in backup.system_exports %}<a href="/admin/exports/download/system/{{ f.name }}">Download {{ f.name }} ({{ f.size_label }}, {{ f.created }})</a>{% endfor %}
+    </div>
+    <h2 style="margin-top:14px">Off-site Backup</h2>
+    {% if backup.offsite_configured %}
+        {% set last = backup.offsite_last %}
+        <p class="meta">Runs daily. Last run:
+        {% if last %}{{ last.finished_at }} UTC -
+            {% if last.ok %}<span class="pill pill-on">OK</span> {{ last.key }}{% else %}<span class="pill pill-off">Failed</span> {{ last.message }}{% endif %}
+        {% else %}never{% endif %}</p>
+        <form method="post" action="/admin/backups/offsite/run">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" {% if backup.offsite_running %}disabled{% endif %}>{% if backup.offsite_running %}Off-site backup running...{% else %}Run Off-site Backup Now{% endif %}</button>
+        </form>
+    {% else %}
+        <p class="meta"><span class="pill pill-off">Not configured</span> Set DEXTER_OFFSITE_S3_BUCKET, DEXTER_OFFSITE_S3_ACCESS_KEY_ID, DEXTER_OFFSITE_S3_SECRET_ACCESS_KEY and DEXTER_OFFSITE_S3_ENDPOINT in the Render environment.</p>
+    {% endif %}
+</div></div>
+{% endif %}
 </body></html>
 

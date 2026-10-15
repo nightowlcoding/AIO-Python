@@ -1174,17 +1174,18 @@ def load_daily_log(company_id, date_str, location_id=None, shift=None):
     legacy_dir = os.path.expanduser("~/Documents/AIO Python/daily_logs")
     legacy_day = os.path.join(legacy_dir, f"{date_str}_Day.csv")
     legacy_night = os.path.join(legacy_dir, f"{date_str}_Night.csv")
+    # Legacy desktop logs carry no company, so only one explicitly chosen company may import them.
+    legacy_company = (os.environ.get('MGR_LEGACY_DAILY_LOGS_COMPANY_ID') or '').strip()
+    legacy_allowed = bool(legacy_company) and legacy_company == str(company_id)
 
-    if not os.path.exists(filepath):
-        # If not found, check legacy folder and copy if exists.
+    if not os.path.exists(filepath) and legacy_allowed:
+        os.makedirs(data_dir, exist_ok=True)
         if shift:
             legacy_shift_path = os.path.join(legacy_dir, f"{date_str}_{shift}.csv")
             if os.path.exists(legacy_shift_path):
-                import shutil
                 shutil.copy(legacy_shift_path, filepath)
         else:
             if os.path.exists(legacy_day):
-                import shutil
                 shutil.copy(legacy_day, filepath)
             elif os.path.exists(legacy_night):
                 filepath = f"{data_dir}/{date_str_clean}_Night.csv"

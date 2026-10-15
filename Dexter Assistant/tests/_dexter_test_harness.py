@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import types
 import warnings
@@ -9,6 +10,8 @@ from pathlib import Path
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "dexter_assistant.py"
 TEMPLATE_DIR = MODULE_PATH.parent / "templates"
+if str(MODULE_PATH.parent) not in sys.path:
+    sys.path.insert(0, str(MODULE_PATH.parent))
 _BOOTSTRAP_TMP = tempfile.TemporaryDirectory()
 _BOOTSTRAP_DB_PATH = Path(_BOOTSTRAP_TMP.name) / "bootstrap_rbac.db"
 

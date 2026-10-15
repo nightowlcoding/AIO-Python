@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Restore Preview - Dexter Ops</title>
+<style>:root{--accent:#ea580c;--edge:#d1d5db;--ink:#1f2937;--muted:#6b7280;--panel:#fff;--bg:#f3f4f6}*{box-sizing:border-box}body{font-family:'Segoe UI','Trebuchet MS',sans-serif;margin:0;padding:20px 24px;background:var(--bg);color:var(--ink)}h1{font-size:1.3rem;margin:0 0 8px}h2{font-size:1.02rem;margin:0 0 6px}.sub,.meta{color:var(--muted)}.card{background:var(--panel);border-radius:12px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);border:1px solid var(--edge)}table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--edge)}th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}.msg{padding:9px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid}.err{background:#fee2e2;color:#991b1b;border-color:#fecaca}.warn{background:#fef3c7;color:#92400e;border-color:#fde68a}input{padding:8px 11px;border:1px solid var(--edge);border-radius:8px;font-size:.93rem}button{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.88rem;font-weight:600;background:var(--accent);color:#fff}button.secondary{background:#e5e7eb;color:var(--ink)}.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}</style>
+</head><body>
+<h1>Restore Preview</h1>
+<p class="sub">Nothing has been changed yet. Review what this backup will put back into <strong>{{ company_name }}</strong>.</p>
+{% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+
+<div class="card">
+    <h2>Backup</h2>
+    <table>
+        <tr><th>File</th><td>{{ plan.uploaded_filename }}</td></tr>
+        <tr><th>Company</th><td>{{ plan.backup_company.name }}</td></tr>
+        <tr><th>Created</th><td>{{ plan.backup_created_at }} UTC by {{ plan.backup_created_by }}</td></tr>
+        <tr><th>Checksums</th><td>All files verified</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h2>What will be restored</h2>
+    <p class="meta">Restore puts back everything in the backup. Anything added after the backup was made is kept.</p>
+    <table>
+        <thead><tr><th>Area</th><th>Details</th></tr></thead>
+        <tbody>
+        <tr><td>Files (daily logs, employee files, logo...)</td><td>{{ plan.files.new }} missing files put back, {{ plan.files.changed }} changed files reverted, {{ plan.files.unchanged }} already identical{% if plan.files.skipped %}, {{ plan.files.skipped }} skipped{% endif %}</td></tr>
+        {% for i in plan.inventory %}<tr><td>Inventory ({{ 'counts' if i.file == 'inventory_database.json' else 'orders' }}) - {{ i.location }}</td><td>{{ i.dates }} dates</td></tr>{% endfor %}
+        {% if plan.invoice_log_entries %}<tr><td>Invoice import history</td><td>up to {{ plan.invoice_log_entries }} entries</td></tr>{% endif %}
+        {% for table, count in plan.productmix.tables.items() %}<tr><td>ProductMix - {{ table }}</td><td>{{ count }} rows</td></tr>{% endfor %}
+        {% for table, count in plan.dexter.items() %}<tr><td>Dexter - {{ table }}</td><td>{{ count }} rows</td></tr>{% endfor %}
+        {% if plan.manager_app.locations %}<tr><td>Manager App locations</td><td>{{ plan.manager_app.locations }} (only missing ones are added)</td></tr>{% endif %}
+        </tbody>
+    </table>
+    <p class="meta">Not restored: user accounts and passwords, location assignments, activity history.</p>
+</div>
+
+{% if plan.warnings %}
+<div class="msg warn"><strong>Notes</strong><ul>{% for w in plan.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<div class="card">
+    <h2>Confirm</h2>
+    <p class="meta">A safety backup of the current data is created automatically before anything changes. Inventory Control restarts briefly during the restore.</p>
+    <div class="actions">
+        <form method="post" action="/admin/restore/{{ token }}/apply" class="actions">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <input name="confirm_slug" placeholder="Type {{ company_slug }} to confirm" autocomplete="off" required />
+            <button type="submit">Restore Now</button>
+        </form>
+        <form method="post" action="/admin/restore/{{ token }}/cancel">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" class="secondary">Cancel</button>
+        </form>
+    </div>
+</div>
+</body></html>

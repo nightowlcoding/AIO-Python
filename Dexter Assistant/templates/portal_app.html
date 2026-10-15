@@ -304,8 +304,7 @@
                         doc.documentElement ? doc.documentElement.scrollHeight : 0
                     );
                     if (contentH && contentH > 50) {
-                        var maxSafeHeight = Math.max(vh * 8, 12000);
-                        var nextHeight = Math.min(Math.max(contentH, vh, minHeight), maxSafeHeight);
+                        var nextHeight = Math.max(contentH, vh, minHeight);
                         frame.style.height = nextHeight + 'px';
                         return;
                     }

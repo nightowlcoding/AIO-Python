@@ -46,3 +46,25 @@ services:
       # Set the value in the Render dashboard; used by deploy/backup_production.py.
       - key: DEXTER_OPS_BACKUP_TOKEN
         sync: false
+      # Off-site backup (S3-compatible, e.g. Backblaze B2). Set values in the Render dashboard.
+      - key: DEXTER_OFFSITE_S3_ENDPOINT
+        sync: false
+      - key: DEXTER_OFFSITE_S3_BUCKET
+        sync: false
+      - key: DEXTER_OFFSITE_S3_ACCESS_KEY_ID
+        sync: false
+      - key: DEXTER_OFFSITE_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: DEXTER_OFFSITE_BACKUP_TIME_UTC
+        value: "08:30"
+      # Customer cloud backups (Google Drive / OneDrive). Generate the key with cryptography.fernet.Fernet.generate_key().
+      - key: DEXTER_TOKEN_ENC_KEY
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: MS_OAUTH_CLIENT_ID
+        sync: false
+      - key: MS_OAUTH_CLIENT_SECRET
+        sync: false

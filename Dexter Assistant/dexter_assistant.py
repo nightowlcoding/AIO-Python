@@ -24,19 +24,22 @@ import tempfile
 import time
 import uuid
 import webbrowser
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any
 from email.message import EmailMessage
 from email.utils import formataddr, parsedate_to_datetime
 from urllib.error import URLError
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import quote, urlencode, urljoin, urlparse
 from urllib.request import urlopen
 
 import requests
+import dexter_backups
+import dexter_cloud
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, Response, has_request_context, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask.typing import ResponseReturnValue
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
@@ -521,6 +524,12 @@ def get_rbac_db_connection() -> sqlite3.Connection:
         print(f"[get_rbac_db_connection]   Primary writable: {os.access(RBAC_DB_PATH.parent, os.W_OK) if RBAC_DB_PATH.parent.exists() else 'N/A'}", file=sys.stderr)
         raise
 
+def _sqlite_lastrowid(cursor: sqlite3.Cursor) -> int:
+    lastrowid = cursor.lastrowid
+    if lastrowid is None:
+        raise RuntimeError("SQLite insert did not return a row ID")
+    return lastrowid
+
 def _is_transient_sqlite_error(exc: Exception) -> bool:
     message = str(exc).lower()
     transient_markers = (
@@ -606,7 +615,7 @@ def ensure_default_company(conn: sqlite3.Connection) -> int:
         """,
         (default_name, slug),
     )
-    return int(cur.lastrowid)
+    return _sqlite_lastrowid(cur)
 
 def initialize_rbac_db() -> None:
     try:
@@ -1020,6 +1029,7 @@ def find_auth_user(identifier: str) -> tuple[str | None, dict[str, Any] | None]:
                     time.sleep(0.15)
                     continue
                 raise
+        raise AuthLookupUnavailableError("Authentication lookup retries exhausted")
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         print(f"[find_auth_user] Failed to query auth database: {error_msg}", file=sys.stderr)
@@ -1655,7 +1665,7 @@ def create_company(actor_user_id: int, company_name: str) -> tuple[bool, str]:
             """,
             (cleaned_name, slug),
         )
-        new_company_id = int(cur.lastrowid)
+        new_company_id = _sqlite_lastrowid(cur)
         conn.commit()
         add_audit_log(actor_user_id, "create_company", "companies", new_company_id, json.dumps({"name": cleaned_name}), company_id=new_company_id)
         return True, "Company created."
@@ -2129,9 +2139,9 @@ def _build_public_endpoint_url(endpoint: str, **values: Any) -> str:
 def _redirect_admin_users(*, message: str | None = None, error: str | None = None) -> Response:
     target = url_for("admin_users_page")
     if message is not None:
-        return redirect(f"{target}?message={requests.utils.quote(message)}")
+        return redirect(f"{target}?message={quote(message)}")
     if error is not None:
-        return redirect(f"{target}?error={requests.utils.quote(error)}")
+        return redirect(f"{target}?error={quote(error)}")
     return redirect(target)
 
 def _send_email_via_smtp(target_email: str, subject: str, body: str, reply_to: str | None = None) -> tuple[bool, str]:
@@ -2465,7 +2475,7 @@ def create_user_account(
         if role_name != "Super Admin":
             _replace_user_restaurant_assignments(
                 conn,
-                int(cur.lastrowid),
+                _sqlite_lastrowid(cur),
                 target_company_id,
                 normalized_assigned_restaurant_ids,
             )
@@ -2474,7 +2484,7 @@ def create_user_account(
             actor_user_id,
             "create_user",
             "users",
-            int(cur.lastrowid),
+            _sqlite_lastrowid(cur),
             json.dumps(
                 {
                     "username": normalized_username,
@@ -2867,7 +2877,7 @@ def create_task_record(
             actor_user_id,
             "create_task",
             "tasks",
-            int(cur.lastrowid),
+            _sqlite_lastrowid(cur),
             json.dumps({"title": cleaned_title, "assigned_to": assigned_user_id, "priority": cleaned_priority}),
             company_id=effective_company_id,
         )
@@ -3235,10 +3245,10 @@ class AppManager:
             return retry_after
 
     def _app_cfg(self, name: str) -> dict[str, Any]:
-        name = self.resolve_name(name)
-        if not name:
+        resolved_name = self.resolve_name(name)
+        if resolved_name is None:
             raise KeyError(f"Unknown app: {name}")
-        return self.config["apps"][name]
+        return self.config["apps"][resolved_name]
 
     def resolve_name(self, name: str) -> str | None:
         candidate = (name or "").strip().lower()
@@ -3311,7 +3321,7 @@ class AppManager:
                     "base_url": resolved_base_url,
                     "health_url": urljoin(resolved_base_url, app.get("health_path", "/")),
                     "running": running,
-                    "pid": proc.pid if running else None,
+                    "pid": proc.pid if proc is not None and running else None,
                     "log_tail": self._tail_log(name),
                 }
 
@@ -3817,7 +3827,7 @@ except Exception as e:
     print(f"[dexter] Attempting to continue with degraded functionality...", file=sys.stderr)
 
 @app.before_request
-def require_auth_for_protected_routes() -> Response | None:
+def require_auth_for_protected_routes() -> ResponseReturnValue | None:
     public_prefixes = (
         "/auth/login",
         "/auth/register",
@@ -3841,7 +3851,7 @@ def require_auth_for_protected_routes() -> Response | None:
 
 @app.route("/auth/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
-def auth_login() -> Response:
+def auth_login() -> ResponseReturnValue:
     try:
         if session.get(SESSION_USER_KEY):
             return redirect(default_post_login_path())
@@ -3915,7 +3925,7 @@ def auth_login() -> Response:
 
 @app.route("/auth/register", methods=["GET", "POST"])
 @limiter.limit("5 per minute")
-def auth_register() -> Response:
+def auth_register() -> ResponseReturnValue:
     if session.get(SESSION_USER_KEY):
         return redirect(default_post_login_path())
 
@@ -3964,7 +3974,7 @@ def auth_register() -> Response:
                     conn.commit()
                     session[SESSION_USER_KEY] = {
                         "username": username,
-                        "user_id": int(cur.lastrowid),
+                        "user_id": _sqlite_lastrowid(cur),
                         "role_name": "Employee",
                         "company_id": default_company_id,
                         "selected_company_id": default_company_id,
@@ -3990,7 +4000,7 @@ def auth_register() -> Response:
 
 @app.route("/auth/forgot-password", methods=["GET", "POST"])
 @limiter.limit("5 per minute")
-def auth_forgot_password() -> Response:
+def auth_forgot_password() -> ResponseReturnValue:
     if session.get(SESSION_USER_KEY):
         return redirect(default_post_login_path())
 
@@ -4032,7 +4042,7 @@ def auth_forgot_password() -> Response:
 
 @app.route("/auth/reset-password/<token>", methods=["GET", "POST"])
 @limiter.limit("10 per minute")
-def auth_reset_password(token: str) -> Response:
+def auth_reset_password(token: str) -> ResponseReturnValue:
     if session.get(SESSION_USER_KEY):
         return redirect(default_post_login_path())
 
@@ -4099,22 +4109,22 @@ def auth_reset_password(token: str) -> Response:
     return Response(render_template("reset_password.html", error=error, done=done))
 
 @app.route("/auth/logout", methods=["POST", "GET"])
-def auth_logout() -> Response:
+def auth_logout() -> ResponseReturnValue:
     session.pop(SESSION_USER_KEY, None)
     return redirect(url_for("auth_login"))
 
 @app.route("/favicon.ico")
-def front_door_favicon() -> Response:
+def front_door_favicon() -> ResponseReturnValue:
     if FRONT_DOOR_FAVICON.exists():
         response = send_file(FRONT_DOOR_FAVICON, mimetype="image/svg+xml", max_age=_PUBLIC_ASSET_CACHE_SECONDS)
         return _apply_public_asset_cache_headers(response)
     return jsonify({"ok": False, "message": "Not found"}), 404
 
 @app.route("/branding/logo")
-def branding_logo() -> Response:
+def branding_logo() -> ResponseReturnValue:
     return _default_branding_logo_response()
 
-def _default_branding_logo_response() -> Response:
+def _default_branding_logo_response() -> ResponseReturnValue:
     if BRANDING_LOGO_PATH.exists():
         response = send_file(BRANDING_LOGO_PATH, mimetype="image/png", max_age=_PUBLIC_ASSET_CACHE_SECONDS)
         return _apply_public_asset_cache_headers(response)
@@ -4128,7 +4138,7 @@ def _default_branding_logo_response() -> Response:
 
 @app.route("/branding/company-logo")
 @login_required
-def branding_company_logo() -> Response:
+def branding_company_logo() -> ResponseReturnValue:
     def _send_no_store_logo(path: Path, *, download_name: str | None = None) -> Response:
         response = send_file(
             path,
@@ -4143,7 +4153,7 @@ def branding_company_logo() -> Response:
         response.headers["Vary"] = "Cookie"
         return response
 
-    def _company_logo_fallback_response() -> Response:
+    def _company_logo_fallback_response() -> ResponseReturnValue:
         if BRANDING_LOGO_PATH.exists():
             return _send_no_store_logo(BRANDING_LOGO_PATH)
         if LEGACY_BRANDING_LOGO_PATH.exists():
@@ -4169,7 +4179,7 @@ def branding_company_logo() -> Response:
 
 @app.route("/")
 @login_required
-def index() -> str:
+def index() -> ResponseReturnValue:
     referer = request.headers.get("Referer", "")
     if "/app/productmix/" in referer or "/portal/productmix" in referer:
         return _proxy("productmix", "")
@@ -4178,7 +4188,7 @@ def index() -> str:
 
 @app.route("/admin")
 @login_required
-def admin() -> str:
+def admin() -> ResponseReturnValue:
     if current_role_name() == "Super Admin":
         return redirect("/admin/users")
     return redirect("/admin/company-profile")
@@ -4217,7 +4227,7 @@ def admin_email_page() -> Response:
 def admin_email_settings_save() -> Response:
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/email?error={requests.utils.quote(scope_error)}")
+        return redirect(f"/admin/email?error={quote(scope_error)}")
     if selected_company_id is None:
         return redirect("/admin/email?error=No+active+company+scope+is+selected")
 
@@ -4259,7 +4269,7 @@ def admin_email_test_send() -> Response:
     )
     ok, msg = _send_email_via_smtp(target_email, subject, body, reply_to=str(company_mail.get("email_reply_to") or settings["reply_to"]))
     key = "message" if ok else "error"
-    return redirect(f"/admin/email?{key}={requests.utils.quote(msg)}")
+    return redirect(f"/admin/email?{key}={quote(msg)}")
 
 def _effective_company_scope(require_active: bool = True) -> int | None:
     try:
@@ -4332,7 +4342,7 @@ def admin_company_scope_switch() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin")
-def api_admin_company_scope_switch() -> Response:
+def api_admin_company_scope_switch() -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -4425,7 +4435,7 @@ def admin_location_scope_switch() -> Response:
 @app.route("/api/admin/location-scope", methods=["PATCH"])
 @csrf.exempt
 @login_required
-def api_admin_location_scope_switch() -> Response:
+def api_admin_location_scope_switch() -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -4500,7 +4510,7 @@ def admin_companies_create() -> Response:
 
     ok, msg = create_company(actor_id, request.form.get("name") or "")
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(f"/admin/companies?{key}={quote(msg)}")
 
 @app.route("/admin/companies/<int:company_id>/rename", methods=["POST"])
 @login_required
@@ -4512,7 +4522,7 @@ def admin_companies_rename(company_id: int) -> Response:
 
     ok, msg = rename_company(actor_id, int(company_id), request.form.get("name") or "")
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(f"/admin/companies?{key}={quote(msg)}")
 
 @app.route("/admin/companies/<int:company_id>/active", methods=["POST"])
 @login_required
@@ -4525,7 +4535,7 @@ def admin_companies_active(company_id: int) -> Response:
     is_active = str(request.form.get("is_active", "1")).strip() == "1"
     ok, msg = set_company_active_state(actor_id, int(company_id), is_active)
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(f"/admin/companies?{key}={quote(msg)}")
 
 @app.route("/admin/companies/<int:company_id>/delete", methods=["POST"])
 @login_required
@@ -4537,7 +4547,7 @@ def admin_companies_delete(company_id: int) -> Response:
 
     ok, msg = soft_delete_company(actor_id, int(company_id))
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(f"/admin/companies?{key}={quote(msg)}")
 
 @app.route("/admin/companies/<int:company_id>/restore", methods=["POST"])
 @login_required
@@ -4549,7 +4559,7 @@ def admin_companies_restore(company_id: int) -> Response:
 
     ok, msg = restore_company(actor_id, int(company_id))
     key = "message" if ok else "error"
-    return redirect(f"/admin/companies?{key}={requests.utils.quote(msg)}")
+    return redirect(f"/admin/companies?{key}={quote(msg)}")
 
 @app.route("/admin/company-health")
 @login_required
@@ -4578,6 +4588,7 @@ def admin_company_profile_page() -> Response:
 
     is_super_admin = current_role_name() == "Super Admin"
     companies = list_companies(active_only=True) if is_super_admin else []
+    backup = _backup_panel_context(int(selected_company_id)) if is_super_admin else None
     return Response(
         render_template(
             "admin_company_profile.html",
@@ -4585,6 +4596,7 @@ def admin_company_profile_page() -> Response:
             is_super_admin=is_super_admin,
             companies=companies,
             selected_company_id=selected_company_id,
+            backup=backup,
             message=request.args.get("message", ""),
             error=request.args.get("error", ""),
         )
@@ -4600,7 +4612,7 @@ def admin_company_profile_save() -> Response:
 
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/company-profile?error={requests.utils.quote(scope_error)}")
+        return redirect(f"/admin/company-profile?error={quote(scope_error)}")
     if selected_company_id is None:
         return redirect("/admin/company-profile?error=No+active+company+scope+is+selected")
 
@@ -4624,7 +4636,7 @@ def admin_company_profile_save() -> Response:
     if uploaded_logo and str(getattr(uploaded_logo, "filename", "") or "").strip():
         ok, err_message, saved_rel_path = _save_company_logo(int(selected_company_id), uploaded_logo)
         if not ok:
-            return redirect(f"/admin/company-profile?error={requests.utils.quote(err_message)}")
+            return redirect(f"/admin/company-profile?error={quote(err_message)}")
         logo_rel_path = saved_rel_path
 
     profile_payload = {
@@ -4968,7 +4980,7 @@ def admin_tasks_create() -> Response:
     assigned_to = int(assigned_to_raw) if assigned_to_raw.isdigit() else None
     selected_company_id, scope_error = _strict_company_scope_for_mutation()
     if scope_error:
-        return redirect(f"/admin/tasks?error={requests.utils.quote(scope_error)}")
+        return redirect(f"/admin/tasks?error={quote(scope_error)}")
 
     ok, msg = create_task_record(
         actor_user_id=actor_id,
@@ -4982,7 +4994,7 @@ def admin_tasks_create() -> Response:
     key = "message" if ok else "error"
     status_filter = (request.args.get("status") or request.form.get("status") or "").strip().lower()
     status_qs = f"&status={status_filter}" if status_filter in {"pending", "in-progress", "completed"} else ""
-    return redirect(f"/admin/tasks?{key}={requests.utils.quote(msg)}{status_qs}")
+    return redirect(f"/admin/tasks?{key}={quote(msg)}{status_qs}")
 
 @app.route("/admin/audit-logs")
 @login_required
@@ -5014,7 +5026,7 @@ def api_admin_users_list() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_users_create() -> Response:
+def api_admin_users_create() -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -5039,7 +5051,7 @@ def api_admin_users_create() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_users_role(user_id: int) -> Response:
+def api_admin_users_role(user_id: int) -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -5058,7 +5070,7 @@ def api_admin_users_role(user_id: int) -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_users_active(user_id: int) -> Response:
+def api_admin_users_active(user_id: int) -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -5079,7 +5091,7 @@ def api_admin_users_active(user_id: int) -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_users_locations(user_id: int) -> Response:
+def api_admin_users_locations(user_id: int) -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -5108,7 +5120,7 @@ def api_admin_tasks_list() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_tasks_create() -> Response:
+def api_admin_tasks_create() -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -5118,8 +5130,8 @@ def api_admin_tasks_create() -> Response:
         return jsonify({"ok": False, "message": scope_error}), 403
 
     payload = request.get_json(silent=True) or {}
-    assigned_to = payload.get("assigned_to")
-    assigned_to_id = int(assigned_to) if str(assigned_to or "").isdigit() else None
+    assigned_to_text = str(payload.get("assigned_to") or "")
+    assigned_to_id = int(assigned_to_text) if assigned_to_text.isdigit() else None
     ok, msg = create_task_record(
         actor_user_id=actor_id,
         title=str(payload.get("title") or ""),
@@ -5136,7 +5148,7 @@ def api_admin_tasks_create() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_tasks_status(task_id: int) -> Response:
+def api_admin_tasks_status(task_id: int) -> ResponseReturnValue:
     actor_id = current_user_id()
     if actor_id is None:
         return jsonify({"ok": False, "message": "Session expired"}), 401
@@ -5160,7 +5172,7 @@ def api_admin_audit_logs() -> Response:
 @app.route("/api/admin/company-files", methods=["GET"])
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_company_files() -> Response:
+def api_admin_company_files() -> ResponseReturnValue:
     selected_company_id = _effective_company_scope()
     if selected_company_id is None:
         return jsonify({"ok": False, "message": "No active company scope is selected"}), 403
@@ -5184,7 +5196,7 @@ def api_admin_company_files() -> Response:
 @app.route("/api/admin/company-files/download", methods=["GET"])
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_company_file_download() -> Response:
+def api_admin_company_file_download() -> ResponseReturnValue:
     selected_company_id = _effective_company_scope()
     if selected_company_id is None:
         return jsonify({"ok": False, "message": "No active company scope is selected"}), 403
@@ -5263,7 +5275,7 @@ def portal_home() -> str:
 
 @app.route("/portal/<name>")
 @login_required
-def portal_app(name: str) -> Response:
+def portal_app(name: str) -> ResponseReturnValue:
     try:
         resolved_name = MANAGER.resolve_name(name)
         if not resolved_name:
@@ -5443,7 +5455,7 @@ def _storage_health_snapshot() -> dict[str, Any]:
     return snapshot
 
 @app.route("/api/health")
-def api_health() -> Response:
+def api_health() -> ResponseReturnValue:
     # Render uses this endpoint as a liveness check during zero-downtime deploys.
     # Keep it independent of SQLite and mounted-disk work, which can briefly lock
     # while the previous instance exits.
@@ -5453,7 +5465,7 @@ def api_health() -> Response:
 @app.route("/api/admin/storage-health", methods=["GET"])
 @login_required
 @role_required("Super Admin")
-def api_admin_storage_health() -> Response:
+def api_admin_storage_health() -> ResponseReturnValue:
     payload = _storage_health_snapshot()
     status = 200 if payload.get("ok") else 503
     return jsonify(payload), status
@@ -5466,7 +5478,7 @@ def api_status() -> Response:
 @app.route("/api/admin/tenant-scope-audit", methods=["GET"])
 @login_required
 @role_required("Super Admin", "Manager")
-def api_admin_tenant_scope_audit() -> Response:
+def api_admin_tenant_scope_audit() -> ResponseReturnValue:
     payload = _run_tenant_scope_audit(app)
     status_code = 200 if payload.get("ok") else 500
     return jsonify(payload), status_code
@@ -5847,8 +5859,9 @@ def _parse_inventory_group_saved_lists_payload(raw_value: Any) -> list[dict[str,
                 decoded = []
             if isinstance(decoded, list):
                 payload = decoded
-            elif isinstance(decoded, dict) and isinstance(decoded.get("lists"), list):
-                payload = decoded.get("lists")
+            elif isinstance(decoded, dict):
+                candidate = decoded.get("lists")
+                payload = candidate if isinstance(candidate, list) else []
             else:
                 payload = []
     else:
@@ -6055,7 +6068,7 @@ def _load_inventory_settings_context_for_company(company_name: str) -> dict[str,
 
 @app.route("/api/shared/restaurants")
 @login_required
-def api_shared_restaurants() -> Response:
+def api_shared_restaurants() -> ResponseReturnValue:
     pm_db_path = _productmix_db_path()
     if not pm_db_path.exists():
         return jsonify({"ok": False, "message": f"Shared restaurant DB not found: {pm_db_path}"}), 404
@@ -6241,7 +6254,7 @@ def api_shared_inventory_default_groups() -> Response:
 @app.route("/api/shared/inventory-default-groups/active-list", methods=["GET", "POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_default_groups_active_list() -> Response:
+def api_shared_inventory_default_groups_active_list() -> ResponseReturnValue:
     if request.method == "GET":
         requested_list_id = str(request.args.get("list_id") or "").strip()
     else:
@@ -6303,7 +6316,7 @@ def api_shared_inventory_default_groups_active_list() -> Response:
 @app.route("/api/shared/inventory-default-groups/catch-all-sync", methods=["POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_default_groups_catch_all_sync() -> Response:
+def api_shared_inventory_default_groups_catch_all_sync() -> ResponseReturnValue:
     payload = request.get_json(silent=True) or {}
     current_product_ids = _normalize_product_id_list((payload or {}).get("product_ids"))
 
@@ -6354,7 +6367,7 @@ def api_shared_inventory_default_groups_catch_all_sync() -> Response:
 @app.route("/api/shared/inventory-default-groups/list-create", methods=["POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_list_create() -> Response:
+def api_shared_inventory_list_create() -> ResponseReturnValue:
     payload = request.get_json(silent=True) or {}
     list_name = str((payload or {}).get("name") or "").strip()
     if not list_name:
@@ -6373,7 +6386,8 @@ def api_shared_inventory_list_create() -> Response:
         return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
 
     config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
-    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    raw_company_groups = config.get("company")
+    company_groups = raw_company_groups if isinstance(raw_company_groups, list) else []
 
     normalized_name = list_name.casefold()
     for group in company_groups:
@@ -6396,7 +6410,7 @@ def api_shared_inventory_list_create() -> Response:
 @app.route("/api/shared/inventory-default-groups/list-rename", methods=["POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_list_rename() -> Response:
+def api_shared_inventory_list_rename() -> ResponseReturnValue:
     payload = request.get_json(silent=True) or {}
     list_id = str((payload or {}).get("list_id") or "").strip()
     list_name = str((payload or {}).get("name") or "").strip()
@@ -6416,7 +6430,8 @@ def api_shared_inventory_list_rename() -> Response:
         return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
 
     config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
-    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    raw_company_groups = config.get("company")
+    company_groups = raw_company_groups if isinstance(raw_company_groups, list) else []
 
     found = False
     for group in company_groups:
@@ -6439,7 +6454,7 @@ def api_shared_inventory_list_rename() -> Response:
 @app.route("/api/shared/inventory-default-groups/list-duplicate", methods=["POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_list_duplicate() -> Response:
+def api_shared_inventory_list_duplicate() -> ResponseReturnValue:
     payload = request.get_json(silent=True) or {}
     list_name = str((payload or {}).get("name") or "").strip()
     source_list_id = str((payload or {}).get("source_list_id") or "catch_all").strip() or "catch_all"
@@ -6459,7 +6474,8 @@ def api_shared_inventory_list_duplicate() -> Response:
         return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
 
     config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
-    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    raw_company_groups = config.get("company")
+    company_groups = raw_company_groups if isinstance(raw_company_groups, list) else []
     if any(str((group or {}).get("name") or "").strip().casefold() == list_name.casefold() for group in company_groups):
         return jsonify({"ok": False, "message": "A list with that name already exists"}), 409
 
@@ -6494,7 +6510,7 @@ def api_shared_inventory_list_duplicate() -> Response:
 @app.route("/api/shared/inventory-default-groups/list-delete", methods=["POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_list_delete() -> Response:
+def api_shared_inventory_list_delete() -> ResponseReturnValue:
     payload = request.get_json(silent=True) or {}
     list_id = str((payload or {}).get("list_id") or "").strip()
     if not list_id:
@@ -6513,13 +6529,15 @@ def api_shared_inventory_list_delete() -> Response:
         return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
 
     config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
-    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    raw_company_groups = config.get("company")
+    company_groups = raw_company_groups if isinstance(raw_company_groups, list) else []
     next_groups = [group for group in company_groups if str((group or {}).get("id") or "").strip() != list_id]
     if len(next_groups) == len(company_groups):
         return jsonify({"ok": False, "message": "List not found"}), 404
     config["company"] = next_groups
 
-    defaults_map = config.get("default_group_by_location") if isinstance(config.get("default_group_by_location"), dict) else {}
+    raw_defaults_map = config.get("default_group_by_location")
+    defaults_map = raw_defaults_map if isinstance(raw_defaults_map, dict) else {}
     cleaned_defaults: dict[str, str] = {}
     for key, value in defaults_map.items():
         map_key = str(key or "").strip()
@@ -6547,7 +6565,7 @@ def api_shared_inventory_list_delete() -> Response:
 @app.route("/api/shared/inventory-default-groups/list-items", methods=["POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_list_items() -> Response:
+def api_shared_inventory_list_items() -> ResponseReturnValue:
     payload = request.get_json(silent=True) or {}
     list_id = str((payload or {}).get("list_id") or "").strip()
     item_keys = _normalize_product_id_list((payload or {}).get("item_keys"))
@@ -6567,7 +6585,8 @@ def api_shared_inventory_list_items() -> Response:
         return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
 
     config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
-    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    raw_company_groups = config.get("company")
+    company_groups = raw_company_groups if isinstance(raw_company_groups, list) else []
 
     found = False
     for group in company_groups:
@@ -6590,7 +6609,7 @@ def api_shared_inventory_list_items() -> Response:
 @app.route("/api/shared/inventory-default-groups/list-remove-item", methods=["POST"])
 @csrf.exempt
 @login_required
-def api_shared_inventory_list_remove_item() -> Response:
+def api_shared_inventory_list_remove_item() -> ResponseReturnValue:
     payload = request.get_json(silent=True) or {}
     list_id = str((payload or {}).get("list_id") or "").strip()
     product_number = str((payload or {}).get("product_number") or "").strip()
@@ -6610,7 +6629,8 @@ def api_shared_inventory_list_remove_item() -> Response:
         return jsonify({"ok": False, "message": "Unable to locate manager settings record for selected company"}), 404
 
     config = _parse_inventory_default_groups_payload(settings_obj.get("inventory_default_groups"))
-    company_groups = config.get("company") if isinstance(config.get("company"), list) else []
+    raw_company_groups = config.get("company")
+    company_groups = raw_company_groups if isinstance(raw_company_groups, list) else []
     found = False
     removed = False
     for group in company_groups:
@@ -6702,7 +6722,7 @@ def api_dashboard() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_start_all() -> Response:
+def api_start_all() -> ResponseReturnValue:
     result = MANAGER.start_all()
     code = 200 if result.get("ok") else 409
     return jsonify(result), code
@@ -6718,7 +6738,7 @@ def api_stop_all() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_start(name: str) -> Response:
+def api_start(name: str) -> ResponseReturnValue:
     result = MANAGER.start(name)
     code = 200 if result.get("ok") else 409
     return jsonify(result), code
@@ -6727,7 +6747,7 @@ def api_start(name: str) -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_stop(name: str) -> Response:
+def api_stop(name: str) -> ResponseReturnValue:
     result = MANAGER.stop(name)
     code = 200 if result.get("ok") else 409
     return jsonify(result), code
@@ -6736,12 +6756,12 @@ def api_stop(name: str) -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin", "Manager")
-def api_restart(name: str) -> Response:
+def api_restart(name: str) -> ResponseReturnValue:
     result = MANAGER.restart(name)
     code = 200 if result.get("ok") else 409
     return jsonify(result), code
 
-def _proxy(name: str, path: str) -> Response:
+def _proxy(name: str, path: str) -> ResponseReturnValue:
     resolved_name = MANAGER.resolve_name(name)
     if not resolved_name:
         return jsonify({"ok": False, "message": f"Unknown app: {name}"}), 404
@@ -7014,6 +7034,10 @@ def _proxy(name: str, path: str) -> Response:
             def _rewrite_attr(match: re.Match[str]) -> str:
                 attr = match.group("attr")
                 quoted_path = match.group("path")
+                if quoted_path.startswith("/branding/"):
+                    return f"{attr}{quoted_path}"
+                if quoted_path.startswith("/portal") or quoted_path.startswith("/admin"):
+                    return f"{attr}{quoted_path}"
                 if quoted_path.startswith("/app/managerapp/"):
                     return f"{attr}{quoted_path}"
                 if quoted_path == "/":
@@ -7095,7 +7119,7 @@ def autosync_sync_now():
 @app.route("/api/admin/backups/managerapp/status", methods=["GET"])
 @login_required
 @role_required("Super Admin")
-def manager_backup_status() -> Response:
+def manager_backup_status() -> ResponseReturnValue:
     payload = _manager_backup_status_payload()
     status = 200 if payload.get("ok") else 503
     return jsonify(payload), status
@@ -7105,7 +7129,7 @@ def manager_backup_status() -> Response:
 @csrf.exempt
 @login_required
 @role_required("Super Admin")
-def manager_backup_run_now() -> Response:
+def manager_backup_run_now() -> ResponseReturnValue:
     body = request.get_json(silent=True) or {}
     requested_mode = str(body.get("mode") or "full").strip().lower()
     mode = requested_mode if requested_mode in {"critical", "full"} else "full"
@@ -7129,7 +7153,7 @@ def _ops_backup_token_ok() -> bool:
 @app.route("/api/ops/backups/managerapp/status", methods=["GET"])
 @csrf.exempt
 @limiter.limit("30 per hour")
-def ops_manager_backup_status() -> Response:
+def ops_manager_backup_status() -> ResponseReturnValue:
     if not _ops_backup_token_ok():
         return jsonify({"ok": False, "message": "Unauthorized"}), 401
     payload = _manager_backup_status_payload()
@@ -7139,7 +7163,7 @@ def ops_manager_backup_status() -> Response:
 @app.route("/api/ops/backups/managerapp/run", methods=["POST"])
 @csrf.exempt
 @limiter.limit("12 per hour")
-def ops_manager_backup_run_now() -> Response:
+def ops_manager_backup_run_now() -> ResponseReturnValue:
     if not _ops_backup_token_ok():
         return jsonify({"ok": False, "message": "Unauthorized"}), 401
     body = request.get_json(silent=True) or {}
@@ -7290,7 +7314,9 @@ def _manager_backup_status_payload() -> dict[str, Any]:
 
     try:
         finished_at = datetime.fromisoformat(str(last_run.get("finished_at", "")))
-        age_seconds = int((datetime.utcnow() - finished_at).total_seconds())
+        if finished_at.tzinfo is None:
+            finished_at = finished_at.replace(tzinfo=timezone.utc)
+        age_seconds = int((datetime.now(timezone.utc) - finished_at).total_seconds())
     except Exception:
         age_seconds = -1
 
@@ -7347,7 +7373,7 @@ def _collect_snapshot_operations(snapshot_dir: Path, paths: dict[str, Path], mod
 
 
 def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
-    started_at = datetime.utcnow()
+    started_at = datetime.now(timezone.utc)
     cfg = _manager_backup_config()
     paths = _manager_backup_paths()
     backup_root = paths["backup_root"]
@@ -7376,14 +7402,14 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
         if not persistent_root.exists():
             raise RuntimeError(f"Persistent data root missing: {persistent_root}")
 
-        stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         snapshot_dir = backup_root / f"{mode}_snapshot_{stamp}"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         result["snapshot_dir"] = str(snapshot_dir)
         result["operations"].extend(_collect_snapshot_operations(snapshot_dir, paths, mode))
 
         manifest = {
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "trigger": trigger,
             "config": cfg,
             "paths": {k: str(v) for k, v in paths.items()},
@@ -7404,7 +7430,7 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
                 nas_target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(snapshot_dir, nas_target, dirs_exist_ok=True)
                 result["nas_sync"]["copied"] = True
-                cutoff = datetime.utcnow().timestamp() - (15 * 24 * 60 * 60)
+                cutoff = datetime.now(timezone.utc).timestamp() - (15 * 24 * 60 * 60)
                 for old_snapshot in sorted([p for p in nas_root.glob("*_snapshot_*") if p.is_dir()], key=lambda p: p.name):
                     try:
                         if old_snapshot.stat().st_mtime < cutoff:
@@ -7440,8 +7466,1204 @@ def _run_manager_backup(trigger: str, mode: str = "critical") -> dict[str, Any]:
         result["message"] = str(exc)
         return result
     finally:
-        result["finished_at"] = datetime.utcnow().isoformat()
+        result["finished_at"] = datetime.now(timezone.utc).isoformat()
         _update_manager_backup_state(result)
+
+
+# ---------------------------------------------------------------- company exports + off-site backup
+
+_EXPORT_LOCK = threading.Lock()
+_EXPORT_JOBS: dict[str, dict[str, Any]] = {}
+_OFFSITE_LOCK = threading.Lock()
+_OFFSITE_META_KEY = "offsite_backup_last_run"
+_EXPORT_FILENAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,150}\.zip")
+
+
+def _exports_root() -> Path:
+    override = (os.environ.get("DEXTER_EXPORTS_DIR") or "").strip()
+    if override:
+        return Path(override)
+    return _manager_backup_paths()["persistent_root"] / "backups" / "exports"
+
+
+def _company_exports_dir(company_id: int) -> Path:
+    return _exports_root() / f"company_{int(company_id)}"
+
+
+def _system_exports_dir() -> Path:
+    return _exports_root() / "system"
+
+
+def _system_backup_sources() -> dict[str, Path]:
+    paths = _manager_backup_paths()
+    return {
+        "manager_app_db": paths["db_path"],
+        "manager_company_data": paths["company_data_path"],
+        "dexter_company_storage": COMPANY_STORAGE_ROOT,
+        "dexter_auth_users": paths["auth_users_path"],
+        "dexter_rbac_db": paths["rbac_db_path"],
+        "ic3_data": paths["ic3_data_path"],
+        "productmix": paths["productmix_root"],
+        "inventory_data": paths["inventory_data_root"],
+        "daily_logs": paths["daily_logs_root"],
+        "uploads": paths["uploads_root"],
+        "OrderInvoices": paths["order_invoices_root"],
+        "reports": paths["reports_root"],
+    }
+
+
+def _format_bytes(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{size} B"
+
+
+def _list_export_files(folder: Path) -> list[dict[str, Any]]:
+    if not folder.exists():
+        return []
+    entries: list[dict[str, Any]] = []
+    for path in sorted(folder.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True):
+        stat = path.stat()
+        entries.append(
+            {
+                "name": path.name,
+                "bytes": int(stat.st_size),
+                "size_label": _format_bytes(int(stat.st_size)),
+                "created": datetime.fromtimestamp(stat.st_mtime, timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            }
+        )
+    return entries
+
+
+def _current_actor() -> tuple[int | None, str]:
+    user = session.get(SESSION_USER_KEY) or {}
+    return current_user_id(), str(user.get("username") or f"user-{user.get('user_id')}")
+
+
+def _start_export_job(kind: str, company_id: int | None, actor_name: str, builder) -> tuple[bool, str]:
+    with _EXPORT_LOCK:
+        if any(job["status"] == "running" for job in _EXPORT_JOBS.values()):
+            return False, "Another backup is already being built. Try again in a minute."
+        job_id = uuid.uuid4().hex[:12]
+        job: dict[str, Any] = {
+            "id": job_id,
+            "kind": kind,
+            "company_id": company_id,
+            "status": "running",
+            "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "finished_at": "",
+            "actor": actor_name,
+            "file": "",
+            "error": "",
+            "warnings": [],
+        }
+        _EXPORT_JOBS[job_id] = job
+        for old_id in list(_EXPORT_JOBS)[:-20]:
+            _EXPORT_JOBS.pop(old_id, None)
+
+    def _run() -> None:
+        try:
+            outcome = builder()
+            job.update(status="done", file=outcome.get("file", ""), warnings=outcome.get("warnings", []), report=outcome.get("report"))
+        except Exception as exc:  # noqa: BLE001
+            job.update(status="failed", error=str(exc))
+            print(f"[dexter export] {kind} export failed: {exc}", file=sys.stderr)
+        finally:
+            job["finished_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    threading.Thread(target=_run, name=f"dexter-export-{job_id}", daemon=True).start()
+    return True, job_id
+
+
+def _build_company_export(company_id: int, actor_id: int, actor_name: str) -> dict[str, Any]:
+    company_row = _get_company_by_id(int(company_id), require_active=False)
+    if not company_row:
+        raise RuntimeError("Company not found")
+    company = {"id": int(company_row["id"]), "name": str(company_row["name"]), "slug": str(company_row["slug"] or "")}
+    restaurants = _list_restaurants_for_company_id(int(company_id))
+    paths = _manager_backup_paths()
+    slug = re.sub(r"[^a-z0-9-]+", "-", (company["slug"] or company["name"]).lower()).strip("-") or f"company-{company_id}"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = _company_exports_dir(int(company_id)) / f"{slug}_backup_{stamp}.zip"
+    manifest = dexter_backups.build_company_export_zip(
+        dest_zip=dest,
+        company=company,
+        restaurants=restaurants,
+        dexter_company_dir=_company_storage_root(int(company_id)),
+        manager_company_data_root=paths["company_data_path"],
+        manager_db=paths["db_path"],
+        ic3_data_dir=paths["ic3_data_path"],
+        productmix_db=_productmix_db_path(),
+        rbac_db=RBAC_DB_PATH,
+        actor=actor_name,
+    )
+    dexter_backups.prune_local_exports(dest.parent, int(os.environ.get("DEXTER_EXPORT_KEEP", "4")))
+    add_audit_log(
+        int(actor_id),
+        "company_data_export",
+        "companies",
+        int(company_id),
+        json.dumps({"file": dest.name, "file_count": len(manifest["files"]), "warnings": manifest["warnings"][:10]}),
+        company_id=int(company_id),
+    )
+    return {"file": dest.name, "warnings": manifest["warnings"]}
+
+
+def _build_system_export(actor_id: int, actor_name: str) -> dict[str, Any]:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = _system_exports_dir() / f"dexter_system_backup_{stamp}.zip"
+    manifest = dexter_backups.build_system_export_zip(dest_zip=dest, sources=_system_backup_sources(), actor=actor_name)
+    dexter_backups.prune_local_exports(dest.parent, int(os.environ.get("DEXTER_SYSTEM_EXPORT_KEEP", "1")))
+    add_audit_log(
+        int(actor_id),
+        "system_data_export",
+        "system",
+        None,
+        json.dumps({"file": dest.name, "file_count": len(manifest["files"])}),
+    )
+    return {"file": dest.name, "warnings": manifest["warnings"]}
+
+
+def _backup_alert_recipients() -> list[str]:
+    recipients = {
+        part.strip()
+        for part in (os.environ.get("DEXTER_BACKUP_ALERT_EMAILS") or "").split(",")
+        if "@" in part
+    }
+    try:
+        conn = get_rbac_db_connection()
+        try:
+            rows = conn.execute(
+                """
+                SELECT u.username FROM users u JOIN roles r ON r.id = u.role_id
+                WHERE r.name = 'Super Admin' AND u.is_active = 1
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+        recipients.update(str(r["username"]).strip() for r in rows if "@" in str(r["username"] or ""))
+    except sqlite3.Error:
+        pass
+    return sorted(recipients)
+
+
+def _notify_backup_admins(subject: str, body: str) -> None:
+    for recipient in _backup_alert_recipients():
+        ok, detail = _send_email_via_smtp(recipient, subject, body)
+        if not ok:
+            print(f"[dexter backup] Alert email to {recipient} failed: {detail}", file=sys.stderr)
+
+
+def _offsite_last_run() -> dict[str, Any] | None:
+    try:
+        conn = get_rbac_db_connection()
+        try:
+            row = conn.execute("SELECT value FROM migration_meta WHERE key = ?", (_OFFSITE_META_KEY,)).fetchone()
+        finally:
+            conn.close()
+        return json.loads(row["value"]) if row else None
+    except (sqlite3.Error, ValueError):
+        return None
+
+
+def _record_offsite_run(result: dict[str, Any]) -> None:
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO migration_meta (key, value, updated_at) VALUES (?, ?, datetime('now'))
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (_OFFSITE_META_KEY, json.dumps(result)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _run_offsite_backup_now(trigger: str) -> dict[str, Any]:
+    if not _OFFSITE_LOCK.acquire(blocking=False):
+        return {"ok": False, "message": "An off-site backup is already running"}
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    try:
+        try:
+            result = dexter_backups.run_offsite_backup(_system_backup_sources(), actor=trigger)
+        except Exception as exc:  # noqa: BLE001
+            result = {"ok": False, "message": f"Off-site backup failed: {exc}"}
+        result.update(trigger=trigger, started_at=started_at, finished_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        try:
+            _record_offsite_run(result)
+        except sqlite3.Error as exc:
+            print(f"[dexter backup] Could not record off-site result: {exc}", file=sys.stderr)
+        if not result.get("ok") and dexter_backups.offsite_config() is not None:
+            base_url = str(_mail_config().get("public_base_url") or "").strip().rstrip("/")
+            _notify_backup_admins(
+                "Dexter off-site backup FAILED",
+                f"The off-site backup ({trigger}) failed at {result['finished_at']} UTC.\n\n"
+                f"Error: {result.get('message')}\n\n"
+                f"Check the admin page: {base_url}/admin/company-profile\n",
+            )
+        return result
+    finally:
+        _OFFSITE_LOCK.release()
+
+
+def _backup_panel_context(company_id: int) -> dict[str, Any]:
+    jobs = [dict(j) for j in _EXPORT_JOBS.values()]
+    return {
+        "company_exports": _list_export_files(_company_exports_dir(int(company_id))),
+        "system_exports": _list_export_files(_system_exports_dir()),
+        "company_jobs": [j for j in jobs if j["kind"] == "company" and j["company_id"] == int(company_id)][-5:][::-1],
+        "restore_jobs": [j for j in jobs if j["kind"] == "restore" and j["company_id"] == int(company_id)][-3:][::-1],
+        "system_jobs": [j for j in jobs if j["kind"] == "system"][-3:][::-1],
+        "building": any(j["status"] == "running" for j in jobs),
+        "offsite_configured": dexter_backups.offsite_config() is not None,
+        "offsite_running": _OFFSITE_LOCK.locked(),
+        "offsite_last": _offsite_last_run(),
+        "cloud_providers": [(p, dexter_cloud.PROVIDER_LABELS[p]) for p in dexter_cloud.available_providers()],
+        "cloud_destination": _get_backup_destination(int(company_id)),
+        "interval_days": _backup_interval_days(),
+    }
+
+
+@app.route("/admin/exports/company", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_export_company_start() -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    actor_id, actor_name = _current_actor()
+    if company_id is None or actor_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected")
+    ok, detail = _start_export_job(
+        "company",
+        int(company_id),
+        actor_name,
+        lambda: _build_company_export(int(company_id), int(actor_id), actor_name),
+    )
+    if not ok:
+        return redirect(f"/admin/company-profile?error={quote(detail)}")
+    return redirect("/admin/company-profile?message=Company+backup+started.+Refresh+in+a+moment+to+download+it.#data-backup")
+
+
+@app.route("/admin/exports/system", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_export_system_start() -> ResponseReturnValue:
+    actor_id, actor_name = _current_actor()
+    if actor_id is None:
+        return redirect("/admin/company-profile?error=Session+expired")
+    ok, detail = _start_export_job("system", None, actor_name, lambda: _build_system_export(int(actor_id), actor_name))
+    if not ok:
+        return redirect(f"/admin/company-profile?error={quote(detail)}")
+    return redirect("/admin/company-profile?message=Full+system+backup+started.+Refresh+in+a+moment+to+download+it.#data-backup")
+
+
+@app.route("/admin/exports/download/<kind>/<name>", methods=["GET"])
+@login_required
+@role_required("Super Admin")
+def admin_export_download(kind: str, name: str) -> ResponseReturnValue:
+    if not _EXPORT_FILENAME_RE.fullmatch(name):
+        return Response("Not found", status=404)
+    company_id = _effective_company_scope()
+    if kind == "company":
+        if company_id is None:
+            return Response("No active company scope is selected", status=403)
+        folder = _company_exports_dir(int(company_id))
+    elif kind == "system":
+        folder = _system_exports_dir()
+    else:
+        return Response("Not found", status=404)
+    path = folder / name
+    if not path.is_file():
+        return Response("Not found", status=404)
+    actor_id, _ = _current_actor()
+    if actor_id is not None:
+        add_audit_log(
+            int(actor_id),
+            f"{kind}_data_export_download",
+            "companies" if kind == "company" else "system",
+            int(company_id) if kind == "company" and company_id is not None else None,
+            json.dumps({"file": name}),
+            company_id=int(company_id) if kind == "company" and company_id is not None else None,
+        )
+    return send_file(path, as_attachment=True, download_name=name, mimetype="application/zip")
+
+
+_RESTORE_TOKEN_RE = re.compile(r"[a-f0-9]{32}")
+
+
+def _restore_staging_dir() -> Path:
+    folder = Path(tempfile.gettempdir()) / "dexter_restore_staging"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def _clean_restore_staging(max_age_hours: int = 24) -> None:
+    cutoff = time.time() - max_age_hours * 3600
+    for path in _restore_staging_dir().iterdir():
+        try:
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            continue
+
+
+def _discard_restore_staging(token: str) -> None:
+    for suffix in (".zip", ".json"):
+        (_restore_staging_dir() / f"{token}{suffix}").unlink(missing_ok=True)
+
+
+def _load_restore_plan(token: str, company_id: int | None) -> dict[str, Any] | None:
+    if not _RESTORE_TOKEN_RE.fullmatch(token or "") or company_id is None:
+        return None
+    plan_path = _restore_staging_dir() / f"{token}.json"
+    zip_path = _restore_staging_dir() / f"{token}.zip"
+    if not plan_path.is_file() or not zip_path.is_file():
+        return None
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    if int(plan.get("company_id") or 0) != int(company_id):
+        return None
+    return plan
+
+
+@app.route("/admin/restore/upload", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_restore_upload() -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    actor_id, actor_name = _current_actor()
+    if company_id is None or actor_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected#data-backup")
+    max_bytes = int(os.environ.get("DEXTER_RESTORE_MAX_UPLOAD_MB", "500")) * 1024 * 1024
+    if request.content_length is not None and request.content_length > max_bytes:
+        return redirect("/admin/company-profile?error=Backup+file+is+too+large#data-backup")
+    upload = request.files.get("backup_zip")
+    if upload is None or not str(upload.filename or "").lower().endswith(".zip"):
+        return redirect("/admin/company-profile?error=Choose+a+company+backup+.zip+file#data-backup")
+
+    _clean_restore_staging()
+    token = secrets.token_hex(16)
+    zip_path = _restore_staging_dir() / f"{token}.zip"
+    upload.save(zip_path)
+    try:
+        manifest = dexter_backups.validate_company_zip(zip_path)
+        backup_company_id = int((manifest.get("company") or {}).get("id") or 0)
+        if backup_company_id != int(company_id):
+            raise dexter_backups.RestoreError(
+                f"This backup belongs to '{(manifest.get('company') or {}).get('name')}', not the selected company. "
+                "Switch to that company to restore it."
+            )
+        company_row = _get_company_by_id(int(company_id), require_active=False)
+        paths = _manager_backup_paths()
+        mgr_cid = dexter_backups.manager_company_id_for_name(paths["db_path"], str(company_row["name"]) if company_row else "")
+        plan = dexter_backups.plan_company_restore(
+            zip_path,
+            manifest,
+            company_id=int(company_id),
+            dexter_company_dir=_company_storage_root(int(company_id)),
+            manager_company_dir=(paths["company_data_path"] / mgr_cid) if mgr_cid else None,
+            manager_company_id=mgr_cid,
+            ic3_data_dir=paths["ic3_data_path"],
+            productmix_db=_productmix_db_path(),
+            restaurants=_list_restaurants_for_company_id(int(company_id)),
+        )
+    except dexter_backups.RestoreError as exc:
+        zip_path.unlink(missing_ok=True)
+        return redirect(f"/admin/company-profile?error={quote(str(exc))}#data-backup")
+    except Exception as exc:  # noqa: BLE001
+        zip_path.unlink(missing_ok=True)
+        print(f"[dexter restore] Could not read uploaded backup: {exc}", file=sys.stderr)
+        return redirect("/admin/company-profile?error=Could+not+read+the+backup+file#data-backup")
+
+    plan["uploaded_by"] = actor_name
+    plan["uploaded_filename"] = Path(str(upload.filename)).name
+    (_restore_staging_dir() / f"{token}.json").write_text(json.dumps(plan), encoding="utf-8")
+    add_audit_log(
+        int(actor_id),
+        "company_restore_uploaded",
+        "companies",
+        int(company_id),
+        json.dumps({"file": plan["uploaded_filename"], "backup_created_at": plan.get("backup_created_at")}),
+        company_id=int(company_id),
+    )
+    return redirect(f"/admin/restore/{token}")
+
+
+@app.route("/admin/restore/<token>", methods=["GET"])
+@login_required
+@role_required("Super Admin")
+def admin_restore_preview(token: str) -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    plan = _load_restore_plan(token, company_id)
+    if plan is None:
+        return redirect("/admin/company-profile?error=Restore+preview+expired+or+not+found#data-backup")
+    profile = get_company_profile(int(company_id)) if company_id is not None else None
+    return Response(
+        render_template(
+            "admin_restore_preview.html",
+            plan=plan,
+            token=token,
+            company_name=(profile or {}).get("company_name", ""),
+            company_slug=(profile or {}).get("company_slug", ""),
+            error=request.args.get("error", ""),
+        )
+    )
+
+
+@app.route("/admin/restore/<token>/cancel", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_restore_cancel(token: str) -> ResponseReturnValue:
+    if _load_restore_plan(token, _effective_company_scope()) is not None:
+        _discard_restore_staging(token)
+    return redirect("/admin/company-profile?message=Restore+cancelled#data-backup")
+
+
+def _run_company_restore(token: str, plan: dict[str, Any], actor_id: int, actor_name: str) -> dict[str, Any]:
+    company_id = int(plan["company_id"])
+    zip_path = _restore_staging_dir() / f"{token}.zip"
+    safety = _build_company_export(company_id, actor_id, f"{actor_name} (automatic pre-restore backup)")
+    ic3_was_running = MANAGER.is_running("ic3")
+    # IC3 keeps inventory in memory and would overwrite restored files on its next save.
+    if ic3_was_running:
+        MANAGER.stop("ic3")
+    try:
+        rbac_conn = get_rbac_db_connection()
+        try:
+            report = dexter_backups.apply_company_restore(
+                zip_path, plan, rbac_conn=rbac_conn, manager_db=_manager_backup_paths()["db_path"]
+            )
+        finally:
+            rbac_conn.close()
+    finally:
+        if ic3_was_running:
+            MANAGER.start("ic3")
+    report["safety_backup"] = safety["file"]
+    add_audit_log(
+        actor_id,
+        "company_restore_applied",
+        "companies",
+        company_id,
+        json.dumps({k: v for k, v in report.items() if k != "warnings"} | {"backup_created_at": plan.get("backup_created_at")}),
+        company_id=company_id,
+    )
+    _discard_restore_staging(token)
+    return {"file": safety["file"], "warnings": report["warnings"], "report": report}
+
+
+@app.route("/admin/restore/<token>/apply", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_restore_apply(token: str) -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    plan = _load_restore_plan(token, company_id)
+    actor_id, actor_name = _current_actor()
+    if plan is None or company_id is None or actor_id is None:
+        return redirect("/admin/company-profile?error=Restore+preview+expired+or+not+found#data-backup")
+    profile = get_company_profile(int(company_id)) or {}
+    typed = str(request.form.get("confirm_slug") or "").strip().lower()
+    if not typed or typed != str(profile.get("company_slug") or "").strip().lower():
+        return redirect(f"/admin/restore/{token}?error=Type+the+company+slug+exactly+to+confirm")
+    ok, detail = _start_export_job(
+        "restore",
+        int(company_id),
+        actor_name,
+        lambda: _run_company_restore(token, plan, int(actor_id), actor_name),
+    )
+    if not ok:
+        return redirect(f"/admin/restore/{token}?error={quote(detail)}")
+    return redirect("/admin/company-profile?message=Restore+started.+A+safety+backup+is+taken+first.+Refresh+to+see+the+result.#data-backup")
+
+
+# ---------------------------------------------------------------- customer cloud destinations
+
+_CLOUD_OAUTH_SESSION_KEY = "dexter_cloud_oauth"
+_BACKUP_DESTINATION_PUBLIC_COLS = (
+    "company_id", "provider", "account_email", "folder_id", "connected_by_name",
+    "connected_at", "last_upload_at", "last_upload_file", "last_attempt_at", "last_error",
+)
+
+
+def _backup_interval_days() -> int:
+    return max(1, int(os.environ.get("DEXTER_COMPANY_BACKUP_INTERVAL_DAYS", "7")))
+
+
+def _ensure_backup_destinations_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS company_backup_destinations (
+            company_id INTEGER PRIMARY KEY,
+            provider TEXT NOT NULL CHECK (provider IN ('google', 'onedrive')),
+            account_email TEXT,
+            enc_refresh_token TEXT NOT NULL,
+            folder_id TEXT,
+            connected_by INTEGER,
+            connected_by_name TEXT,
+            connected_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_upload_at TEXT,
+            last_upload_file TEXT,
+            last_attempt_at TEXT,
+            last_error TEXT,
+            FOREIGN KEY (company_id) REFERENCES companies(id)
+        )
+        """
+    )
+
+
+def _get_backup_destination(company_id: int, include_secret: bool = False) -> dict[str, Any] | None:
+    conn = get_rbac_db_connection()
+    try:
+        _ensure_backup_destinations_table(conn)
+        row = conn.execute("SELECT * FROM company_backup_destinations WHERE company_id = ?", (int(company_id),)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    data = dict(row)
+    if not include_secret:
+        data = {k: data.get(k) for k in _BACKUP_DESTINATION_PUBLIC_COLS} | {"connected_by": data.get("connected_by")}
+    data["provider_label"] = dexter_cloud.PROVIDER_LABELS.get(str(data.get("provider")), str(data.get("provider")))
+    return data
+
+
+def _update_backup_destination(company_id: int, **fields: Any) -> None:
+    allowed = {"enc_refresh_token", "folder_id", "last_upload_at", "last_upload_file", "last_attempt_at", "last_error"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return
+    conn = get_rbac_db_connection()
+    try:
+        _ensure_backup_destinations_table(conn)
+        conn.execute(
+            f"UPDATE company_backup_destinations SET {', '.join(f'{k} = ?' for k in updates)} WHERE company_id = ?",
+            [*updates.values(), int(company_id)],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _utc_now_text() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _parse_utc_text(value: Any) -> datetime | None:
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _last_company_backup_at(company_id: int, destination: dict[str, Any] | None = None) -> datetime | None:
+    candidates: list[datetime] = []
+    folder = _company_exports_dir(int(company_id))
+    if folder.exists():
+        mtimes = [p.stat().st_mtime for p in folder.glob("*.zip")]
+        if mtimes:
+            candidates.append(datetime.fromtimestamp(max(mtimes), timezone.utc))
+    destination = destination if destination is not None else _get_backup_destination(int(company_id))
+    if destination:
+        uploaded = _parse_utc_text(destination.get("last_upload_at"))
+        if uploaded:
+            candidates.append(uploaded)
+    return max(candidates) if candidates else None
+
+
+def _overdue_company_backups() -> list[dict[str, Any]]:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_backup_interval_days())
+    overdue: list[dict[str, Any]] = []
+    for company in list_companies(active_only=True):
+        last = _last_company_backup_at(int(company["id"]))
+        if last is None or last < cutoff:
+            overdue.append(
+                {
+                    "id": int(company["id"]),
+                    "name": str(company["name"]),
+                    "last": last.strftime("%Y-%m-%d") if last else "never",
+                }
+            )
+    return overdue
+
+
+@app.context_processor
+def inject_backup_overdue() -> dict[str, Any]:
+    if not has_request_context() or current_role_name() != "Super Admin":
+        return {"backup_overdue": []}
+    try:
+        return {"backup_overdue": _overdue_company_backups()}
+    except Exception as exc:  # noqa: BLE001
+        print(f"[dexter backup] Overdue check failed: {exc}", file=sys.stderr)
+        return {"backup_overdue": []}
+
+
+def _company_cloud_backup(company_id: int, actor_id: int, actor_name: str, trigger: str) -> dict[str, Any]:
+    destination = _get_backup_destination(int(company_id), include_secret=True)
+    if not destination:
+        raise RuntimeError("No cloud destination is connected for this company")
+    company_row = _get_company_by_id(int(company_id), require_active=False)
+    company_name = str(company_row["name"]) if company_row else f"Company {company_id}"
+    label = destination["provider_label"]
+    outcome = _build_company_export(int(company_id), int(actor_id), actor_name)
+    zip_path = _company_exports_dir(int(company_id)) / outcome["file"]
+    base_url = str(_mail_config().get("public_base_url") or "").strip().rstrip("/")
+    try:
+        result = dexter_cloud.upload_backup(
+            str(destination["provider"]),
+            dexter_cloud.decrypt_token(str(destination["enc_refresh_token"])),
+            str(destination.get("folder_id") or ""),
+            company_name,
+            zip_path,
+            keep=int(os.environ.get("DEXTER_CLOUD_KEEP", "8")),
+        )
+    except Exception as exc:  # noqa: BLE001
+        _update_backup_destination(int(company_id), last_attempt_at=_utc_now_text(), last_error=str(exc)[:500])
+        _notify_backup_admins(
+            f"Dexter backup to {label} FAILED - {company_name}",
+            f"The {trigger} backup of {company_name} to {label} ({destination.get('account_email')}) failed.\n\n"
+            f"Error: {exc}\n\nA copy was still saved on the Dexter server. Reconnect the account if the error mentions sign-in.\n"
+            f"{base_url}/admin/company-profile\n",
+        )
+        raise
+    now = _utc_now_text()
+    _update_backup_destination(
+        int(company_id),
+        enc_refresh_token=dexter_cloud.encrypt_token(result["refresh_token"]),
+        folder_id=result["folder_id"],
+        last_upload_at=now,
+        last_upload_file=outcome["file"],
+        last_attempt_at=now,
+        last_error="",
+    )
+    add_audit_log(
+        int(actor_id),
+        "company_cloud_backup",
+        "companies",
+        int(company_id),
+        json.dumps({"provider": destination["provider"], "file": outcome["file"], "trigger": trigger}),
+        company_id=int(company_id),
+    )
+    _notify_backup_admins(
+        f"Dexter backup saved to {label} - {company_name}",
+        f"{company_name} was backed up to {label} ({destination.get('account_email')}), folder \"{result['folder_name']}\".\n"
+        f"File: {outcome['file']}\n\n{base_url}/admin/company-profile\n",
+    )
+    return {"file": outcome["file"], "warnings": outcome["warnings"], "report": {"cloud": label, "folder": result["folder_name"]}}
+
+
+@app.route("/admin/backups/cloud/connect/<provider>", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_cloud_connect(provider: str) -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    if company_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected#data-backup")
+    if provider not in dexter_cloud.available_providers():
+        return redirect("/admin/company-profile?error=That+cloud+provider+is+not+set+up+on+this+server#data-backup")
+    state = secrets.token_urlsafe(32)
+    verifier, challenge = dexter_cloud.new_pkce()
+    session[_CLOUD_OAUTH_SESSION_KEY] = {
+        "state": state,
+        "verifier": verifier,
+        "provider": provider,
+        "company_id": int(company_id),
+        "created": int(time.time()),
+    }
+    redirect_uri = _build_public_endpoint_url("admin_cloud_callback", provider=provider)
+    return redirect(dexter_cloud.authorization_url(provider, redirect_uri, state, challenge))
+
+
+@app.route("/admin/backups/cloud/callback/<provider>", methods=["GET"])
+@login_required
+@role_required("Super Admin")
+def admin_cloud_callback(provider: str) -> ResponseReturnValue:
+    pending = session.pop(_CLOUD_OAUTH_SESSION_KEY, None) or {}
+    company_id = _effective_company_scope()
+    supplied_state = str(request.args.get("state") or "")
+    if (
+        not pending
+        or pending.get("provider") != provider
+        or not supplied_state
+        or not hmac.compare_digest(supplied_state, str(pending.get("state") or ""))
+        or int(time.time()) - int(pending.get("created") or 0) > 600
+        or company_id is None
+        or int(pending.get("company_id") or 0) != int(company_id)
+    ):
+        return redirect("/admin/company-profile?error=Cloud+sign-in+expired+or+was+not+started+here.+Try+again.#data-backup")
+    if request.args.get("error"):
+        reason = str(request.args.get("error_description") or request.args.get("error"))[:200]
+        return redirect(f"/admin/company-profile?error={quote('Cloud sign-in cancelled: ' + reason)}#data-backup")
+    code = str(request.args.get("code") or "")
+    actor_id, actor_name = _current_actor()
+    if not code or actor_id is None:
+        return redirect("/admin/company-profile?error=Cloud+sign-in+did+not+return+a+code#data-backup")
+
+    try:
+        redirect_uri = _build_public_endpoint_url("admin_cloud_callback", provider=provider)
+        tokens = dexter_cloud.exchange_code(provider, code, redirect_uri, str(pending["verifier"]))
+        folder_id = ""
+        if provider == "google":
+            company_row = _get_company_by_id(int(company_id), require_active=False)
+            folder_id = dexter_cloud.google_ensure_folder(
+                tokens["access_token"], "", dexter_cloud.folder_name_for(str(company_row["name"]) if company_row else "")
+            )
+        enc = dexter_cloud.encrypt_token(tokens["refresh_token"])
+    except Exception as exc:  # noqa: BLE001
+        print(f"[dexter cloud] Connect failed for company {company_id}: {exc}", file=sys.stderr)
+        return redirect(f"/admin/company-profile?error={quote(str(exc)[:200])}#data-backup")
+
+    old = _get_backup_destination(int(company_id), include_secret=True)
+    conn = get_rbac_db_connection()
+    try:
+        _ensure_backup_destinations_table(conn)
+        conn.execute(
+            """
+            INSERT INTO company_backup_destinations
+                (company_id, provider, account_email, enc_refresh_token, folder_id, connected_by, connected_by_name, connected_at,
+                 last_upload_at, last_upload_file, last_attempt_at, last_error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), NULL, NULL, NULL, NULL)
+            ON CONFLICT(company_id) DO UPDATE SET
+                provider = excluded.provider, account_email = excluded.account_email,
+                enc_refresh_token = excluded.enc_refresh_token, folder_id = excluded.folder_id,
+                connected_by = excluded.connected_by, connected_by_name = excluded.connected_by_name,
+                connected_at = excluded.connected_at, last_upload_at = NULL, last_upload_file = NULL,
+                last_attempt_at = NULL, last_error = NULL
+            """,
+            (int(company_id), provider, tokens["account_email"], enc, folder_id, int(actor_id), actor_name),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    if old and old.get("provider") != provider:
+        try:
+            dexter_cloud.revoke(str(old["provider"]), dexter_cloud.decrypt_token(str(old["enc_refresh_token"])))
+        except Exception:  # noqa: BLE001
+            pass
+    add_audit_log(
+        int(actor_id),
+        "company_cloud_connected",
+        "companies",
+        int(company_id),
+        json.dumps({"provider": provider, "account": tokens["account_email"]}),
+        company_id=int(company_id),
+    )
+    label = dexter_cloud.PROVIDER_LABELS[provider]
+    message = f"{label} connected ({tokens['account_email']})"
+    return redirect(f"/admin/company-profile?message={quote(message)}#data-backup")
+
+
+@app.route("/admin/backups/cloud/disconnect", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_cloud_disconnect() -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    actor_id, _ = _current_actor()
+    if company_id is None or actor_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected#data-backup")
+    destination = _get_backup_destination(int(company_id), include_secret=True)
+    if destination:
+        try:
+            dexter_cloud.revoke(str(destination["provider"]), dexter_cloud.decrypt_token(str(destination["enc_refresh_token"])))
+        except Exception:  # noqa: BLE001
+            pass
+        conn = get_rbac_db_connection()
+        try:
+            conn.execute("DELETE FROM company_backup_destinations WHERE company_id = ?", (int(company_id),))
+            conn.commit()
+        finally:
+            conn.close()
+        add_audit_log(
+            int(actor_id),
+            "company_cloud_disconnected",
+            "companies",
+            int(company_id),
+            json.dumps({"provider": destination["provider"]}),
+            company_id=int(company_id),
+        )
+    return redirect("/admin/company-profile?message=Cloud+backup+disconnected#data-backup")
+
+
+@app.route("/admin/backups/cloud/run", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_cloud_backup_run() -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    actor_id, actor_name = _current_actor()
+    if company_id is None or actor_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected#data-backup")
+    if not _get_backup_destination(int(company_id)):
+        return redirect("/admin/company-profile?error=Connect+a+cloud+account+first#data-backup")
+    ok, detail = _start_export_job(
+        "company",
+        int(company_id),
+        actor_name,
+        lambda: _company_cloud_backup(int(company_id), int(actor_id), actor_name, "manual"),
+    )
+    if not ok:
+        return redirect(f"/admin/company-profile?error={quote(detail)}#data-backup")
+    return redirect("/admin/company-profile?message=Cloud+backup+started.+Refresh+in+a+moment.#data-backup")
+
+
+# ---------------------------------------------------------------- legacy shared files -> company
+
+_LEGACY_LIST_LIMIT = 2000
+
+
+def _legacy_roots() -> dict[str, Path]:
+    paths = _manager_backup_paths()
+    roots = {
+        "daily_logs": paths["daily_logs_root"],
+        "uploads": paths["uploads_root"],
+        "OrderInvoices": paths["order_invoices_root"],
+        "inventory_data": paths["inventory_data_root"],
+        "reports": paths["reports_root"],
+    }
+    desktop_logs = Path.home() / "Documents" / "AIO Python" / "daily_logs"
+    if desktop_logs.is_dir():
+        roots["desktop_daily_logs"] = desktop_logs
+    return roots
+
+
+def _ensure_legacy_assignments_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS legacy_file_assignments (
+            root TEXT NOT NULL,
+            rel_path TEXT NOT NULL,
+            company_id INTEGER NOT NULL,
+            sha256 TEXT,
+            assigned_by INTEGER,
+            assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (root, rel_path),
+            FOREIGN KEY (company_id) REFERENCES companies(id)
+        )
+        """
+    )
+
+
+def _legacy_assignments() -> dict[tuple[str, str], int]:
+    conn = get_rbac_db_connection()
+    try:
+        _ensure_legacy_assignments_table(conn)
+        rows = conn.execute("SELECT root, rel_path, company_id FROM legacy_file_assignments").fetchall()
+    finally:
+        conn.close()
+    return {(str(r["root"]), str(r["rel_path"])): int(r["company_id"]) for r in rows}
+
+
+def _resolve_legacy_file(root_key: str, rel_path: str) -> Path | None:
+    root = _legacy_roots().get(root_key)
+    if root is None or not rel_path or Path(rel_path).is_absolute():
+        return None
+    candidate = (root / rel_path).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
+@app.route("/admin/legacy-files", methods=["GET"])
+@login_required
+@role_required("Super Admin")
+def admin_legacy_files_page() -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    if company_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected")
+    company_names = {int(c["id"]): str(c["name"]) for c in list_companies(active_only=False)}
+    assignments = _legacy_assignments()
+    groups: list[dict[str, Any]] = []
+    for key, root in _legacy_roots().items():
+        files: list[dict[str, Any]] = []
+        truncated = False
+        if root.is_dir():
+            for path in sorted(root.rglob("*")):
+                if not path.is_file() or path.is_symlink() or path.name.startswith("."):
+                    continue
+                if len(files) >= _LEGACY_LIST_LIMIT:
+                    truncated = True
+                    break
+                rel = path.relative_to(root).as_posix()
+                owner = assignments.get((key, rel))
+                stat = path.stat()
+                files.append(
+                    {
+                        "value": f"{key}|{rel}",
+                        "rel": rel,
+                        "size_label": _format_bytes(int(stat.st_size)),
+                        "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d"),
+                        "owner_id": owner,
+                        "owner_name": company_names.get(owner, f"#{owner}") if owner is not None else "",
+                    }
+                )
+        groups.append({"key": key, "root": str(root), "files": files, "truncated": truncated})
+    return Response(
+        render_template(
+            "admin_legacy_files.html",
+            groups=groups,
+            company_id=int(company_id),
+            company_name=company_names.get(int(company_id), ""),
+            message=request.args.get("message", ""),
+            error=request.args.get("error", ""),
+        )
+    )
+
+
+@app.route("/admin/legacy-files/assign", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_legacy_files_assign() -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    actor_id, _ = _current_actor()
+    if company_id is None or actor_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected")
+    selected = request.form.getlist("files")
+    assignments = _legacy_assignments()
+    copied: list[str] = []
+    skipped = 0
+    conn = get_rbac_db_connection()
+    try:
+        _ensure_legacy_assignments_table(conn)
+        for value in selected[:_LEGACY_LIST_LIMIT]:
+            root_key, _, rel = str(value).partition("|")
+            source = _resolve_legacy_file(root_key, rel)
+            if source is None or (root_key, rel) in assignments:
+                skipped += 1
+                continue
+            target = _resolve_company_storage_path(int(company_id), f"legacy/{root_key}/{rel}", create_parent=True)
+            if target is None:
+                skipped += 1
+                continue
+            shutil.copy2(source, target)
+            conn.execute(
+                "INSERT INTO legacy_file_assignments (root, rel_path, company_id, sha256, assigned_by) VALUES (?, ?, ?, ?, ?)",
+                (root_key, rel, int(company_id), _hash_file_sha256(target), int(actor_id)),
+            )
+            copied.append(f"{root_key}/{rel}")
+        conn.commit()
+    finally:
+        conn.close()
+    if copied:
+        add_audit_log(
+            int(actor_id),
+            "legacy_files_assigned",
+            "companies",
+            int(company_id),
+            json.dumps({"count": len(copied), "files": copied[:50]}),
+            company_id=int(company_id),
+        )
+    message = f"Copied {len(copied)} file(s) into this company's storage" + (f"; {skipped} skipped" if skipped else "")
+    return redirect(f"/admin/legacy-files?message={quote(message)}")
+
+
+@app.route("/admin/legacy-files/unassign", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_legacy_files_unassign() -> ResponseReturnValue:
+    company_id = _effective_company_scope()
+    actor_id, _ = _current_actor()
+    if company_id is None or actor_id is None:
+        return redirect("/admin/company-profile?error=No+active+company+scope+is+selected")
+    root_key, _, rel = str(request.form.get("file") or "").partition("|")
+    if _legacy_assignments().get((root_key, rel)) != int(company_id):
+        return redirect("/admin/legacy-files?error=That+file+is+not+assigned+to+the+selected+company")
+    copy_path = _resolve_company_storage_path(int(company_id), f"legacy/{root_key}/{rel}")
+    if copy_path is not None and copy_path.is_file():
+        copy_path.unlink()
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            "DELETE FROM legacy_file_assignments WHERE root = ? AND rel_path = ? AND company_id = ?",
+            (root_key, rel, int(company_id)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    add_audit_log(
+        int(actor_id), "legacy_file_unassigned", "companies", int(company_id),
+        json.dumps({"file": f"{root_key}/{rel}"}), company_id=int(company_id),
+    )
+    return redirect("/admin/legacy-files?message=Assignment+removed")
+
+
+def _meta_get(key: str) -> str | None:
+    conn = get_rbac_db_connection()
+    try:
+        row = conn.execute("SELECT value FROM migration_meta WHERE key = ?", (key,)).fetchone()
+        return str(row["value"]) if row else None
+    finally:
+        conn.close()
+
+
+def _meta_set(key: str, value: str) -> None:
+    conn = get_rbac_db_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO migration_meta (key, value, updated_at) VALUES (?, ?, datetime('now'))
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (key, value),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _wait_for_export_job(job_id: str, timeout_seconds: int = 3600) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        job = _EXPORT_JOBS.get(job_id)
+        if not job or job["status"] != "running":
+            return
+        time.sleep(5)
+
+
+def _run_company_backup_sweep() -> None:
+    interval = timedelta(days=_backup_interval_days())
+    now = datetime.now(timezone.utc)
+    cloud_ready = bool(dexter_cloud.available_providers())
+    base_url = str(_mail_config().get("public_base_url") or "").strip().rstrip("/")
+    for company in list_companies(active_only=True):
+        company_id = int(company["id"])
+        destination = _get_backup_destination(company_id)
+        if destination and cloud_ready:
+            last_upload = _parse_utc_text(destination.get("last_upload_at"))
+            last_attempt = _parse_utc_text(destination.get("last_attempt_at"))
+            due = last_upload is None or now - last_upload >= interval
+            # After a failure, wait before retrying so a broken account doesn't email every sweep.
+            backoff_ok = last_attempt is None or now - last_attempt >= timedelta(hours=12)
+            if due and backoff_ok and destination.get("connected_by"):
+                actor_id = int(destination["connected_by"])
+                for _ in range(60):
+                    ok, job_id = _start_export_job(
+                        "company",
+                        company_id,
+                        "weekly schedule",
+                        lambda cid=company_id, aid=actor_id: _company_cloud_backup(cid, aid, "weekly schedule", "weekly"),
+                    )
+                    if ok:
+                        _wait_for_export_job(job_id)
+                        break
+                    time.sleep(60)
+            continue
+
+        last = _last_company_backup_at(company_id, destination)
+        if last is not None and now - last < interval:
+            continue
+        reminder_key = f"backup_reminder_sent_{company_id}"
+        last_reminder = _parse_utc_text(_meta_get(reminder_key))
+        if last_reminder is not None and now - last_reminder < interval:
+            continue
+        _notify_backup_admins(
+            f"Reminder: back up {company['name']}",
+            f"{company['name']} has not been backed up since {last.strftime('%Y-%m-%d') if last else 'it was created'}.\n\n"
+            "Download a company backup, or connect Google Drive / OneDrive so it happens automatically:\n"
+            f"{base_url}/admin/company-profile\n",
+        )
+        _meta_set(reminder_key, _utc_now_text())
+
+
+_COMPANY_BACKUP_SWEEP_STARTED = False
+
+
+def _start_company_backup_sweep_scheduler() -> None:
+    global _COMPANY_BACKUP_SWEEP_STARTED
+    if _COMPANY_BACKUP_SWEEP_STARTED or _env_flag("DEXTER_DISABLE_COMPANY_BACKUP_SWEEP", default=False):
+        return
+
+    def _loop() -> None:
+        time.sleep(15 * 60)
+        while True:
+            try:
+                _run_company_backup_sweep()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[dexter backup] Company backup sweep failed: {exc}", file=sys.stderr)
+            time.sleep(3 * 60 * 60)
+
+    threading.Thread(target=_loop, name="dexter-company-backup-sweep", daemon=True).start()
+    _COMPANY_BACKUP_SWEEP_STARTED = True
+
+
+try:
+    _start_company_backup_sweep_scheduler()
+except Exception as e:
+    print(f"[dexter backup] Warning: Failed to initialize company backup sweep: {e}", file=sys.stderr)
+
+
+@app.route("/admin/backups/offsite/run", methods=["POST"])
+@login_required
+@role_required("Super Admin")
+def admin_offsite_backup_run() -> ResponseReturnValue:
+    if dexter_backups.offsite_config() is None:
+        return redirect("/admin/company-profile?error=Off-site+backup+is+not+configured#data-backup")
+    if _OFFSITE_LOCK.locked():
+        return redirect("/admin/company-profile?error=An+off-site+backup+is+already+running#data-backup")
+    actor_id, actor_name = _current_actor()
+    if actor_id is not None:
+        add_audit_log(int(actor_id), "offsite_backup_run", "system", None, None)
+    threading.Thread(
+        target=_run_offsite_backup_now, args=(f"manual:{actor_name}",), name="dexter-offsite-manual", daemon=True
+    ).start()
+    return redirect("/admin/company-profile?message=Off-site+backup+started#data-backup")
+
+
+@app.route("/api/ops/backups/offsite/status", methods=["GET"])
+@csrf.exempt
+@limiter.limit("30 per hour")
+def ops_offsite_backup_status() -> ResponseReturnValue:
+    if not _ops_backup_token_ok():
+        return jsonify({"ok": False, "message": "Unauthorized"}), 401
+    last = _offsite_last_run()
+    return jsonify({"configured": dexter_backups.offsite_config() is not None, "running": _OFFSITE_LOCK.locked(), "last_run": last})
+
+
+@app.route("/api/ops/backups/offsite/run", methods=["POST"])
+@csrf.exempt
+@limiter.limit("6 per hour")
+def ops_offsite_backup_run() -> ResponseReturnValue:
+    if not _ops_backup_token_ok():
+        return jsonify({"ok": False, "message": "Unauthorized"}), 401
+    payload = _run_offsite_backup_now("ops-api")
+    return jsonify(payload), (200 if payload.get("ok") else 500)
+
+
+_OFFSITE_THREAD_STARTED = False
+
+
+def _start_offsite_backup_scheduler() -> None:
+    global _OFFSITE_THREAD_STARTED
+    if _OFFSITE_THREAD_STARTED or dexter_backups.offsite_config() is None:
+        return
+    run_time = (os.environ.get("DEXTER_OFFSITE_BACKUP_TIME_UTC") or "08:30").strip()
+    if not re.fullmatch(r"\d{2}:\d{2}", run_time):
+        run_time = "08:30"
+    hour, minute = int(run_time[:2]), int(run_time[3:])
+
+    def _loop() -> None:
+        while True:
+            now = datetime.now(timezone.utc)
+            next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if next_run <= now:
+                next_run += timedelta(days=1)
+            time.sleep(max(60, int((next_run - now).total_seconds())))
+            result = _run_offsite_backup_now(f"scheduled-{next_run.strftime('%Y-%m-%d')}")
+            print(f"[dexter backup] Off-site backup: {result.get('message')}", file=sys.stderr)
+
+    threading.Thread(target=_loop, name="dexter-offsite-backup", daemon=True).start()
+    _OFFSITE_THREAD_STARTED = True
+    _startup_log(f"[dexter backup] Off-site backup scheduler started (daily at {run_time} UTC)")
+
+
+try:
+    _start_offsite_backup_scheduler()
+except Exception as e:
+    print(f"[dexter backup] Warning: Failed to initialize off-site backup scheduler: {e}", file=sys.stderr)
 
 
 def _start_manager_backup_scheduler() -> None:
@@ -7510,9 +8732,8 @@ def _start_manager_backup_scheduler() -> None:
     t = threading.Thread(target=_loop, name="dexter-manager-backup", daemon=True)
     t.start()
     _MGR_BACKUP_THREAD_STARTED = True
-    print(
-        f"[dexter backup] Manager backup scheduler started (critical: {', '.join(cfg['critical_schedule_times'])}, full: {cfg['full_backup_time']}, keep: {cfg['keep_snapshots']})",
-        file=sys.stderr,
+    _startup_log(
+        f"[dexter backup] Manager backup scheduler started (critical: {', '.join(cfg['critical_schedule_times'])}, full: {cfg['full_backup_time']}, keep: {cfg['keep_snapshots']})"
     )
 
 
@@ -7521,12 +8742,38 @@ try:
 except Exception as e:
     print(f"[dexter backup] Warning: Failed to initialize manager backup scheduler: {e}", file=sys.stderr)
 
+_COMPANY_PURGE_THREAD_STARTED = False
+
+def _start_company_purge_scheduler() -> None:
+    global _COMPANY_PURGE_THREAD_STARTED
+    if _COMPANY_PURGE_THREAD_STARTED or not _env_flag("DEXTER_COMPANY_PURGE_ENABLED", default=False):
+        return
+
+    def _loop() -> None:
+        while True:
+            try:
+                purge_expired_deleted_companies()
+            except Exception as exc:
+                print(f"[dexter] Warning: Company purge sweep failed: {exc}", file=sys.stderr)
+            time.sleep(6 * 60 * 60)
+
+    t = threading.Thread(target=_loop, name="dexter-company-purge", daemon=True)
+    t.start()
+    _COMPANY_PURGE_THREAD_STARTED = True
+    _startup_log("[dexter] Company purge scheduler started (checks every 6h, 30-day retention).")
+
+
+try:
+    _start_company_purge_scheduler()
+except Exception as e:
+    print(f"[dexter] Warning: Failed to initialize company purge scheduler: {e}", file=sys.stderr)
+
 
 @app.route("/api/admin/migrate-local-data", methods=["POST"])
 @csrf.exempt
 @login_required
 @role_required("Super Admin")
-def api_admin_migrate_local_data() -> Response:
+def api_admin_migrate_local_data() -> ResponseReturnValue:
     try:
         ic3_data_dir = Path(os.environ.get("IC3_DATA_DIR") or (ROOT / "Inventory Control 3" / "data"))
         pm_db_dir = Path(os.environ.get("PM_DB_DIR") or (ROOT / "ProductMixRestaurantDB"))
@@ -7572,7 +8819,7 @@ def api_admin_migrate_local_data() -> Response:
 
 @app.route("/app/<name>/")
 @login_required
-def app_root(name: str) -> Response:
+def app_root(name: str) -> ResponseReturnValue:
     return _proxy(name, "")
 
 @app.route(
@@ -7580,17 +8827,17 @@ def app_root(name: str) -> Response:
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
 )
 @csrf.exempt
-def app_proxy(name: str, path: str) -> Response:
+def app_proxy(name: str, path: str) -> ResponseReturnValue:
     return _proxy(name, path)
 
 @app.route("/open/<name>")
 @login_required
-def open_app(name: str) -> Response:
+def open_app(name: str) -> ResponseReturnValue:
     return redirect(f"/app/{name}/")
 
 @app.route("/static/<path:path>")
 @login_required
-def contextual_static_proxy(path: str) -> Response:
+def contextual_static_proxy(path: str) -> ResponseReturnValue:
     referer = request.headers.get("Referer", "")
     if "/app/managerapp/" in referer or "/portal/managerapp" in referer:
         return _proxy("managerapp", f"static/{path}")
@@ -7603,7 +8850,7 @@ def contextual_static_proxy(path: str) -> Response:
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
 )
 @csrf.exempt
-def contextual_proxy(path: str) -> Response:
+def contextual_proxy(path: str) -> ResponseReturnValue:
     reserved_prefixes = (
         "app/",
         "portal/",
@@ -7679,18 +8926,23 @@ if __name__ == "__main__":
 
     debug_mode = os.environ.get("PM_DEBUG", "0") == "1"
     ssl_context = "adhoc" if use_ssl else None
+
+    def _print_address(extra: str = "") -> None:
+        print(f"\n==> Dexter Assistant is running at {scheme}://{host}:{port}{extra}\n", file=sys.stderr)
+
     if debug_mode:
-        print(f"[dexter] Running in DEBUG mode on {scheme}://{host}:{port}", file=sys.stderr)
+        _print_address(" (DEBUG mode)")
         app.run(host=host, port=port, debug=True, ssl_context=ssl_context)
     else:
         if use_ssl:
-            print(f"[dexter] SSL enabled. Running Flask HTTPS server on {scheme}://{host}:{port}", file=sys.stderr)
+            _print_address(" (SSL/HTTPS)")
             app.run(host=host, port=port, debug=False, ssl_context=ssl_context)
         else:
             try:
                 from waitress import serve  # type: ignore[import]
-                print(f"[dexter] Running via waitress on {host}:{port} (threads=8)", file=sys.stderr)
+                _print_address()
                 serve(app, host=host, port=port, threads=8)
             except ImportError:
                 print("[dexter] waitress not installed — falling back to Flask dev server.", file=sys.stderr)
+                _print_address()
                 app.run(host=host, port=port, debug=False)

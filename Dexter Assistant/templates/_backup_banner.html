@@ -1,0 +1,8 @@
+{% if backup_overdue %}
+<div style="padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:.9rem;border:1px solid #fde68a;background:#fef3c7;color:#92400e">
+    <strong>Backup reminder:</strong>
+    {% for c in backup_overdue %}{{ c.name }} (last: {{ c.last }}){% if not loop.last %}, {% endif %}{% endfor %}
+    {{ 'has' if backup_overdue|length == 1 else 'have' }} not been backed up recently.
+    <a href="/admin/company-profile#data-backup" style="color:#92400e;font-weight:700">Back up now</a>
+</div>
+{% endif %}

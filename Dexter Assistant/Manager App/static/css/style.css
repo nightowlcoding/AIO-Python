@@ -119,6 +119,18 @@ main {
     min-width: 180px;
 }
 
+.daily-log-location-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 280px;
+    margin: 0;
+    color: #5b6573;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
 .daily-log-context-select,
 .daily-log-context-input,
 .daily-log-context-button {
@@ -293,6 +305,11 @@ main {
     }
 
     .daily-log-toolbar > * {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .daily-log-location-picker {
         width: 100%;
         min-width: 0;
     }

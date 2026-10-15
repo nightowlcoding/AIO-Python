@@ -18,7 +18,7 @@ except Exception as exc:  # pragma: no cover - fallback path only
 
     @app.route("/api/health")
     def fallback_health():
-        # Keep health checks green while surfacing import failures for debugging.
+        # Let Render reject a release whose main app failed to initialize.
         return jsonify(
             {
                 "ok": True,
@@ -27,7 +27,7 @@ except Exception as exc:  # pragma: no cover - fallback path only
                 "import_error": f"{type(_import_error).__name__}: {_import_error}",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
             }
-        ), 200
+        ), 503
 
     @app.route("/", defaults={"path": ""})
     @app.route("/<path:path>")

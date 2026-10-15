@@ -1671,6 +1671,8 @@ PRODUCT_DETAIL_SCRIPT = r"""
         location: '',
         locationScope: 'current',
         detailPayload: null,
+        returnTabId: '',
+        returnScrollY: 0,
     };
 
     function escapeHtml(value) {
@@ -2112,9 +2114,15 @@ PRODUCT_DETAIL_SCRIPT = r"""
         if (backBtn && backBtn.dataset.bound !== '1') {
             backBtn.dataset.bound = '1';
             backBtn.addEventListener('click', function () {
-                const reportTab = document.querySelector('.tab[onclick*="report"]') || document.querySelector('.tab');
-                if (reportTab instanceof HTMLElement) {
-                    reportTab.click();
+                const returnId = state.returnTabId;
+                const returnTab = returnId ? document.querySelector('.tab[onclick*="\'' + returnId + '\'"]') : null;
+                const targetTab = returnTab || document.querySelector('.tab[onclick*="report"]') || document.querySelector('.tab');
+                if (targetTab instanceof HTMLElement) {
+                    targetTab.click();
+                    if (returnTab) {
+                        const scrollY = state.returnScrollY || 0;
+                        window.setTimeout(function () { window.scrollTo(0, scrollY); }, 0);
+                    }
                 }
             });
         }
@@ -2394,7 +2402,17 @@ PRODUCT_DETAIL_SCRIPT = r"""
         state.windowKey = windowKey || state.windowKey || 'month';
         state.location = guessCurrentLocation();
 
+        const activeContent = document.querySelector('.tab-content.active');
+        if (activeContent && activeContent.id && activeContent.id !== 'productdetail') {
+            state.returnTabId = activeContent.id;
+            state.returnScrollY = window.scrollY || 0;
+        }
+
         ensureProductDetailTab();
+        const backBtn = document.getElementById('ic3ProductBackBtn');
+        if (backBtn) {
+            backBtn.textContent = state.returnTabId === 'inventory' ? 'Back to Inventory' : 'Back to Report';
+        }
         const btn = document.getElementById('ic3ProductDetailTabButton');
         if (btn) btn.click();
 
@@ -2448,6 +2466,18 @@ PRODUCT_DETAIL_SCRIPT = r"""
                 loadProductDetail(productNumber, 'week');
             }
             return;
+        }
+
+        const inventoryCell = event.target && event.target.closest ? event.target.closest('#categoriesContainer tbody td') : null;
+        if (inventoryCell && !inventoryCell.querySelector('input, button, select') && !event.target.closest('input, button, select, a')) {
+            const row = inventoryCell.parentElement;
+            const qtyInput = row ? row.querySelector('input.quantity-input') : null;
+            const productNumber = qtyInput ? String(qtyInput.id || '').replace(/^qty_/, '').trim() : '';
+            if (productNumber) {
+                event.preventDefault();
+                loadProductDetail(productNumber, 'week');
+                return;
+            }
         }
 
         const scopeBtn = event.target && event.target.closest ? event.target.closest('.ic3LocationScopeBtn') : null;
@@ -2566,6 +2596,13 @@ PRODUCT_DETAIL_SCRIPT = r"""
     });
 
     const runInstall = function () {
+        if (!document.getElementById('ic3InventoryRowLinkStyle')) {
+            const style = document.createElement('style');
+            style.id = 'ic3InventoryRowLinkStyle';
+            style.textContent = '#categoriesContainer tbody td:not(.row-controls) { cursor: pointer; }'
+                + ' #categoriesContainer tbody tr:hover td:not(.row-controls) { color: #1a4db3; }';
+            (document.head || document.documentElement).appendChild(style);
+        }
         ensureProductDetailTab();
         installProductLinks();
         setTimeout(installProductNicknameColumn, 250);
@@ -4099,6 +4136,14 @@ def _register_product_detail_endpoints(flask_app) -> None:
     def get_product_detail_runtime(product_number):
         requested_location = _effective_runtime_location()
         window_key = str(request.args.get("window") or "week").strip().lower()
+        start_date = str(request.args.get("start_date") or "").strip()
+        end_date = str(request.args.get("end_date") or "").strip()
+        for bound in (start_date, end_date):
+            parsed_bound = _safe_parse_date(bound) if bound else None
+            if bound and (parsed_bound is None or parsed_bound.isoformat() != bound):
+                return jsonify({"success": False, "message": "Dates must use YYYY-MM-DD."}), 400
+        if start_date and end_date and start_date > end_date:
+            return jsonify({"success": False, "message": "Start date must not exceed end date."}), 400
 
         products_list_obj = globals().get("products_list") or []
         inventory_data_obj = globals().get("inventory_data") or {}
@@ -4179,6 +4224,7 @@ def _register_product_detail_endpoints(flask_app) -> None:
                             "unit_price": avg_price_by_date.get(str(date_str)),
                         }
                     )
+                    break
 
         inventory_rows = []
         for location in locations_to_scan:
@@ -4199,9 +4245,18 @@ def _register_product_detail_endpoints(flask_app) -> None:
                             "quantity": quantity,
                         }
                     )
+                    break
 
-        filtered_orders = _window_filter_dates(order_rows, window_key)
-        filtered_inventory = _window_filter_dates(inventory_rows, window_key)
+        if "start_date" in request.args or "end_date" in request.args:
+            def in_report_period(row):
+                day = _safe_parse_date(row["date"])
+                return day is not None and (not start_date or day.isoformat() >= start_date) and (not end_date or day.isoformat() <= end_date)
+
+            filtered_orders = [row for row in order_rows if in_report_period(row)]
+            filtered_inventory = [row for row in inventory_rows if in_report_period(row)]
+        else:
+            filtered_orders = _window_filter_dates(order_rows, window_key)
+            filtered_inventory = _window_filter_dates(inventory_rows, window_key)
 
         filtered_orders = sorted(filtered_orders, key=lambda row: (str(row.get("date") or ""), str(row.get("location") or "")))
         filtered_inventory = sorted(filtered_inventory, key=lambda row: (str(row.get("date") or ""), str(row.get("location") or "")))
@@ -4231,6 +4286,8 @@ def _register_product_detail_endpoints(flask_app) -> None:
                 "location": requested_location,
                 "location_label": location_label,
                 "window": window_key,
+                "start_date": start_date or None,
+                "end_date": end_date or None,
                 "product": product_payload,
                 "summary": {
                     "order_rows": len(filtered_orders),
