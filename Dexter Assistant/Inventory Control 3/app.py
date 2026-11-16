@@ -2,7 +2,10 @@ from flask import jsonify, request
 from pathlib import Path
 from collections import defaultdict
 from bisect import bisect_left, bisect_right
+import csv
+import io
 import json
+import math
 import marshal
 import logging
 import os
@@ -3228,6 +3231,13 @@ def _usage_to_float(raw_value, default=0.0) -> float:
         return float(default)
 
 
+def _usage_measurement(raw_value) -> float:
+    quantity = float(raw_value)
+    if not math.isfinite(quantity):
+        raise ValueError("Inventory and receipt quantities must be finite numbers")
+    return quantity
+
+
 def _usage_iter_days(start_day, end_day):
     current = start_day
     while current <= end_day:
@@ -3235,8 +3245,9 @@ def _usage_iter_days(start_day, end_day):
         current += timedelta(days=1)
 
 
-def _usage_group_by_product_inventory(location_name: str) -> dict[str, dict[str, float]]:
-    inventory_data_obj = globals().get("inventory_data") or {}
+def _usage_group_by_product_inventory(location_name: str, inventory_data_obj=None) -> dict[str, dict[str, float]]:
+    if inventory_data_obj is None:
+        inventory_data_obj = globals().get("inventory_data") or {}
     by_product: dict[str, dict[str, float]] = defaultdict(dict)
     by_date = inventory_data_obj.get(location_name, {}) if isinstance(inventory_data_obj, dict) else {}
 
@@ -3245,7 +3256,7 @@ def _usage_group_by_product_inventory(location_name: str) -> dict[str, dict[str,
 
     for date_key, snapshot in by_date.items():
         if not isinstance(snapshot, dict):
-            continue
+            raise ValueError("Inventory snapshots must be product quantity dictionaries")
         date_str = str(date_key or "").strip()
         if not date_str:
             continue
@@ -3253,18 +3264,23 @@ def _usage_group_by_product_inventory(location_name: str) -> dict[str, dict[str,
             product_num = _canonical_product_number(raw_product_num)
             if not product_num:
                 continue
-            by_product[product_num][date_str] = _usage_to_float(raw_qty, 0.0)
+            quantity = _usage_measurement(raw_qty)
+            previous = by_product[product_num].get(date_str)
+            if previous is not None and previous != quantity:
+                raise ValueError(f"Conflicting inventory aliases for product {product_num} on {date_str}")
+            by_product[product_num][date_str] = quantity
 
     return dict(by_product)
 
 
-def _usage_group_by_product_receipts(location_name: str) -> dict[str, dict[str, float]]:
-    log_rows = globals().get("invoice_import_log") or []
+def _usage_group_by_product_receipts(location_name: str, log_rows=None) -> dict[str, dict[str, float]]:
+    if log_rows is None:
+        log_rows = globals().get("invoice_import_log") or []
     by_product: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
 
     for entry in log_rows if isinstance(log_rows, list) else []:
         if not isinstance(entry, dict):
-            continue
+            raise ValueError("Invoice imports must be dictionaries")
         if str(entry.get("location") or "").strip() != location_name:
             continue
 
@@ -3278,14 +3294,14 @@ def _usage_group_by_product_receipts(location_name: str) -> dict[str, dict[str, 
                 product_num = _canonical_product_number(raw_product_num)
                 if not product_num:
                     continue
-                by_product[product_num][date_str] += _usage_to_float(raw_qty, 0.0)
+                by_product[product_num][date_str] += _usage_measurement(raw_qty)
             continue
 
         line_items = entry.get("line_items")
         if isinstance(line_items, list):
             for row in line_items:
                 if not isinstance(row, dict):
-                    continue
+                    raise ValueError("Invoice line items must be dictionaries")
                 product_num = _canonical_product_number(
                     row.get("canonical_product_number")
                     or row.get("raw_product_number")
@@ -3293,7 +3309,9 @@ def _usage_group_by_product_receipts(location_name: str) -> dict[str, dict[str, 
                 )
                 if not product_num:
                     continue
-                by_product[product_num][date_str] += _usage_to_float(row.get("quantity"), 0.0)
+                by_product[product_num][date_str] += _usage_measurement(row.get("quantity"))
+        else:
+            raise ValueError("Invoice imports must contain product quantities or line items")
 
     return {k: dict(v) for k, v in by_product.items()}
 
@@ -3335,7 +3353,7 @@ def _usage_prepare_inventory(inv_map: dict[str, float]):
         day = _safe_parse_date(date_key)
         if day is None:
             continue
-        dated_values.append((day, str(date_key), _usage_to_float(qty, 0.0)))
+        dated_values.append((day, str(date_key), _usage_measurement(qty)))
 
     dated_values.sort(key=lambda row: row[0])
     days = [row[0] for row in dated_values]
@@ -3378,57 +3396,134 @@ def _usage_daily_series_for_product(inv_map: dict[str, float], receipt_map: dict
     if prepared_inv is None:
         prepared_inv = _usage_prepare_inventory(inv_map)
 
+    dated_values = prepared_inv["dated_values"]
+    intervals = {}
+    for opening, closing in zip(dated_values, dated_values[1:]):
+        opening_day, opening_key, opening_qty = opening
+        closing_day, closing_key, closing_qty = closing
+        if closing_day <= start_day or opening_day > end_day:
+            continue
+        interval_days = (closing_day - opening_day).days
+        interval_receipts = sum(
+            _usage_measurement(receipt_map.get(day.isoformat(), 0.0))
+            for day in _usage_iter_days(opening_day, closing_day - timedelta(days=1))
+        )
+        daily_usage = (opening_qty + interval_receipts - closing_qty) / interval_days
+        if not math.isfinite(daily_usage):
+            raise ValueError("Inventory and receipt quantities must be finite numbers")
+        running_inventory = opening_qty
+        for day in _usage_iter_days(opening_day, min(closing_day - timedelta(days=1), end_day)):
+            receipts_qty = _usage_measurement(receipt_map.get(day.isoformat(), 0.0))
+            next_inventory = running_inventory + receipts_qty - daily_usage
+            if day >= start_day:
+                intervals[day] = (
+                    running_inventory, next_inventory, daily_usage,
+                    opening_key, closing_key, interval_days,
+                )
+            running_inventory = next_inventory
+
     for day in _usage_iter_days(start_day, end_day):
-        next_day = day + timedelta(days=1)
-        opening_qty, opening_date_key, opening_exact = _usage_snapshot_value_prepared(prepared_inv, day, "backward")
-        closing_qty, closing_date_key, closing_exact = _usage_snapshot_value_prepared(prepared_inv, next_day, "forward")
-
-        receipts_qty = _usage_to_float(receipt_map.get(day.isoformat()), 0.0)
-        usage_qty = opening_qty + receipts_qty - closing_qty
-        weekday_name = day.strftime("%A")
-
-        calc_mode = "count_to_count" if (opening_exact and closing_exact) else "estimated_fallback"
-        weekday_usage[weekday_name].append(usage_qty)
+        receipts_qty = _usage_measurement(receipt_map.get(day.isoformat(), 0.0))
+        if not math.isfinite(receipts_qty):
+            raise ValueError("Receipt quantities must be finite numbers")
+        weekday_name = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[day.weekday()]
+        interval = intervals.get(day)
+        if interval is None:
+            opening_qty = prepared_inv["exact_lookup"].get(day.isoformat())
+            closing_qty = prepared_inv["exact_lookup"].get((day + timedelta(days=1)).isoformat())
+            usage_qty = None
+            opening_date_key = day.isoformat() if opening_qty is not None else ""
+            closing_date_key = (day + timedelta(days=1)).isoformat() if closing_qty is not None else ""
+            calc_mode = "unavailable"
+        else:
+            opening_qty, closing_qty, usage_qty, opening_date_key, closing_date_key, interval_days = interval
+            calc_mode = "count_to_count" if interval_days == 1 else "estimated_gap"
+            weekday_usage[weekday_name].append(usage_qty)
         rows.append(
             {
                 "date": day.isoformat(),
                 "weekday": weekday_name,
-                "opening_inventory": round(opening_qty, 4),
-                "receipts": round(receipts_qty, 4),
-                "closing_inventory": round(closing_qty, 4),
-                "usage": round(usage_qty, 4),
+                "opening_inventory": opening_qty,
+                "receipts": receipts_qty,
+                "closing_inventory": closing_qty,
+                "usage": usage_qty,
                 "calculation_mode": calc_mode,
                 "opening_inventory_date": opening_date_key,
                 "closing_inventory_date": closing_date_key,
+                "discrepancy_flag": usage_qty is not None and usage_qty < 0,
             }
         )
 
     weekday_avg = {}
-    for weekday_name in ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"):
+    for weekday_name in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"):
         values = weekday_usage.get(weekday_name, [])
-        weekday_avg[weekday_name.lower()] = round(sum(values) / len(values), 4) if values else 0.0
+        weekday_avg[weekday_name.lower()] = round(sum(values) / len(values), 4) if values else None
 
     return rows, weekday_avg
+
+
+def _usage_velocity_profile(avg_daily_usage: float):
+    profile_fn = globals().get("_velocity_profile")
+    if callable(profile_fn):
+        band, target_days, upper_days = profile_fn(avg_daily_usage)
+        band, target_days, upper_days = str(band).lower(), float(target_days), float(upper_days)
+        if (
+            band not in {"fast", "medium", "slow"}
+            or not math.isfinite(target_days) or not math.isfinite(upper_days)
+            or target_days <= 0 or upper_days < target_days
+        ):
+            raise ValueError("Invalid velocity days-of-supply profile")
+        return band, target_days, upper_days
+    if avg_daily_usage >= 2.0:
+        return "fast", 6.0, 7.0
+    if avg_daily_usage >= 0.5:
+        return "medium", 10.0, 12.0
+    return "slow", 15.0, 18.0
+
+
+def _usage_daily_summary(daily_rows, ignore_negative=False):
+    covered_rows = [row for row in daily_rows if row["usage"] is not None]
+    sample_rows = [
+        row for row in covered_rows if not ignore_negative or not row["discrepancy_flag"]
+    ]
+    total_usage = math.fsum(row["usage"] for row in sample_rows) if sample_rows else None
+    covered_days = len(covered_rows)
+    estimated_days = sum(row["calculation_mode"] == "estimated_gap" for row in covered_rows)
+    weekday_values = defaultdict(list)
+    for row in sample_rows:
+        weekday_values[row["weekday"].lower()].append(row["usage"])
+    weekdays = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+    return {
+        "usage": round(total_usage, 4) if total_usage is not None else None,
+        "avg_daily_usage": total_usage / len(sample_rows) if sample_rows else None,
+        "sample_days": len(sample_rows),
+        "covered_days": covered_days,
+        "calendar_days": len(daily_rows),
+        "estimated_days": estimated_days,
+        "observed_days": covered_days - estimated_days,
+        "unavailable_days": len(daily_rows) - covered_days,
+        "coverage_status": (
+            "insufficient_data" if not covered_days
+            else "complete" if covered_days == len(daily_rows) else "partial"
+        ),
+        "discrepancy_days": sum(row["discrepancy_flag"] for row in covered_rows),
+        "anomaly_days_excluded": len(covered_rows) - len(sample_rows),
+        "weekday_usage_avg": {
+            name: round(math.fsum(weekday_values[name]) / len(weekday_values[name]), 4)
+            if weekday_values[name] else None for name in weekdays
+        },
+        "weekday_sample_days": {name: len(weekday_values[name]) for name in weekdays},
+        "beginning_inventory": covered_rows[0]["opening_inventory"] if covered_rows else None,
+        "ending_inventory": covered_rows[-1]["closing_inventory"] if covered_rows else None,
+        "covered_start": covered_rows[0]["date"] if covered_rows else None,
+        "covered_end": covered_rows[-1]["date"] if covered_rows else None,
+        "usage_receipts": math.fsum(row["receipts"] for row in covered_rows),
+    }
 
 
 def _register_usage_reports_endpoints(flask_app) -> None:
     if flask_app is None:
         return
-
-    def _usage_velocity_profile(avg_daily_usage: float):
-        profile_fn = globals().get("_velocity_profile")
-        if callable(profile_fn):
-            try:
-                band, target_days, upper_days = profile_fn(avg_daily_usage)
-                return str(band), float(target_days), float(upper_days)
-            except Exception:
-                pass
-
-        if avg_daily_usage >= 1.0:
-            return "fast", 7.0, 10.0
-        if avg_daily_usage >= 0.25:
-            return "medium", 10.0, 14.0
-        return "slow", 15.0, 20.0
 
     def _usage_latest_unit_cost(location_name: str, product_num: str, as_of_day):
         latest_cost = 0.0
@@ -3489,10 +3584,11 @@ def _register_usage_reports_endpoints(flask_app) -> None:
             receipt_map = receipts_by_product.get(product_num, {})
             daily_rows, weekday_avg = _usage_daily_series_for_product(inv_map, receipt_map, start_day, end_day)
 
-            total_usage = round(sum(_usage_to_float(row.get("usage"), 0.0) for row in daily_rows), 2)
+            usage_summary = _usage_daily_summary(daily_rows)
+            total_usage = usage_summary["usage"]
             total_receipts = round(sum(_usage_to_float(row.get("receipts"), 0.0) for row in daily_rows), 2)
-            begin_inv = _usage_to_float(daily_rows[0].get("opening_inventory"), 0.0) if daily_rows else 0.0
-            ending_inv = _usage_to_float(daily_rows[-1].get("closing_inventory"), 0.0) if daily_rows else 0.0
+            begin_inv = usage_summary["beginning_inventory"]
+            ending_inv = usage_summary["ending_inventory"]
 
             inventory_dates = []
             for date_key, qty in sorted(inv_map.items()):
@@ -3508,7 +3604,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                     continue
                 order_dates.append({"date": date_key, "location": location_name, "quantity": round(_usage_to_float(qty, 0.0), 4)})
 
-            if (not include_zero_rows) and abs(total_usage) < 1e-9 and abs(total_receipts) < 1e-9 and not inventory_dates:
+            if (not include_zero_rows) and abs(total_usage or 0.0) < 1e-9 and abs(total_receipts) < 1e-9 and not inventory_dates:
                 continue
 
             row = {
@@ -3521,14 +3617,20 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                 "case_count_type": str(product.get("Case Count Type") or "No"),
                 "member_product_numbers": [product_num],
                 "rolled_up_sub_count": 0,
-                "beginning_inventory": round(begin_inv, 2),
-                "beginning_inventory_meta": {"date": start_day.isoformat(), "location": location_name},
-                "ending_inventory": round(ending_inv, 2),
-                "ending_inventory_meta": {"date": (end_day + timedelta(days=1)).isoformat(), "location": location_name},
+                "beginning_inventory": round(begin_inv, 2) if begin_inv is not None else None,
+                "beginning_inventory_meta": {"date": usage_summary["covered_start"], "location": location_name},
+                "ending_inventory": round(ending_inv, 2) if ending_inv is not None else None,
+                "ending_inventory_meta": {
+                    "date": (
+                        (_safe_parse_date(usage_summary["covered_end"]) + timedelta(days=1)).isoformat()
+                        if usage_summary["covered_end"] else None
+                    ),
+                    "location": location_name,
+                },
                 "total_orders": round(total_receipts, 2),
                 "total_orders_meta": {"source": "invoice_import_log"},
-                "usage": round(total_usage, 2),
-                "cases_required": round(max(0.0, total_usage - ending_inv), 2),
+                "usage": round(total_usage, 2) if total_usage is not None else None,
+                "cases_required": round(max(0.0, total_usage - ending_inv), 2) if total_usage is not None else None,
                 "inventory_count": len(inventory_dates),
                 "order_count": len(order_dates),
                 "total_activity": len(inventory_dates) + len(order_dates),
@@ -3536,6 +3638,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                 "order_dates": order_dates,
                 "weekday_usage_avg": weekday_avg,
                 "usage_daily": daily_rows,
+                "usage_summary": usage_summary,
             }
             rows.append(row)
 
@@ -3552,6 +3655,8 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                     "formula": "opening_inventory + receipts - next_day_closing_inventory",
                     "receipts_source": "invoice_import_log",
                     "negative_usage_allowed": True,
+                    "gap_estimation": "even_daily_allocation_between_counts",
+                    "unbounded_days": "unavailable",
                 },
             }
         )
@@ -3581,8 +3686,8 @@ def _register_usage_reports_endpoints(flask_app) -> None:
         windows = []
         cursor = first_sunday
         while cursor <= end_day:
-            window_start = cursor
-            window_end_marker = cursor + timedelta(days=8)
+            window_start = max(cursor, start_day)
+            window_end_marker = min(cursor + timedelta(days=7), end_day + timedelta(days=1))
             windows.append((window_start, window_end_marker))
             cursor += timedelta(days=7)
 
@@ -3590,22 +3695,13 @@ def _register_usage_reports_endpoints(flask_app) -> None:
         usage_history_by_product = defaultdict(list)
         windows_skipped = 0
 
-        prepared_inventory_by_product = {
-            product_num: _usage_prepare_inventory(inventory_by_product.get(product_num, {}))
+        daily_by_product = {
+            product_num: _usage_daily_series_for_product(
+                inventory_by_product.get(product_num, {}),
+                receipts_by_product.get(product_num, {}), start_day, end_day,
+            )[0]
             for product_num in set(list(inventory_by_product.keys()) + list(receipts_by_product.keys()))
         }
-        product_activity_bounds = {}
-        for product_num, prepared_inv in prepared_inventory_by_product.items():
-            inv_days = prepared_inv.get("days", []) if isinstance(prepared_inv, dict) else []
-            receipt_days = []
-            for date_key in (receipts_by_product.get(product_num, {}) or {}).keys():
-                day = _safe_parse_date(date_key)
-                if day is not None:
-                    receipt_days.append(day)
-
-            all_days = list(inv_days) + receipt_days
-            if all_days:
-                product_activity_bounds[product_num] = (min(all_days), max(all_days))
 
         for window_start, window_end_marker in windows:
             daily_end = window_end_marker - timedelta(days=1)
@@ -3620,47 +3716,66 @@ def _register_usage_reports_endpoints(flask_app) -> None:
 
                 inv_map = inventory_by_product.get(product_num, {})
                 receipt_map = receipts_by_product.get(product_num, {})
-                if not inv_map and not receipt_map:
+                if not inv_map and not receipt_map and not include_zero_rows:
                     continue
 
-                bounds = product_activity_bounds.get(product_num)
-                if bounds:
-                    activity_min, activity_max = bounds
-                    if daily_end < activity_min or window_start > (activity_max + timedelta(days=1)):
-                        continue
-
-                prepared_inv = prepared_inventory_by_product.get(product_num) or _usage_prepare_inventory(inv_map)
-                daily_rows, weekday_avg = _usage_daily_series_for_product(inv_map, receipt_map, window_start, daily_end, prepared_inv=prepared_inv)
+                daily_rows = daily_by_product.get(product_num)
+                if daily_rows is None:
+                    daily_rows = _usage_daily_series_for_product(inv_map, receipt_map, start_day, end_day)[0]
+                    daily_by_product[product_num] = daily_rows
+                offset = (window_start - start_day).days
+                daily_rows = daily_rows[offset:offset + (window_end_marker - window_start).days]
 
                 if not daily_rows:
                     continue
 
-                begin_inv = _usage_to_float(daily_rows[0].get("opening_inventory"), 0.0)
-                ending_inv = _usage_to_float(daily_rows[-1].get("closing_inventory"), 0.0)
+                usage_summary = _usage_daily_summary(daily_rows)
+                weekday_avg = usage_summary["weekday_usage_avg"]
+                begin_inv = usage_summary["beginning_inventory"]
+                ending_inv = usage_summary["ending_inventory"]
                 total_orders = sum(_usage_to_float(row.get("receipts"), 0.0) for row in daily_rows)
-                usage = sum(_usage_to_float(row.get("usage"), 0.0) for row in daily_rows)
+                usage = usage_summary["usage"]
 
-                usage_history_by_product[product_num].append(usage)
+                usage_history_by_product[product_num].append(daily_rows)
                 trailing = usage_history_by_product[product_num][-4:]
-                avg_weekly_usage = (sum(trailing) / len(trailing)) if trailing else 0.0
-                avg_daily_usage = avg_weekly_usage / 8.0 if avg_weekly_usage else 0.0
+                trailing_summary = _usage_daily_summary(
+                    [row for window in trailing for row in window], ignore_negative=True,
+                )
+                avg_daily_usage = trailing_summary["avg_daily_usage"]
+                avg_weekly_usage = avg_daily_usage * 7.0 if avg_daily_usage is not None else None
 
-                velocity_band, target_dos, upper_dos = _usage_velocity_profile(avg_daily_usage)
-                days_of_supply = (ending_inv / avg_daily_usage) if avg_daily_usage > 0 else 0.0
-                reorder_point = avg_daily_usage * 3.0
-                target_stock = avg_daily_usage * target_dos
+                velocity_band, target_dos, upper_dos = (
+                    _usage_velocity_profile(avg_daily_usage)
+                    if avg_daily_usage is not None else (None, None, None)
+                )
+                days_of_supply = (
+                    ending_inv / avg_daily_usage
+                    if ending_inv is not None and avg_daily_usage is not None and avg_daily_usage > 0 else None
+                )
+                reorder_point = avg_daily_usage * 3.0 if avg_daily_usage is not None else None
+                target_stock = avg_daily_usage * target_dos if avg_daily_usage is not None else None
                 on_order_qty = 0.0
-                suggested_order_qty = max(0.0, target_stock - ending_inv - on_order_qty)
-                do_not_order = bool(avg_daily_usage > 0 and days_of_supply > upper_dos)
+                suggested_order_qty = (
+                    max(0.0, target_stock - ending_inv - on_order_qty)
+                    if target_stock is not None and ending_inv is not None else None
+                )
+                do_not_order = days_of_supply > upper_dos if days_of_supply is not None else False
 
                 unit_cost = _usage_latest_unit_cost(location_name, product_num, window_end_marker)
-                on_hand_value = ending_inv * unit_cost
-                excess_qty = max(0.0, ending_inv - target_stock)
-                excess_value = excess_qty * unit_cost
+                on_hand_value = ending_inv * unit_cost if ending_inv is not None else None
+                excess_qty = max(0.0, ending_inv - target_stock) if ending_inv is not None and target_stock is not None else None
+                excess_value = excess_qty * unit_cost if excess_qty is not None else None
 
-                if (not include_zero_rows) and abs(usage) < 1e-9 and abs(total_orders) < 1e-9 and abs(begin_inv) < 1e-9 and abs(ending_inv) < 1e-9:
+                if (
+                    not include_zero_rows and abs(usage or 0.0) < 1e-9
+                    and abs(total_orders) < 1e-9
+                    and abs(begin_inv or 0.0) < 1e-9 and abs(ending_inv or 0.0) < 1e-9
+                ):
                     windows_skipped += 1
                     continue
+
+                def rounded(value, digits=2):
+                    return round(value, digits) if value is not None else None
 
                 row = {
                     "row_order": len(rows),
@@ -3679,35 +3794,36 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                     "end_snapshot_date": str(daily_rows[-1].get("closing_inventory_date") or ""),
                     "start_snapshot_offset_days": 0,
                     "end_snapshot_offset_days": 0,
-                    "window_days": 8,
-                    "beginning_inventory": round(begin_inv, 2),
+                    "window_days": len(daily_rows),
+                    "beginning_inventory": rounded(begin_inv),
                     "total_orders": round(total_orders, 2),
-                    "ending_inventory": round(ending_inv, 2),
-                    "usage": round(usage, 2),
-                    "avg_8day_usage_4w": round(avg_weekly_usage, 2),
-                    "avg_weekly_usage_4w": round(avg_weekly_usage, 2),
-                    "avg_daily_usage_4w": round(avg_daily_usage, 4),
+                    "ending_inventory": rounded(ending_inv),
+                    "usage": rounded(usage),
+                    "avg_8day_usage_4w": rounded(avg_daily_usage * 8 if avg_daily_usage is not None else None),
+                    "avg_weekly_usage_4w": rounded(avg_weekly_usage),
+                    "avg_daily_usage_4w": rounded(avg_daily_usage, 4),
                     "velocity_band": velocity_band,
-                    "days_of_supply": round(days_of_supply, 2),
-                    "target_days_of_supply": round(target_dos, 2),
-                    "reorder_point": round(reorder_point, 2),
-                    "target_stock": round(target_stock, 2),
+                    "days_of_supply": rounded(days_of_supply),
+                    "target_days_of_supply": rounded(target_dos),
+                    "reorder_point": rounded(reorder_point),
+                    "target_stock": rounded(target_stock),
                     "on_order_qty": round(on_order_qty, 2),
-                    "suggested_order_qty": round(suggested_order_qty, 2),
+                    "suggested_order_qty": rounded(suggested_order_qty),
                     "do_not_order": do_not_order,
                     "unit_cost": round(unit_cost, 4),
-                    "on_hand_value": round(on_hand_value, 2),
-                    "excess_qty": round(excess_qty, 2),
-                    "excess_value": round(excess_value, 2),
+                    "on_hand_value": rounded(on_hand_value),
+                    "excess_qty": rounded(excess_qty),
+                    "excess_value": rounded(excess_value),
                     "weekday_usage_avg": weekday_avg,
-                    "avg_sunday_usage": round(weekday_avg.get("sunday", 0.0), 4),
-                    "avg_monday_usage": round(weekday_avg.get("monday", 0.0), 4),
-                    "avg_tuesday_usage": round(weekday_avg.get("tuesday", 0.0), 4),
-                    "avg_wednesday_usage": round(weekday_avg.get("wednesday", 0.0), 4),
-                    "avg_thursday_usage": round(weekday_avg.get("thursday", 0.0), 4),
-                    "avg_friday_usage": round(weekday_avg.get("friday", 0.0), 4),
-                    "avg_saturday_usage": round(weekday_avg.get("saturday", 0.0), 4),
+                    "avg_sunday_usage": weekday_avg["sunday"],
+                    "avg_monday_usage": weekday_avg["monday"],
+                    "avg_tuesday_usage": weekday_avg["tuesday"],
+                    "avg_wednesday_usage": weekday_avg["wednesday"],
+                    "avg_thursday_usage": weekday_avg["thursday"],
+                    "avg_friday_usage": weekday_avg["friday"],
+                    "avg_saturday_usage": weekday_avg["saturday"],
                     "usage_daily": daily_rows,
+                    "usage_summary": usage_summary,
                 }
                 rows.append(row)
 
@@ -3726,19 +3842,149 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                 "usage_model": {
                     "week_start": "Sunday",
                     "day_formula": "opening_inventory + receipts - next_day_closing_inventory",
-                    "averaging": "same_weekday_across_weeks",
+                    "averaging": "trailing_four_weeks_per_covered_nonnegative_day",
                     "receipts_source": "invoice_import_log",
                     "negative_usage_allowed": True,
                 },
                 "assumptions": {
                     "week_start": "Sunday",
-                    "window_days": 8,
+                    "window_days": 7,
                     "formula": "opening_inventory + receipts - next_day_closing_inventory",
                     "receipts_source": "invoice_import_log",
                     "negative_usage_allowed": True,
                 },
             }
         )
+
+    def api_predictive_par_levels_runtime():
+        location_name = str(request.args.get("location") or _effective_runtime_location()).strip()
+        start_raw = request.args.get("start_date")
+        end_raw = request.args.get("end_date")
+        end_day = _safe_parse_date(end_raw) if end_raw is not None else date.today() - timedelta(days=1)
+        start_day = _safe_parse_date(start_raw) if start_raw is not None else (
+            end_day - timedelta(days=363) if end_day else None
+        )
+        output_format = str(request.args.get("format") or "json").lower()
+        if not location_name or start_day is None or end_day is None or start_day > end_day:
+            return jsonify({
+                "success": False,
+                "message": "A location and valid start_date/end_date (YYYY-MM-DD, start <= end) are required",
+            }), 400
+        if output_format not in {"json", "csv"}:
+            return jsonify({"success": False, "message": "format must be json or csv"}), 400
+
+        try:
+            with (ROOT / "data" / "inventory_database.json").open(encoding="utf-8") as handle:
+                inventory_source = json.load(handle)
+            with INVOICE_IMPORT_LOG_PATH.open(encoding="utf-8") as handle:
+                receipts_source = json.load(handle)
+            if not isinstance(inventory_source, dict) or not isinstance(receipts_source, list):
+                raise ValueError("Inventory must be a location dictionary and invoice imports must be a list")
+            if location_name not in inventory_source:
+                return jsonify({"success": False, "message": "Location has no saved inventory data"}), 404
+            if not isinstance(inventory_source[location_name], dict):
+                raise ValueError("Location inventory must be a dictionary of dated snapshots")
+            inventory_by_product = _usage_group_by_product_inventory(location_name, inventory_source)
+            receipts_by_product = _usage_group_by_product_receipts(location_name, receipts_source)
+            products = globals().get("products_list")
+            if not isinstance(products, list):
+                raise ValueError("Product catalog is unavailable")
+            catalog = {}
+            for product in products:
+                if isinstance(product, dict):
+                    product_num = _canonical_product_number(product.get("Product Number"))
+                    if product_num:
+                        catalog.setdefault(product_num, product)
+            product_numbers = set(catalog) | set(inventory_by_product) | set(receipts_by_product)
+            rows = []
+            weekdays = ("sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday")
+            for product_num in product_numbers:
+                daily_rows, _ = _usage_daily_series_for_product(
+                    inventory_by_product.get(product_num, {}),
+                    receipts_by_product.get(product_num, {}), start_day, end_day,
+                )
+                summary = _usage_daily_summary(daily_rows, ignore_negative=True)
+                avg_daily_usage = summary["avg_daily_usage"]
+                velocity_band, target_dos, _ = (
+                    _usage_velocity_profile(avg_daily_usage)
+                    if avg_daily_usage is not None else (None, None, None)
+                )
+                product = catalog.get(product_num, {})
+                row = {
+                    "product_number": product_num,
+                    "description": str(product.get("Product Description") or ""),
+                    "package_size": str(product.get("Product Package Size") or ""),
+                    "catalog_match": product_num in catalog,
+                    "total_usage": summary["usage"],
+                    "avg_daily_usage": round(avg_daily_usage, 4) if avg_daily_usage is not None else None,
+                    "weekly_demand": round(avg_daily_usage * 7, 4) if avg_daily_usage is not None else None,
+                    "velocity_band": velocity_band,
+                    "target_dos": target_dos,
+                    "target_stock": round(avg_daily_usage * target_dos, 4) if avg_daily_usage is not None else None,
+                    "calendar_days": summary["calendar_days"],
+                    "covered_days": summary["covered_days"],
+                    "sample_days": summary["sample_days"],
+                    "observed_days": summary["observed_days"],
+                    "estimated_days": summary["estimated_days"],
+                    "unavailable_days": summary["unavailable_days"],
+                    "anomaly_days_excluded": summary["anomaly_days_excluded"],
+                    "coverage_status": summary["coverage_status"],
+                    "weekday_sample_days": summary["weekday_sample_days"],
+                }
+                for weekday in weekdays:
+                    row[f"avg_{weekday}_usage"] = summary["weekday_usage_avg"][weekday]
+                rows.append(row)
+            rows.sort(key=lambda row: (
+                row["avg_daily_usage"] is None,
+                -(row["avg_daily_usage"] or 0.0), row["description"].lower(), row["product_number"],
+            ))
+        except OSError:
+            logging.exception("Unable to read predictive par report data")
+            return jsonify({"success": False, "message": "Predictive par report data files are unavailable"}), 503
+        except (ValueError, TypeError):
+            logging.exception("Invalid predictive par report data")
+            return jsonify({"success": False, "message": "Predictive par report data is invalid; check the server logs"}), 422
+
+        columns = [
+            "product_number", "description", "package_size", "avg_daily_usage",
+            *[f"avg_{weekday}_usage" for weekday in weekdays],
+            "weekly_demand", "velocity_band", "target_dos", "target_stock", "total_usage",
+            "calendar_days", "covered_days", "sample_days", "observed_days", "estimated_days",
+            "unavailable_days", "anomaly_days_excluded", "coverage_status", "catalog_match",
+        ]
+        if output_format == "csv":
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                csv_row = dict(row)
+                for field in ("product_number", "description", "package_size"):
+                    value = str(csv_row[field])
+                    if value.lstrip().startswith(("=", "+", "-", "@")):
+                        csv_row[field] = "'" + value
+                writer.writerow(csv_row)
+            return flask_app.response_class(
+                output.getvalue(), mimetype="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="predictive_par_{start_day}_{end_day}.csv"'},
+            )
+        return jsonify({
+            "success": True, "location": location_name,
+            "start_date": start_day.isoformat(), "end_date": end_day.isoformat(),
+            "calendar_days": (end_day - start_day).days + 1,
+            "total_products": len(rows), "columns": columns, "rows": rows,
+            "usage_model": {
+                "formula": "beginning_inventory + receipts - ending_inventory",
+                "count_interval": "opening_count_date_inclusive_to_closing_count_date_exclusive",
+                "gap_estimation": "even_daily_allocation_between_counts",
+                "negative_usage": "excluded_from_predictive_averages",
+                "unbounded_days": "unavailable_not_zero",
+                "average_denominator": "covered_nonnegative_days",
+                "target_stock": "avg_daily_usage * velocity_target_dos",
+                "weekly_demand": "avg_daily_usage * 7",
+                "sources": ["inventory_database.json", "invoice_import_log.json"],
+                "units": "saved_inventory_and_receipt_units_no_conversion",
+            },
+        })
 
     def api_period_usage_runtime():
         payload = request.get_json(silent=True) if request.method != "GET" else {}
@@ -3887,6 +4133,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
 
     installed_product_activity = False
     installed_weekly_usage = False
+    installed_predictive_par = False
     installed_period_usage_get = False
     installed_period_usage_post = False
     for rule in flask_app.url_map.iter_rules():
@@ -3896,6 +4143,9 @@ def _register_usage_reports_endpoints(flask_app) -> None:
         if rule.rule == "/api/reports/weekly-usage" and "GET" in rule.methods:
             flask_app.view_functions[rule.endpoint] = api_weekly_usage_runtime
             installed_weekly_usage = True
+        if rule.rule == "/api/reports/predictive-par-levels" and "GET" in rule.methods:
+            flask_app.view_functions[rule.endpoint] = api_predictive_par_levels_runtime
+            installed_predictive_par = True
         if rule.rule == "/api/reports/period-usage":
             if "GET" in rule.methods or "POST" in rule.methods:
                 flask_app.view_functions[rule.endpoint] = api_period_usage_runtime
@@ -3917,6 +4167,14 @@ def _register_usage_reports_endpoints(flask_app) -> None:
             "/api/reports/weekly-usage",
             endpoint="ic3_weekly_usage_runtime",
             view_func=api_weekly_usage_runtime,
+            methods=["GET"],
+        )
+
+    if not installed_predictive_par:
+        flask_app.add_url_rule(
+            "/api/reports/predictive-par-levels",
+            endpoint="ic3_predictive_par_levels_runtime",
+            view_func=api_predictive_par_levels_runtime,
             methods=["GET"],
         )
 

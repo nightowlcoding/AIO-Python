@@ -66,6 +66,59 @@ python -m unittest discover -s "Dexter Assistant/tests" -p test_productmix_ic3.p
 The tests use temporary SQLite data and isolated Flask routes; they do not load
 or edit live inventory, orders, or ProductMix records.
 
+## Predictive inventory par report
+Use the IC3 API through Dexter's authenticated proxy:
+
+```text
+/app/ic3/api/reports/predictive-par-levels?location=Alice&start_date=2026-01-01&end_date=2026-12-31
+```
+
+Add `&format=csv` to download the same sorted report. Without dates, the endpoint
+uses the last 364 days (52 weeks), ending yesterday. Explicit bounds are inclusive
+and can cover a calendar year, including leap years. It reads the saved
+`inventory_database.json` and `invoice_import_log.json` on each request and maps
+product numbers to the runtime catalog. Products absent from the catalog are
+included with `catalog_match=false`.
+
+Each row contains overall daily usage, `avg_sunday_usage` through
+`avg_saturday_usage`, seven-day `weekly_demand`, `velocity_band`, `target_dos`,
+and `target_stock` (`avg_daily_usage * target_dos`), sorted by highest daily
+usage. The installed velocity profile remains authoritative. Without the legacy
+runtime profile, the matching rules are: fast at >= 2 units/day (6 target days),
+medium at >= 0.5 (10 days), and slow below 0.5 (15 days).
+
+Usage is beginning inventory plus receipts minus ending inventory between
+successive counts. Counts mark the start of a day: receipts on the closing
+count's date belong to the next interval. For gaps, interval usage is distributed
+evenly over its days and labeled `estimated_gap`; it is **not** an observed
+weekday-specific burn pattern. Gap totals are conserved, including when a
+report selects only part of a gap. Quantities stay in saved inventory/receipt
+units; no package conversion is inferred.
+
+Negative-usage days are excluded from predictive averages, not counted as zero.
+Valid zero-usage days remain included. Days without bounding counts are
+unavailable and excluded from the denominator. Review `coverage_status`,
+`covered_days`, `sample_days`, `estimated_days`, `unavailable_days`,
+`anomaly_days_excluded`, and `weekday_sample_days` before relying on a par.
+Items without usable samples have null averages and target stock; partial
+history is never presented as a complete observed year.
+
+Existing weekly usage now uses nonoverlapping seven-day windows clipped to the
+requested dates, with four-week daily averages weighted by usable sample days.
+`avg_weekly_usage_4w` is seven-day demand; the compatibility field
+`avg_8day_usage_4w` is eight-day demand, not a weekly total. Daily activity
+retains signed usage and exposes estimates/unavailable days in `usage_summary`.
+Clients must handle null values when counts cannot establish usage.
+
+Invalid request parameters return 400, an unknown inventory location returns
+404, unavailable files return 503, and malformed data returns 422 with a server
+log entry. The report does not write inventory, receipts, or saved par settings.
+
+Run the isolated usage checks from the workspace root:
+```powershell
+python -m unittest discover -s "Dexter Assistant\tests" -p test_inventory_usage.py -v
+```
+
 ## Recommended security environment variables
 Use these in production or any HTTPS-backed deployment:
 - `DEXTER_SECRET_KEY` - required; set a stable secret for session signing.

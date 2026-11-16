@@ -78,7 +78,7 @@
   <div class="col-12 col-lg-4">
     <div class="card stat-card h-100">
       <div class="card-body">
-        <div class="section-eyebrow">Projected Next Period</div>
+        <div class="section-eyebrow">Projected Next Period ({{ analytics_metric_label }})</div>
         <div class="stat-value">{{ summary.projected_next_period_units }}</div>
       </div>
     </div>
@@ -97,8 +97,10 @@
             <div class="display-6 fw-bold mb-2">{{ top_item.item_name }}</div>
             <p class="text-muted mb-2">Leading item in the selected period.</p>
             <div class="d-flex flex-column gap-2">
-              <div><strong>{{ "%.2f"|format(top_item.total_units or 0) }}</strong> total units</div>
+              <div><strong>{{ "%.2f"|format(top_item.total_units or 0) }}</strong> {{ analytics_metric_label|lower }}</div>
+              {% if not analytics_uses_all_levels %}
               <div><strong>{{ "%.2f"|format(top_item.total_qty_sold or 0) }}</strong> raw quantity sold</div>
+              {% endif %}
               <div><strong>{{ top_item.uploads }}</strong> uploads</div>
             </div>
             {% else %}
@@ -111,7 +113,7 @@
         <div class="card shadow-sm border-0 h-100">
           <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span><i class="bi bi-bar-chart-line-fill me-2"></i>Top Items by Period</span>
-            <span class="small text-muted">Top 10 items ranked by total units</span>
+            <span class="small text-muted">Top 10 items ranked by {{ analytics_metric_label|lower }}</span>
           </div>
           <div class="card-body">
               {% if item_rows %}
@@ -134,7 +136,7 @@
         <div class="card shadow-sm border-0 h-100">
           <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span><i class="bi bi-activity me-2"></i>Period Trend</span>
-            <span class="small text-muted">Uploads and total units over time</span>
+            <span class="small text-muted">Uploads and {{ analytics_metric_label|lower }} over time</span>
           </div>
           <div class="card-body">
             {% if period_rows %}
@@ -157,7 +159,7 @@
         <div class="card shadow-sm border-0 h-100">
           <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span><i class="bi bi-pie-chart-fill me-2"></i>Category Mix</span>
-            <span class="small text-muted">Share by total units</span>
+            <span class="small text-muted">Share by {{ analytics_metric_label|lower }}</span>
           </div>
           <div class="card-body">
             {% if category_rows %}
@@ -187,6 +189,7 @@
   var periodRows = {{ period_rows | tojson }};
   var itemRows = {{ items_rows | tojson }};
   var categoryRows = {{ category_rows | tojson }};
+  var metricLabel = {{ analytics_metric_label | tojson }};
 
   function rgba(color, alpha) {
     return color.replace('rgb', 'rgba').replace(')', ',' + alpha + ')');
@@ -204,7 +207,7 @@
         datasets: [
           {
             type: 'line',
-            label: 'Total Units',
+            label: metricLabel,
             data: unitValues,
             borderColor: 'rgb(31, 111, 235)',
             backgroundColor: rgba('rgb(31, 111, 235)', '0.14'),
@@ -272,7 +275,7 @@
       data: {
         labels: topLabels,
         datasets: [{
-          label: 'Total Units',
+          label: metricLabel,
           data: topValues,
           backgroundColor: topColors,
           borderRadius: 10,

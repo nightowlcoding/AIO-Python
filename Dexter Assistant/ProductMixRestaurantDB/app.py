@@ -3356,11 +3356,46 @@ def _get_recent_product_mix_uploads(restaurant=None, limit=12, search_text="", s
     return [dict(r) for r in rows]
 
 
+def _product_mix_analytics_uses_all_levels(conn, restaurant_id):
+    row = conn.execute(
+        "SELECT 1 FROM product_mix_items WHERE restaurant_id = ? LIMIT 1",
+        (int(restaurant_id),),
+    ).fetchone()
+    return row is None
+
+
 def _get_product_mix_period_trend_rows(restaurant=None, start_date=None, end_date=None):
     if not restaurant:
         return []
 
     conn = get_db_connection()
+    if _product_mix_analytics_uses_all_levels(conn, restaurant["id"]):
+        where_clauses = ["r.restaurant_id = ?"]
+        params = [int(restaurant["id"])]
+        if start_date:
+            where_clauses.append("COALESCE(r.report_end_date, r.report_start_date, '') >= ?")
+            params.append(str(start_date))
+        if end_date:
+            where_clauses.append("COALESCE(r.report_start_date, r.report_end_date, '') <= ?")
+            params.append(str(end_date))
+
+        rows = conn.execute(
+            f"""
+            SELECT
+                COALESCE(substr(COALESCE(r.report_end_date, r.report_start_date), 1, 7), 'Unknown') AS period,
+                COUNT(DISTINCT r.upload_id) AS uploads,
+                COALESCE(SUM(r.col_i), 0) AS total_units,
+                COALESCE(SUM(r.col_i), 0) AS total_qty_sold
+            FROM all_levels_records r
+            WHERE {' AND '.join(where_clauses)}
+            GROUP BY period
+            ORDER BY period ASC
+            """,
+            params,
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
     where_clauses = ["u.restaurant_id = ?"]
     params = [int(restaurant["id"])]
 
@@ -3395,6 +3430,48 @@ def _get_product_mix_item_totals_rows(restaurant=None, start_date=None, end_date
         return []
 
     conn = get_db_connection()
+    if _product_mix_analytics_uses_all_levels(conn, restaurant["id"]):
+        category_expression = (
+            "CASE WHEN TRIM(CAST(r.col_c AS TEXT)) IN ('', '0', '0.0') "
+            "THEN 'Uncategorized' ELSE TRIM(CAST(r.col_c AS TEXT)) END"
+        )
+        where_clauses = ["i.restaurant_id = ?", "r.restaurant_id = ?"]
+        params = [int(restaurant["id"]), int(restaurant["id"])]
+
+        cleaned_search = _clean_text(search_text, 120)
+        if cleaned_search:
+            like_value = f"%{cleaned_search}%"
+            where_clauses.append(f"(i.item_name LIKE ? OR ({category_expression}) LIKE ?)")
+            params.extend([like_value, like_value])
+
+        if start_date:
+            where_clauses.append("COALESCE(r.report_end_date, r.report_start_date, '') >= ?")
+            params.append(str(start_date))
+        if end_date:
+            where_clauses.append("COALESCE(r.report_start_date, r.report_end_date, '') <= ?")
+            params.append(str(end_date))
+
+        query = f"""
+            SELECT
+                i.item_name,
+                {category_expression} AS category_name,
+                COUNT(DISTINCT r.upload_id) AS uploads,
+                COALESCE(SUM(r.col_i), 0) AS total_qty_sold,
+                COALESCE(SUM(r.col_i), 0) AS total_units,
+                MAX(r.report_end_date) AS last_report_end_date
+            FROM all_levels_items i
+            JOIN all_levels_records r ON r.item_id = i.id
+            WHERE {' AND '.join(where_clauses)}
+            GROUP BY i.item_name, category_name
+            ORDER BY total_units DESC, total_qty_sold DESC, LOWER(i.item_name) ASC
+        """
+        if limit is None:
+            rows = conn.execute(query, params).fetchall()
+        else:
+            rows = conn.execute(f"{query}\nLIMIT ?", (*params, int(limit))).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
     where_clauses = ["u.restaurant_id = ?"]
     params = [int(restaurant["id"])]
 
@@ -3438,6 +3515,46 @@ def _get_product_mix_category_totals_rows(restaurant=None, start_date=None, end_
         return []
 
     conn = get_db_connection()
+    if _product_mix_analytics_uses_all_levels(conn, restaurant["id"]):
+        category_expression = (
+            "CASE WHEN TRIM(CAST(r.col_c AS TEXT)) IN ('', '0', '0.0') "
+            "THEN 'Uncategorized' ELSE TRIM(CAST(r.col_c AS TEXT)) END"
+        )
+        where_clauses = ["i.restaurant_id = ?", "r.restaurant_id = ?"]
+        params = [int(restaurant["id"]), int(restaurant["id"])]
+
+        cleaned_search = _clean_text(search_text, 120)
+        if cleaned_search:
+            like_value = f"%{cleaned_search}%"
+            where_clauses.append(f"(({category_expression}) LIKE ? OR i.item_name LIKE ?)")
+            params.extend([like_value, like_value])
+
+        if start_date:
+            where_clauses.append("COALESCE(r.report_end_date, r.report_start_date, '') >= ?")
+            params.append(str(start_date))
+        if end_date:
+            where_clauses.append("COALESCE(r.report_start_date, r.report_end_date, '') <= ?")
+            params.append(str(end_date))
+
+        rows = conn.execute(
+            f"""
+            SELECT
+                {category_expression} AS category_name,
+                COUNT(DISTINCT i.id) AS item_count,
+                COUNT(DISTINCT r.upload_id) AS uploads,
+                COALESCE(SUM(r.col_i), 0) AS total_qty_sold,
+                COALESCE(SUM(r.col_i), 0) AS total_units
+            FROM all_levels_items i
+            JOIN all_levels_records r ON r.item_id = i.id
+            WHERE {' AND '.join(where_clauses)}
+            GROUP BY category_name
+            ORDER BY total_units DESC, total_qty_sold DESC, category_name ASC
+            """,
+            params,
+        ).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
     where_clauses = ["u.restaurant_id = ?"]
     params = [int(restaurant["id"])]
 
@@ -5537,6 +5654,16 @@ def reports_analytics_page():
     start_date = _normalize_report_date_filter(request.args.get("start_date"))
     end_date = _normalize_report_date_filter(request.args.get("end_date"))
 
+    analytics_uses_all_levels = False
+    if scoped_restaurant:
+        conn = get_db_connection()
+        try:
+            analytics_uses_all_levels = _product_mix_analytics_uses_all_levels(
+                conn, scoped_restaurant["id"]
+            )
+        finally:
+            conn.close()
+
     items_rows = _get_product_mix_item_totals_rows(
         restaurant=scoped_restaurant,
         start_date=start_date,
@@ -5573,6 +5700,7 @@ def reports_analytics_page():
         "categories": len(category_rows),
         "projected_next_period_units": _format_numeric_for_response(weekly_projection),
     }
+    analytics_metric_label = "Qty Sold" if analytics_uses_all_levels else "Total Units"
 
     return render_template(
         "reports_analytics.html",
@@ -5592,6 +5720,8 @@ def reports_analytics_page():
         top_category=top_category,
         total_units=total_units,
         total_qty_sold=total_qty_sold,
+        analytics_metric_label=analytics_metric_label,
+        analytics_uses_all_levels=analytics_uses_all_levels,
     )
 
 
