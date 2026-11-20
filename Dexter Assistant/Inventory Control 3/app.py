@@ -3025,6 +3025,79 @@ MOBILE_UI_SCRIPT = r"""
 """
 
 
+def _rewrite_weekly_usage_display(payload: str) -> str:
+    start = payload.find("function displayWeeklyUsageReport(data) {")
+    end = payload.find("function setWeeklyUsageView(viewName) {", start)
+    if start < 0 or end < 0:
+        return payload
+
+    display = payload[start:end]
+    replacements = (
+        ("const used = data.windows_used || [];",
+         "const used = Array.isArray(data.windows_used) ? data.windows_used['length'] : Number(data.windows_used || 0);"),
+        ("const skipped = data.windows_skipped || [];",
+         "const skipped = Array.isArray(data.windows_skipped) ? data.windows_skipped['length'] : Number(data.windows_skipped || 0);"),
+        ("const numericValue = Number(value || 0);",
+         "if (value === null || value === undefined || value === '') return '—';\n                const numericValue = Number(value);"),
+        ("return '0';\n                }\n                return numericValue.toLocaleString",
+         "return '—';\n                }\n                return numericValue.toLocaleString"),
+        ("beginning_inventory: Number(item.beginning_inventory || 0),",
+         "beginning_inventory: item.beginning_inventory,"),
+        ("ending_inventory: Number(item.ending_inventory || 0),",
+         "ending_inventory: item.ending_inventory,"),
+        ("avg_8day_usage_4w: Number(item.avg_8day_usage_4w || item.avg_weekly_usage_4w || 0),",
+         "avg_8day_usage_4w: item.avg_8day_usage_4w,"),
+        ("avg_daily_usage_4w: Number(item.avg_daily_usage_4w || 0),",
+         "avg_daily_usage_4w: item.avg_daily_usage_4w,\n                        unavailable_days: 0,\n                        assumed_zero_days: 0,"),
+        ("summary.total_usage += Number(item.usage || 0);",
+         "summary.total_usage += Number(item.usage ?? 0);\n                summary.unavailable_days += Number(item.usage_summary?.unavailable_days ?? 0);\n                summary.assumed_zero_days += Number(item.usage_summary?.assumed_zero_days ?? 0);"),
+        ("summary.ending_inventory = Number(item.ending_inventory || 0);",
+         "summary.ending_inventory = item.ending_inventory;"),
+        ("summary.avg_8day_usage_4w = Number(item.avg_8day_usage_4w || item.avg_weekly_usage_4w || 0);",
+         "summary.avg_8day_usage_4w = item.avg_8day_usage_4w;"),
+        ("summary.avg_daily_usage_4w = Number(item.avg_daily_usage_4w || 0);",
+         "summary.avg_daily_usage_4w = item.avg_daily_usage_4w;"),
+        ("            let html = '<div style=\"background: #f8f9fa;",
+         "            summarizedRows.forEach(item => {\n"
+         "                const latest = (data.latest_averages || {})[item.product_number];\n"
+         "                if (latest) { item.avg_8day_usage_4w = latest.avg_8day_usage_4w; item.avg_daily_usage_4w = latest.avg_daily_usage_4w; item.assumed_zero_days = latest.assumed_zero_days; }\n"
+         "                if (item.unavailable_days) item.total_usage = null;\n"
+         "            });\n"
+         "            let html = '<div style=\"background: #f8f9fa;"),
+        ("used.length", "used"),
+        ("skipped.length", "skipped"),
+        ("Windows Skipped:", "Product-window rows omitted:"),
+        ("            if (skipped > 0) {", "            if (Array.isArray(data.windows_skipped) && skipped > 0) {"),
+        ("skipped.map(w =>", "data.windows_skipped.map(w =>"),
+        ("formatWeeklyUsageNumber(item.avg_8day_usage_4w || item.avg_weekly_usage_4w)",
+         "formatWeeklyUsageNumber(item.avg_8day_usage_4w)"),
+        ("Usage (8d)", "Usage"),
+        ("Week End</th>", "Week End (exclusive)</th>"),
+        ("Range End</th>", "Range End (exclusive)</th>"),
+        ("            html += '<th style=\"padding: 8px; border: 1px solid #dee2e6; text-align: right;\">Begin</th>';",
+         "            html += '<th style=\"padding: 8px; border: 1px solid #dee2e6; text-align: right;\">Assumed days (range)</th>';\n"
+         "            html += '<th style=\"padding: 8px; border: 1px solid #dee2e6; text-align: right;\">Begin</th>';"),
+        ("                    html += '<td style=\"padding: 8px; border: 1px solid #dee2e6; text-align: right;\">' + formatWeeklyUsageNumber(item.beginning_inventory) + '</td>';",
+         "                    html += '<td style=\"padding: 8px; border: 1px solid #dee2e6; text-align: right;\">' + (isRawView ? Number(item.usage_summary?.assumed_zero_days ?? 0) : item.assumed_zero_days) + '</td>';\n"
+         "                    html += '<td style=\"padding: 8px; border: 1px solid #dee2e6; text-align: right;\">' + formatWeeklyUsageNumber(item.beginning_inventory) + '</td>';"),
+        ("            html += '<div style=\"display:flex; gap:8px;",
+         "            html += '<p>Missing inventory boundaries are assumed to be zero. Assumed days are estimates, not measured usage; recorded receipts may still be on hand. Gap days are also estimates. Averages use nonnegative days from the latest four windows. — means unavailable; total usage requires the full selected range.</p>';\n"
+         "            html += '<div style=\"display:flex; gap:8px;"),
+    )
+    for old, new in replacements:
+        if old not in display:
+            logging.warning("Weekly usage display patch did not find %r", old)
+        display = display.replace(old, new)
+    payload = payload[:start] + display + payload[end:]
+    return payload.replace(
+        "Weekly Usage (Sun → Following Mon, 8 Days)",
+        "Weekly Usage (Sunday-start windows)",
+    ).replace(
+        "Units/cases consumed per 8-day window, with 4-week rolling daily average.",
+        "Usage per weekly window, with a four-window rolling daily average.",
+    )
+
+
 def _rewrite_bulk_upload_text(payload: str) -> str:
     literal_replacements = (
         ("Bulk Upload (Up to 20)", "Bulk Upload"),
@@ -3044,7 +3117,7 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         ),
     )
 
-    updated = payload
+    updated = _rewrite_weekly_usage_display(payload)
     for old, new in literal_replacements:
         updated = updated.replace(old, new)
 
@@ -3488,7 +3561,7 @@ def _usage_daily_summary(daily_rows, ignore_negative=False):
     ]
     total_usage = math.fsum(row["usage"] for row in sample_rows) if sample_rows else None
     covered_days = len(covered_rows)
-    estimated_days = sum(row["calculation_mode"] == "estimated_gap" for row in covered_rows)
+    estimated_days = sum(row["calculation_mode"] in {"estimated_gap", "assumed_zero"} for row in covered_rows)
     weekday_values = defaultdict(list)
     for row in sample_rows:
         weekday_values[row["weekday"].lower()].append(row["usage"])
@@ -3500,6 +3573,7 @@ def _usage_daily_summary(daily_rows, ignore_negative=False):
         "covered_days": covered_days,
         "calendar_days": len(daily_rows),
         "estimated_days": estimated_days,
+        "assumed_zero_days": sum(row["calculation_mode"] == "assumed_zero" for row in covered_rows),
         "observed_days": covered_days - estimated_days,
         "unavailable_days": len(daily_rows) - covered_days,
         "coverage_status": (
@@ -3693,15 +3767,39 @@ def _register_usage_reports_endpoints(flask_app) -> None:
 
         rows = []
         usage_history_by_product = defaultdict(list)
+        latest_averages = {}
+        assumed_days_by_product = defaultdict(int)
         windows_skipped = 0
 
-        daily_by_product = {
-            product_num: _usage_daily_series_for_product(
-                inventory_by_product.get(product_num, {}),
-                receipts_by_product.get(product_num, {}), start_day, end_day,
+        daily_by_product = {}
+        assumed_dates_by_product = {}
+        boundary_days = [start_day] + [end for _, end in windows]
+        product_numbers = set(inventory_by_product) | set(receipts_by_product)
+        if include_zero_rows:
+            product_numbers.update(
+                _canonical_product_number(product.get("Product Number"))
+                for product in products if isinstance(product, dict)
+            )
+        for product_num in product_numbers:
+            inv_map = dict(inventory_by_product.get(product_num, {}))
+            count_days = [_safe_parse_date(key) for key in inv_map]
+            count_days = [day for day in count_days if day is not None]
+            first_count = min(count_days) if count_days else None
+            last_count = max(count_days) if count_days else None
+            assumed_dates = set()
+            for boundary in boundary_days:
+                if first_count is None or boundary < first_count or boundary > last_count:
+                    key = boundary.isoformat()
+                    inv_map[key] = 0.0
+                    assumed_dates.add(key)
+            assumed_dates_by_product[product_num] = assumed_dates
+            daily_rows = _usage_daily_series_for_product(
+                inv_map, receipts_by_product.get(product_num, {}), start_day, end_day,
             )[0]
-            for product_num in set(list(inventory_by_product.keys()) + list(receipts_by_product.keys()))
-        }
+            for row in daily_rows:
+                if row["opening_inventory_date"] in assumed_dates or row["closing_inventory_date"] in assumed_dates:
+                    row["calculation_mode"] = "assumed_zero"
+            daily_by_product[product_num] = daily_rows
 
         for window_start, window_end_marker in windows:
             daily_end = window_end_marker - timedelta(days=1)
@@ -3743,27 +3841,51 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                 )
                 avg_daily_usage = trailing_summary["avg_daily_usage"]
                 avg_weekly_usage = avg_daily_usage * 7.0 if avg_daily_usage is not None else None
+                assumed_days_by_product[product_num] += usage_summary["assumed_zero_days"]
+                latest_averages[product_num] = {
+                    "avg_8day_usage_4w": round(avg_daily_usage * 8, 2) if avg_daily_usage is not None else None,
+                    "avg_daily_usage_4w": round(avg_daily_usage, 4) if avg_daily_usage is not None else None,
+                    "assumed_zero_days": assumed_days_by_product[product_num],
+                }
 
                 velocity_band, target_dos, upper_dos = (
                     _usage_velocity_profile(avg_daily_usage)
                     if avg_daily_usage is not None else (None, None, None)
                 )
+                assumed_dates = assumed_dates_by_product.get(product_num, set())
+
+                def boundary_source(day_row, boundary_day, direction):
+                    field = "opening_inventory_date" if direction == "start" else "closing_inventory_date"
+                    quantity = day_row["opening_inventory"] if direction == "start" else day_row["closing_inventory"]
+                    if quantity is None:
+                        return "unavailable"
+                    count_date = day_row[field]
+                    if count_date == boundary_day.isoformat() and count_date not in assumed_dates:
+                        return "counted"
+                    return "assumed_zero" if day_row["calculation_mode"] == "assumed_zero" else "estimated_gap"
+
+                beginning_source = boundary_source(daily_rows[0], window_start, "start")
+                ending_source = boundary_source(daily_rows[-1], window_end_marker, "end")
+                reliable_ending_inv = ending_inv if ending_source != "assumed_zero" else None
                 days_of_supply = (
-                    ending_inv / avg_daily_usage
-                    if ending_inv is not None and avg_daily_usage is not None and avg_daily_usage > 0 else None
+                    reliable_ending_inv / avg_daily_usage
+                    if reliable_ending_inv is not None and avg_daily_usage is not None and avg_daily_usage > 0 else None
                 )
                 reorder_point = avg_daily_usage * 3.0 if avg_daily_usage is not None else None
                 target_stock = avg_daily_usage * target_dos if avg_daily_usage is not None else None
                 on_order_qty = 0.0
                 suggested_order_qty = (
-                    max(0.0, target_stock - ending_inv - on_order_qty)
-                    if target_stock is not None and ending_inv is not None else None
+                    max(0.0, target_stock - reliable_ending_inv - on_order_qty)
+                    if target_stock is not None and reliable_ending_inv is not None else None
                 )
-                do_not_order = days_of_supply > upper_dos if days_of_supply is not None else False
+                do_not_order = (
+                    None if ending_source == "assumed_zero"
+                    else days_of_supply > upper_dos if days_of_supply is not None else False
+                )
 
                 unit_cost = _usage_latest_unit_cost(location_name, product_num, window_end_marker)
-                on_hand_value = ending_inv * unit_cost if ending_inv is not None else None
-                excess_qty = max(0.0, ending_inv - target_stock) if ending_inv is not None and target_stock is not None else None
+                on_hand_value = reliable_ending_inv * unit_cost if reliable_ending_inv is not None else None
+                excess_qty = max(0.0, reliable_ending_inv - target_stock) if reliable_ending_inv is not None and target_stock is not None else None
                 excess_value = excess_qty * unit_cost if excess_qty is not None else None
 
                 if (
@@ -3796,8 +3918,10 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                     "end_snapshot_offset_days": 0,
                     "window_days": len(daily_rows),
                     "beginning_inventory": rounded(begin_inv),
+                    "beginning_inventory_source": beginning_source,
                     "total_orders": round(total_orders, 2),
                     "ending_inventory": rounded(ending_inv),
+                    "ending_inventory_source": ending_source,
                     "usage": rounded(usage),
                     "avg_8day_usage_4w": rounded(avg_daily_usage * 8 if avg_daily_usage is not None else None),
                     "avg_weekly_usage_4w": rounded(avg_weekly_usage),
@@ -3835,6 +3959,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                 "start_date": start_day.isoformat(),
                 "end_date": end_day.isoformat(),
                 "rows": rows,
+                "latest_averages": latest_averages,
                 "total_rows": len(rows),
                 "total_products": len({str(r.get("product_number") or "") for r in rows}),
                 "windows_used": len(windows),
@@ -3845,6 +3970,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                     "averaging": "trailing_four_weeks_per_covered_nonnegative_day",
                     "receipts_source": "invoice_import_log",
                     "negative_usage_allowed": True,
+                    "missing_boundary_counts": "assumed_zero_at_weekly_boundaries",
                 },
                 "assumptions": {
                     "week_start": "Sunday",
@@ -3854,6 +3980,32 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                     "negative_usage_allowed": True,
                 },
             }
+        )
+
+    def api_weekly_usage_export_runtime():
+        response = api_weekly_usage_runtime()
+        if isinstance(response, tuple):
+            return response
+        data = response.get_json()
+        columns = (
+            "product_number", "description", "brand", "group", "package_size",
+            "case_count_type", "member_product_numbers", "rolled_up_sub_count",
+            "window_start", "window_end", "start_snapshot_date", "end_snapshot_date",
+            "start_snapshot_offset_days", "end_snapshot_offset_days", "beginning_inventory",
+            "total_orders", "ending_inventory", "usage", "avg_8day_usage_4w",
+            "avg_daily_usage_4w", "velocity_band", "days_of_supply", "target_days_of_supply",
+            "reorder_point", "target_stock", "on_order_qty", "suggested_order_qty",
+            "do_not_order", "unit_cost", "on_hand_value", "excess_qty", "excess_value",
+            "assumed_zero_days", "beginning_inventory_source", "ending_inventory_source",
+        )
+        output = io.StringIO(newline="")
+        writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        for row in data["rows"]:
+            writer.writerow({**row, "assumed_zero_days": row["usage_summary"]["assumed_zero_days"]})
+        return flask_app.response_class(
+            output.getvalue(), mimetype="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="weekly_usage_{data["start_date"]}_to_{data["end_date"]}.csv"'},
         )
 
     def api_predictive_par_levels_runtime():
@@ -4133,6 +4285,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
 
     installed_product_activity = False
     installed_weekly_usage = False
+    installed_weekly_export = False
     installed_predictive_par = False
     installed_period_usage_get = False
     installed_period_usage_post = False
@@ -4143,6 +4296,9 @@ def _register_usage_reports_endpoints(flask_app) -> None:
         if rule.rule == "/api/reports/weekly-usage" and "GET" in rule.methods:
             flask_app.view_functions[rule.endpoint] = api_weekly_usage_runtime
             installed_weekly_usage = True
+        if rule.rule == "/api/reports/weekly-usage/export" and "GET" in rule.methods:
+            flask_app.view_functions[rule.endpoint] = api_weekly_usage_export_runtime
+            installed_weekly_export = True
         if rule.rule == "/api/reports/predictive-par-levels" and "GET" in rule.methods:
             flask_app.view_functions[rule.endpoint] = api_predictive_par_levels_runtime
             installed_predictive_par = True
@@ -4167,6 +4323,14 @@ def _register_usage_reports_endpoints(flask_app) -> None:
             "/api/reports/weekly-usage",
             endpoint="ic3_weekly_usage_runtime",
             view_func=api_weekly_usage_runtime,
+            methods=["GET"],
+        )
+
+    if not installed_weekly_export:
+        flask_app.add_url_rule(
+            "/api/reports/weekly-usage/export",
+            endpoint="ic3_weekly_usage_export_runtime",
+            view_func=api_weekly_usage_export_runtime,
             methods=["GET"],
         )
 

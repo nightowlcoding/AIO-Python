@@ -1,11 +1,16 @@
 import ast
 import csv
 import io
+import importlib.util
 import json
 import logging
+import marshal
 import math
 import re
+import shutil
+import subprocess
 import tempfile
+import types
 import unittest
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
@@ -34,6 +39,7 @@ class InventoryUsageTests(unittest.TestCase):
             "_usage_prepare_inventory", "_usage_snapshot_value_prepared",
             "_usage_daily_series_for_product", "_usage_daily_summary",
             "_usage_velocity_profile", "_register_usage_reports_endpoints",
+            "_rewrite_weekly_usage_display",
         }
         functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
         self.assertEqual({node.name for node in functions}, names)
@@ -197,6 +203,153 @@ class InventoryUsageTests(unittest.TestCase):
         self.assertIsNone(product["usage"])
         self.assertIsNone(product["cases_required"])
         self.assertEqual(product["usage_summary"]["covered_days"], 0)
+
+    def test_weekly_missing_counts_assume_zero_at_window_boundaries(self):
+        self.ns["invoice_import_log"] = [
+            {"location": "Alice", "delivery_date": "2026-01-04", "products": {"123": 7}},
+            {"location": "Alice", "delivery_date": "2026-01-11", "products": {"123": 14}},
+        ]
+        payload = self.client.get(
+            "/api/reports/weekly-usage?start_date=2026-01-04&end_date=2026-01-17"
+        ).get_json()
+        first, second = payload["rows"]
+        self.assertEqual((first["beginning_inventory"], first["ending_inventory"], first["usage"]), (0, 0, 7))
+        self.assertEqual((second["beginning_inventory"], second["ending_inventory"], second["usage"]), (0, 0, 14))
+        self.assertEqual(second["avg_daily_usage_4w"], 1.5)
+        self.assertEqual(second["avg_8day_usage_4w"], 12)
+        self.assertEqual(first["usage_summary"]["assumed_zero_days"], 7)
+        self.assertEqual(first["beginning_inventory_source"], "assumed_zero")
+        self.assertEqual(first["ending_inventory_source"], "assumed_zero")
+        self.assertIsNone(first["days_of_supply"])
+        self.assertIsNone(first["suggested_order_qty"])
+        self.assertIsNone(first["on_hand_value"])
+        self.assertIsNone(first["do_not_order"])
+        self.assertEqual(payload["latest_averages"]["123"]["assumed_zero_days"], 14)
+        exported = self.client.get(
+            "/api/reports/weekly-usage/export?start_date=2026-01-04&end_date=2026-01-17"
+        )
+        self.assertEqual(exported.status_code, 200)
+        csv_rows = list(csv.DictReader(io.StringIO(exported.get_data(as_text=True))))
+        self.assertEqual([float(row["usage"]) for row in csv_rows], [7, 14])
+        self.assertEqual([int(row["assumed_zero_days"]) for row in csv_rows], [7, 7])
+        self.assertEqual(csv_rows[0]["ending_inventory_source"], "assumed_zero")
+        self.assertEqual(csv_rows[0]["suggested_order_qty"], "")
+        self.assertEqual(self.client.get("/api/reports/weekly-usage/export").status_code, 400)
+
+        self.ns["inventory_data"] = {"Alice": {"2026-01-11": {"123": 4}}}
+        payload = self.client.get(
+            "/api/reports/weekly-usage?start_date=2026-01-04&end_date=2026-01-17"
+        ).get_json()
+        first, second = payload["rows"]
+        self.assertEqual((first["beginning_inventory"], first["ending_inventory"], first["usage"]), (0, 4, 3))
+        self.assertEqual((second["beginning_inventory"], second["ending_inventory"], second["usage"]), (4, 0, 18))
+        self.assertEqual(first["ending_inventory_source"], "counted")
+        self.assertEqual(second["beginning_inventory_source"], "counted")
+        self.assertEqual(second["avg_daily_usage_4w"], 1.5)
+
+    def test_weekly_latest_average_includes_omitted_zero_windows(self):
+        self.ns["invoice_import_log"] = [
+            {"location": "Alice", "delivery_date": "2026-01-04", "products": {"123": 7}},
+        ]
+        payload = self.client.get(
+            "/api/reports/weekly-usage?start_date=2026-01-04&end_date=2026-02-07"
+        ).get_json()
+        self.assertEqual(len(payload["rows"]), 1)
+        self.assertEqual(payload["rows"][0]["avg_daily_usage_4w"], 1)
+        self.assertEqual(payload["latest_averages"]["123"]["avg_daily_usage_4w"], 0)
+        self.assertEqual(payload["latest_averages"]["123"]["assumed_zero_days"], 35)
+
+    def test_weekly_assumptions_do_not_replace_real_count_intervals(self):
+        self.ns["inventory_data"] = {"Alice": {
+            "2026-01-07": {"123": 4}, "2026-01-09": {"123": 2},
+        }}
+        self.ns["invoice_import_log"] = [
+            {"location": "Alice", "delivery_date": "2026-01-04", "products": {"123": 7}},
+            {"location": "Alice", "delivery_date": "2026-01-08", "products": {"123": 1}},
+        ]
+        payload = self.client.get(
+            "/api/reports/weekly-usage?start_date=2026-01-04&end_date=2026-01-10"
+        ).get_json()
+        row = payload["rows"][0]
+        self.assertEqual(row["usage"], 8)
+        self.assertEqual(row["usage_summary"]["assumed_zero_days"], 5)
+        self.assertEqual([day["calculation_mode"] for day in row["usage_daily"]], [
+            "assumed_zero", "assumed_zero", "assumed_zero", "estimated_gap",
+            "estimated_gap", "assumed_zero", "assumed_zero",
+        ])
+
+    def test_weekly_display_distinguishes_missing_counts_from_zero(self):
+        node = shutil.which("node")
+        bytecode = ROOT / "Inventory Control 3" / "app.pyc"
+        if not node or bytecode.read_bytes()[:4] != importlib.util.MAGIC_NUMBER:
+            self.skipTest("Node and the matching application bytecode are required")
+        with bytecode.open("rb") as source:
+            source.read(16)
+            code = marshal.load(source)
+
+        def find_html(code_object):
+            for value in code_object.co_consts:
+                if isinstance(value, types.CodeType):
+                    found = find_html(value)
+                    if found:
+                        return found
+                elif isinstance(value, str) and "function displayWeeklyUsageReport(data) {" in value:
+                    return value
+            return None
+
+        original = find_html(code)
+        self.assertIsNotNone(original)
+        with self.assertNoLogs(level="WARNING"):
+            rewritten = self.ns["_rewrite_weekly_usage_display"](original)
+        start = rewritten.index("function displayWeeklyUsageReport(data) {")
+        end = rewritten.index("function setWeeklyUsageView(viewName) {", start)
+        script = r"""
+const vm = require('vm');
+const source = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const container = {};
+const context = {document: {getElementById: () => container},
+                 escapeHtml: x => x, currentWeeklyUsageView: 'summary'};
+vm.createContext(context);
+vm.runInContext(source, context);
+const row = (id, begin, end, usage, avg, covered) => ({
+    product_number: id, description: id, group: '',
+    window_start: '2026-01-01', window_end: '2026-01-03',
+    beginning_inventory: begin, ending_inventory: end, total_orders: 2,
+    usage, avg_8day_usage_4w: avg, avg_daily_usage_4w: avg,
+    usage_summary: {covered_days: covered, unavailable_days: 2 - covered, assumed_zero_days: 0}
+});
+const data = {location: 'Alice', start_date: '2026-01-01', end_date: '2026-01-02',
+              windows_used: 1, windows_skipped: 2,
+              rows: [row('missing', null, null, null, null, 0),
+                     row('zero', 0, 0, 0, 0, 2),
+                     row('partial', 3, 2, 1, 0.5, 1)]};
+function cells(id) {
+    const rows = [...container.innerHTML.matchAll(/<tr>([\s\S]*?)<\/tr>/g)];
+    const row = rows.find(match => match[1].includes('>' + id + '</td>'));
+    if (!row) throw Error('missing row ' + id);
+    return [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(match => match[1]);
+}
+context.displayWeeklyUsageReport(data);
+if (!container.innerHTML.includes('Windows Used:</strong> 1') ||
+    !container.innerHTML.includes('Product-window rows omitted:</strong> 2') ||
+    container.innerHTML.includes('undefined')) throw Error('bad window counts');
+if (cells('missing').slice(6).join('|') !== '0|—|2|—|—|—|—') throw Error('missing displayed as zero');
+if (cells('zero').slice(6).join('|') !== '0|0|2|0|0|0|0') throw Error('valid zero lost');
+if (cells('partial')[10] !== '—') throw Error('partial usage shown as full total');
+context.currentWeeklyUsageView = 'raw';
+context.displayWeeklyUsageReport(data);
+if (cells('missing').slice(5).join('|') !== '0|—|2|—|—|—|—') throw Error('raw missing displayed as zero');
+data.windows_used = [{}, {}];
+data.windows_skipped = [{window_start: '2026-01-01', window_end: '2026-01-02'}];
+context.displayWeeklyUsageReport(data);
+if (!container.innerHTML.includes('Windows Used:</strong> 2') ||
+    !container.innerHTML.includes('Product-window rows omitted:</strong> 1')) throw Error('bad array window counts');
+"""
+        result = subprocess.run(
+            [node, "-e", script], input=json.dumps(rewritten[start:end]),
+            text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_predictive_invalid_sources_fail_explicitly_and_zero_usage_is_valid(self):
         self.save_data({"Alice": {

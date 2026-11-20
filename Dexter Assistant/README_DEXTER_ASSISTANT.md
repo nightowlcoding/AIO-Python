@@ -105,6 +105,14 @@ history is never presented as a complete observed year.
 
 Existing weekly usage now uses nonoverlapping seven-day windows clipped to the
 requested dates, with four-week daily averages weighted by usable sample days.
+For weekly reports only, missing inventory counts outside the available count
+history are assumed to be zero at each report-window boundary. These days are
+marked `assumed_zero` and counted in `assumed_zero_days` in the report and CSV.
+Usage based on that assumption is an estimate: received stock might still be on
+hand. Boundary sources are included in the API and CSV; stock-dependent order
+recommendations and valuation are unavailable when the ending stock is assumed.
+Actual counts continue to be used where available. Predictive par and
+product activity reports do not make this zero-count assumption.
 `avg_weekly_usage_4w` is seven-day demand; the compatibility field
 `avg_8day_usage_4w` is eight-day demand, not a weekly total. Daily activity
 retains signed usage and exposes estimates/unavailable days in `usage_summary`.
