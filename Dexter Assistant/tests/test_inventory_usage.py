@@ -259,6 +259,31 @@ class InventoryUsageTests(unittest.TestCase):
         self.assertEqual(payload["latest_averages"]["123"]["avg_daily_usage_4w"], 0)
         self.assertEqual(payload["latest_averages"]["123"]["assumed_zero_days"], 35)
 
+    def test_weekly_prices_use_latest_matching_invoice_at_each_window_end(self):
+        self.ns["inventory_data"] = {"Alice": {
+            "2026-01-04": {"123": 10}, "2026-01-18": {"123": 10},
+        }}
+        self.ns["invoice_import_log"] = [
+            {"location": "Alice", "delivery_date": "2026-01-18",
+             "products": {}, "product_prices": {"123": 3.33333}},
+            {"location": "Alice", "delivery_date": "2026-01-10",
+             "products": {}, "product_prices": {"123": 1}},
+            {"location": "Alice", "delivery_date": "2026-01-10",
+             "products": {}, "product_prices": {"123.0": 2}},
+            {"location": "Kingsville", "delivery_date": "2026-01-11",
+             "products": {}, "product_prices": {"123": 99}},
+            {"location": "Alice", "delivery_date": "2026-01-19",
+             "products": {}, "product_prices": {"123": 42}},
+        ]
+        url = "/api/reports/weekly-usage?start_date=2026-01-04&end_date=2026-01-17"
+        rows = self.client.get(url).get_json()["rows"]
+        self.assertEqual([row["unit_cost"] for row in rows], [2, 3.3333])
+        self.assertEqual([row["on_hand_value"] for row in rows], [20, 33.33])
+
+        exported = self.client.get(url.replace("weekly-usage?", "weekly-usage/export?"))
+        csv_rows = list(csv.DictReader(io.StringIO(exported.get_data(as_text=True))))
+        self.assertEqual([float(row["unit_cost"]) for row in csv_rows], [2, 3.3333])
+
     def test_weekly_assumptions_do_not_replace_real_count_intervals(self):
         self.ns["inventory_data"] = {"Alice": {
             "2026-01-07": {"123": 4}, "2026-01-09": {"123": 2},

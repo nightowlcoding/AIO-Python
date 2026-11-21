@@ -3599,9 +3599,8 @@ def _register_usage_reports_endpoints(flask_app) -> None:
     if flask_app is None:
         return
 
-    def _usage_latest_unit_cost(location_name: str, product_num: str, as_of_day):
-        latest_cost = 0.0
-        latest_date = None
+    def _usage_prepare_unit_costs(location_name: str):
+        prices_by_product = defaultdict(list)
         log_rows = globals().get("invoice_import_log") or []
         for entry in log_rows if isinstance(log_rows, list) else []:
             if not isinstance(entry, dict):
@@ -3610,7 +3609,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                 continue
             date_key = str(entry.get("delivery_date") or "").strip()
             day = _safe_parse_date(date_key)
-            if day is None or day > as_of_day:
+            if day is None:
                 continue
 
             price_map = entry.get("product_prices")
@@ -3618,13 +3617,15 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                 continue
 
             for raw_num, raw_price in price_map.items():
-                if _canonical_product_number(raw_num) != product_num:
-                    continue
-                price = _usage_to_float(raw_price, 0.0)
-                if latest_date is None or day >= latest_date:
-                    latest_date = day
-                    latest_cost = price
-        return round(latest_cost, 4)
+                product_num = _canonical_product_number(raw_num)
+                if product_num:
+                    prices_by_product[product_num].append((day, _usage_to_float(raw_price, 0.0)))
+
+        prepared = {}
+        for product_num, prices in prices_by_product.items():
+            prices.sort(key=lambda item: item[0])
+            prepared[product_num] = ([day for day, _ in prices], [price for _, price in prices])
+        return prepared
 
     def api_product_activity_usage_runtime():
         location_name = str(request.args.get("location") or _effective_runtime_location()).strip()
@@ -3750,6 +3751,7 @@ def _register_usage_reports_endpoints(flask_app) -> None:
 
         inventory_by_product = _usage_group_by_product_inventory(location_name)
         receipts_by_product = _usage_group_by_product_receipts(location_name)
+        unit_costs_by_product = _usage_prepare_unit_costs(location_name)
         products = globals().get("products_list") or []
         if not isinstance(products, list):
             products = []
@@ -3883,7 +3885,9 @@ def _register_usage_reports_endpoints(flask_app) -> None:
                     else days_of_supply > upper_dos if days_of_supply is not None else False
                 )
 
-                unit_cost = _usage_latest_unit_cost(location_name, product_num, window_end_marker)
+                price_dates, prices = unit_costs_by_product.get(product_num, ([], []))
+                price_index = bisect_right(price_dates, window_end_marker) - 1
+                unit_cost = round(prices[price_index], 4) if price_index >= 0 else 0.0
                 on_hand_value = reliable_ending_inv * unit_cost if reliable_ending_inv is not None else None
                 excess_qty = max(0.0, reliable_ending_inv - target_stock) if reliable_ending_inv is not None and target_stock is not None else None
                 excess_value = excess_qty * unit_cost if excess_qty is not None else None
