@@ -15,6 +15,7 @@ import unittest
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from html import escape, unescape
 from pathlib import Path
 
 from flask import Flask, jsonify, request
@@ -39,7 +40,10 @@ class InventoryUsageTests(unittest.TestCase):
             "_usage_prepare_inventory", "_usage_snapshot_value_prepared",
             "_usage_daily_series_for_product", "_usage_daily_summary",
             "_usage_velocity_profile", "_register_usage_reports_endpoints",
-            "_rewrite_weekly_usage_display",
+            "_rewrite_weekly_usage_display", "_rewrite_product_activity_display",
+            "_rewrite_price_report_location", "_normalize_runtime_location_text",
+            "_dexter_selected_location_from_headers", "_dexter_selected_restaurant_id_from_headers",
+            "_collect_requested_location_values", "_install_dexter_location_guard_patch",
         }
         functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names]
         self.assertEqual({node.name for node in functions}, names)
@@ -47,6 +51,7 @@ class InventoryUsageTests(unittest.TestCase):
             "date": date, "datetime": datetime, "timedelta": timedelta,
             "defaultdict": defaultdict, "bisect_left": bisect_left, "bisect_right": bisect_right,
             "math": math, "re": re, "json": json, "csv": csv, "io": io, "logging": logging,
+            "_html_escape": escape, "_html_unescape": unescape,
             "request": request, "jsonify": jsonify, "ROOT": Path(self.temp.name),
             "INVOICE_IMPORT_LOG_PATH": self.data_dir / "invoice_import_log.json",
             "_effective_runtime_location": lambda: "Alice",
@@ -226,7 +231,7 @@ class InventoryUsageTests(unittest.TestCase):
         self.assertIsNone(first["do_not_order"])
         self.assertEqual(payload["latest_averages"]["123"]["assumed_zero_days"], 14)
         exported = self.client.get(
-            "/api/reports/weekly-usage/export?start_date=2026-01-04&end_date=2026-01-17"
+            "/api/reports/weekly-usage/export?start_date=2026-01-04&end_date=2026-01-17&layout=windows"
         )
         self.assertEqual(exported.status_code, 200)
         csv_rows = list(csv.DictReader(io.StringIO(exported.get_data(as_text=True))))
@@ -235,7 +240,11 @@ class InventoryUsageTests(unittest.TestCase):
         self.assertEqual(csv_rows[0]["ending_inventory_source"], "assumed_zero")
         self.assertEqual(csv_rows[0]["suggested_order_qty"], "")
         self.assertEqual(self.client.get("/api/reports/weekly-usage/export").status_code, 400)
-
+        summary = list(csv.DictReader(io.StringIO(self.client.get(
+            "/api/reports/weekly-usage/export?start_date=2026-01-04&end_date=2026-01-17"
+        ).get_data(as_text=True))))
+        self.assertEqual(len(summary), 1)
+        self.assertEqual((summary[0]["windows"], float(summary[0]["total_usage"])), ("2", 21))
         self.ns["inventory_data"] = {"Alice": {"2026-01-11": {"123": 4}}}
         payload = self.client.get(
             "/api/reports/weekly-usage?start_date=2026-01-04&end_date=2026-01-17"
@@ -280,7 +289,7 @@ class InventoryUsageTests(unittest.TestCase):
         self.assertEqual([row["unit_cost"] for row in rows], [2, 3.3333])
         self.assertEqual([row["on_hand_value"] for row in rows], [20, 33.33])
 
-        exported = self.client.get(url.replace("weekly-usage?", "weekly-usage/export?"))
+        exported = self.client.get(url.replace("weekly-usage?", "weekly-usage/export?layout=windows&"))
         csv_rows = list(csv.DictReader(io.StringIO(exported.get_data(as_text=True))))
         self.assertEqual([float(row["unit_cost"]) for row in csv_rows], [2, 3.3333])
 
@@ -302,6 +311,114 @@ class InventoryUsageTests(unittest.TestCase):
             "assumed_zero", "assumed_zero", "assumed_zero", "estimated_gap",
             "estimated_gap", "assumed_zero", "assumed_zero",
         ])
+
+    def test_activity_display_limits_descriptions_and_keeps_full_text(self):
+        node = shutil.which("node")
+        bytecode = ROOT / "Inventory Control 3" / "app.pyc"
+        if not node or bytecode.read_bytes()[:4] != importlib.util.MAGIC_NUMBER:
+            self.skipTest("Node and the matching application bytecode are required")
+        with bytecode.open("rb") as source:
+            source.read(16)
+            code = marshal.load(source)
+
+        def find_html(code_object):
+            for value in code_object.co_consts:
+                if isinstance(value, types.CodeType):
+                    found = find_html(value)
+                    if found:
+                        return found
+                elif isinstance(value, str) and "function displayProductActivityReport(data) {" in value:
+                    return value
+            return None
+
+        original = find_html(code)
+        self.assertIsNotNone(original)
+        with self.assertNoLogs(level="WARNING"):
+            rewritten = self.ns["_rewrite_product_activity_display"](original)
+        start = rewritten.index("function displayProductActivityReport(data) {")
+        end = rewritten.index("function generateWeeklyUsageReport()", start)
+        script = r"""
+const vm = require('vm');
+const source = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const container = {};
+const escape = value => String(value ?? '').replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const context = {
+    document: {getElementById: () => container},
+    initializeReportQuickEditHandlers: () => {},
+    escapeHtml: escape, escapeAttr: escape,
+    formatReportQuickValue: value => String(value),
+    buildReportQuickCell: () => 'editable',
+};
+vm.createContext(context);
+vm.runInContext(source, context);
+const descriptions = ['Short', '12345678901234567890', '1234567890123456789"<more'];
+const products = descriptions.map((description, i) => ({
+    product_number: String(i), description, brand: 'Brand', package_size: '4/5 LB',
+    inventory_dates: [], order_dates: []
+}));
+context.displayProductActivityReport({
+    products, total_products: products.length, location: 'Alice',
+    date_range: {start: '2026-01-01', end: '2026-01-02'}
+});
+const html = container.innerHTML;
+if (!html.includes('title="Short" aria-label="Short" tabindex="0"><span class="ic3-description-short" aria-hidden="true">Short</span>'))
+    throw Error('short description');
+if (!html.includes('<span class="ic3-description-short" aria-hidden="true">12345678901234567890</span>'))
+    throw Error('exact-length description');
+if (!html.includes('title="1234567890123456789&quot;&lt;more" aria-label="1234567890123456789&quot;&lt;more"'))
+    throw Error('long description or unsafe title');
+if (!html.includes('<span class="ic3-description-short" aria-hidden="true">1234567890123456789…</span>') ||
+    !html.includes('<span class="ic3-description-full" aria-hidden="true">1234567890123456789&quot;&lt;more</span>'))
+    throw Error('long description is not truncated and expandable');
+if (!html.includes('editable')) throw Error('package quick edit lost');
+"""
+        result = subprocess.run(
+            [node, "-e", script], input=json.dumps(rewritten[start:end]),
+            text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_price_report_location_matches_portal_scope(self):
+        html = (
+            '<select id="priceReportLocation">'
+            '<option value="all">All Locations</option>'
+            '<option value="Kingsville">Kingsville</option>'
+            '<option value="Alice">Alice</option></select>'
+        )
+        rewrite = self.ns["_rewrite_price_report_location"]
+        self.assertEqual(rewrite(html, ""), html)
+        self.assertEqual(
+            rewrite(html, "Alice Main"),
+            '<select id="priceReportLocation"><option value="Alice">Alice</option></select>',
+        )
+        self.assertEqual(
+            rewrite(html, 'Other & "More"'),
+            '<select id="priceReportLocation"><option value="Other &amp; &quot;More&quot;">'
+            'Other &amp; &quot;More&quot;</option></select>',
+        )
+
+        self.ns["app"] = self.app
+        self.ns["_install_dexter_location_guard_patch"]()
+        self.app.add_url_rule(
+            "/api/reports/price-fluctuations",
+            "price_report_test",
+            lambda: jsonify({"success": True}),
+        )
+        headers = {"X-Dexter-Restaurant-Location": "Alice"}
+        self.assertEqual(
+            self.client.get("/api/reports/price-fluctuations?location=all", headers=headers).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get("/api/reports/price-fluctuations?location=Kingsville", headers=headers).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get("/api/reports/price-fluctuations?location=Alice", headers=headers).status_code,
+            200,
+        )
 
     def test_weekly_display_distinguishes_missing_counts_from_zero(self):
         node = shutil.which("node")

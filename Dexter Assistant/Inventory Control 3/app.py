@@ -2,6 +2,7 @@ from flask import jsonify, request
 from pathlib import Path
 from collections import defaultdict
 from bisect import bisect_left, bisect_right
+from html import escape as _html_escape, unescape as _html_unescape
 import csv
 import io
 import json
@@ -3025,6 +3026,39 @@ MOBILE_UI_SCRIPT = r"""
 """
 
 
+def _rewrite_product_activity_display(payload: str) -> str:
+    start = payload.find("function displayProductActivityReport(data) {")
+    end = payload.find("function generateWeeklyUsageReport()", start)
+    if start < 0 or end < 0:
+        return payload
+
+    display = payload[start:end]
+    original = (
+        """border: 1px solid #dee2e6;">' + escapeHtml(product.description || '');"""
+    )
+    replacement = (
+        """border: 1px solid #dee2e6;" title="' + escapeAttr(product.description || '') """
+        """+ '" aria-label="' + escapeAttr(product.description || '') + '" tabindex="0">' """
+        """+ '<span class="ic3-description-short" aria-hidden="true">' """
+        """+ escapeHtml(Array.from(String(product.description || '')).length > 20 """
+        """? Array.from(String(product.description)).slice(0, 19).join('') + '\\u2026' """
+        """: String(product.description || '')) + '</span>' """
+        """+ '<span class="ic3-description-full" aria-hidden="true">' """
+        """+ escapeHtml(product.description || '') + '</span>';"""
+    )
+    if original not in display:
+        logging.warning("Product activity display patch did not find the description cell")
+    else:
+        display = display.replace(original, replacement, 1)
+    display = display.replace(
+        "Quick edit: click a value, adjust, then save &#128190;.",
+        "Quick edit: click a value, adjust, then save &#128190;. "
+        "Click a description to see it in full; scroll sideways to see dates.",
+        1,
+    )
+    return payload[:start] + display + payload[end:]
+
+
 def _rewrite_weekly_usage_display(payload: str) -> str:
     start = payload.find("function displayWeeklyUsageReport(data) {")
     end = payload.find("function setWeeklyUsageView(viewName) {", start)
@@ -3098,7 +3132,31 @@ def _rewrite_weekly_usage_display(payload: str) -> str:
     )
 
 
-def _rewrite_bulk_upload_text(payload: str) -> str:
+def _rewrite_price_report_location(payload: str, scoped_location: str) -> str:
+    if not scoped_location:
+        return payload
+
+    match = re.search(
+        r'(<select\b[^>]*\bid="priceReportLocation"[^>]*>)(.*?)(</select>)',
+        payload,
+        flags=re.DOTALL,
+    )
+    if not match:
+        return payload
+
+    normalized_scope = _normalize_runtime_location_text(scoped_location)
+    options = re.findall(r'<option\b[^>]*value="([^"]*)"[^>]*>.*?</option>', match.group(2), re.DOTALL)
+    location = next(
+        (value for value in options if _normalize_runtime_location_text(_html_unescape(value)) == normalized_scope),
+        None,
+    )
+    if location is None:
+        location = _html_escape(scoped_location, quote=True)
+    replacement = match.group(1) + '<option value="' + location + '">' + location + '</option>' + match.group(3)
+    return payload[:match.start()] + replacement + payload[match.end():]
+
+
+def _rewrite_bulk_upload_text(payload: str, scoped_location: str = "") -> str:
     literal_replacements = (
         ("Bulk Upload (Up to 20)", "Bulk Upload"),
         ("Add up to 20 invoices at once. Each invoice can have its own delivery date.", "Add as many invoices as needed. Each invoice can have its own delivery date."),
@@ -3117,7 +3175,9 @@ def _rewrite_bulk_upload_text(payload: str) -> str:
         ),
     )
 
-    updated = _rewrite_weekly_usage_display(payload)
+    updated = _rewrite_price_report_location(
+        _rewrite_product_activity_display(_rewrite_weekly_usage_display(payload)), scoped_location
+    )
     for old, new in literal_replacements:
         updated = updated.replace(old, new)
 
@@ -3991,6 +4051,41 @@ def _register_usage_reports_endpoints(flask_app) -> None:
         if isinstance(response, tuple):
             return response
         data = response.get_json()
+        if str(request.args.get("layout") or "summary").lower() != "windows":
+            by_product = {}
+            for row in data["rows"]:
+                by_product.setdefault(row["product_number"], []).append(row)
+            summary_columns = (
+                "product_number", "description", "brand", "group", "package_size", "windows",
+                "range_start", "range_end_exclusive", "assumed_zero_days", "beginning_inventory",
+                "total_orders", "ending_inventory", "total_usage", "avg_8day_usage_4w",
+                "avg_daily_usage_4w", "velocity_band", "days_of_supply", "suggested_order_qty",
+                "unit_cost", "on_hand_value",
+            )
+            output = io.StringIO(newline="")
+            writer = csv.DictWriter(output, fieldnames=summary_columns, extrasaction="ignore")
+            writer.writeheader()
+            for product_rows in by_product.values():
+                first, last = product_rows[0], product_rows[-1]
+                latest = data["latest_averages"].get(first["product_number"], {})
+                unavailable = any(r["usage_summary"]["unavailable_days"] for r in product_rows)
+                usages = [r["usage"] for r in product_rows if r["usage"] is not None]
+                writer.writerow({
+                    **last,
+                    "windows": len(product_rows),
+                    "range_start": first["window_start"],
+                    "range_end_exclusive": last["window_end"],
+                    "assumed_zero_days": latest.get("assumed_zero_days"),
+                    "beginning_inventory": first["beginning_inventory"],
+                    "total_orders": round(sum(r["total_orders"] for r in product_rows), 2),
+                    "total_usage": None if unavailable or not usages else round(sum(usages), 2),
+                    "avg_8day_usage_4w": latest.get("avg_8day_usage_4w"),
+                    "avg_daily_usage_4w": latest.get("avg_daily_usage_4w"),
+                })
+            return flask_app.response_class(
+                output.getvalue(), mimetype="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="weekly_usage_summary_{data["start_date"]}_to_{data["end_date"]}.csv"'},
+            )
         columns = (
             "product_number", "description", "brand", "group", "package_size",
             "case_count_type", "member_product_numbers", "rolled_up_sub_count",
@@ -5482,7 +5577,7 @@ def _install_global_flask_response_patch() -> None:
                     response.direct_passthrough = False
 
                 body = response.get_data(as_text=True)
-                rewritten = rewrite_func(body)
+                rewritten = rewrite_func(body, _dexter_selected_location_from_headers())
                 if rewritten != body:
                     response.set_data(rewritten)
                     if "Content-Length" in response.headers:
@@ -6096,18 +6191,48 @@ def _install_dexter_ui_patch() -> None:
         "table th:nth-child(2),table td:nth-child(2){width:22%!important;}"
         "table th:nth-child(3),table td:nth-child(3){width:15%!important;}"
         "table th:nth-child(4),table td:nth-child(4){width:10%!important;}"
-        # Product Activity report: reduce wide sticky columns and fix sticky left offsets.
-        # Widths: Product#=120px, Description=180px, Brand=120px, PackageSize=90px.
-        # min-width:0!important overrides the compiled inline min-width (300/220/160px).
-        # left:Xpx!important fixes sticky offsets that were calculated from the old widths.
-        "#reportContent table th:nth-child(2){width:180px!important;min-width:0!important;max-width:180px!important;}"
-        "#reportContent table th:nth-child(3){width:120px!important;min-width:0!important;max-width:120px!important;left:300px!important;}"
-        "#reportContent table td:nth-child(3){left:300px!important;}"
-        "#reportContent table th:nth-child(4){width:90px!important;min-width:0!important;max-width:90px!important;left:420px!important;}"
-        "#reportContent table td:nth-child(4){left:420px!important;}"
-        "#reportContent table th:nth-child(2),#reportContent table th:nth-child(3),#reportContent table th:nth-child(4),"
-        "#reportContent table td:nth-child(2),#reportContent table td:nth-child(3),#reportContent table td:nth-child(4)"
-        "{white-space:normal!important;word-break:break-word!important;text-overflow:clip!important;overflow:hidden!important;vertical-align:top!important;}"
+        "#reportContent table{width:max-content!important;min-width:100%;table-layout:auto!important;}"
+        "#reportContent table th,#reportContent table td{box-sizing:border-box;}"
+        "#reportContent table th:nth-child(1),#reportContent table td:nth-child(1)"
+        "{width:90px!important;min-width:90px!important;max-width:90px!important;}"
+        "#reportContent table th:nth-child(2),#reportContent table td:nth-child(2)"
+        "{width:165px!important;min-width:165px!important;max-width:165px!important;left:90px!important;}"
+        "#reportContent table th:nth-child(3),#reportContent table td:nth-child(3)"
+        "{width:120px!important;min-width:120px!important;max-width:120px!important;left:255px!important;}"
+        "#reportContent table th:nth-child(4),#reportContent table td:nth-child(4)"
+        "{width:80px!important;min-width:80px!important;max-width:80px!important;left:375px!important;}"
+        "#reportContent table th:nth-child(-n+4),#reportContent table td:nth-child(-n+4)"
+        "{white-space:normal!important;overflow-wrap:anywhere!important;text-overflow:clip!important;vertical-align:middle!important;}"
+        "#reportContent .ic3-description-full{display:none;}"
+        "#reportContent td:focus .ic3-description-short{display:none;}"
+        "#reportContent td:focus .ic3-description-full{display:inline;}"
+        "#reportContent table th:nth-child(n+5):nth-child(-n+9)"
+        "{width:85px!important;min-width:85px!important;white-space:normal!important;}"
+        "#reportContent table th:nth-child(n+10)"
+        "{width:105px!important;min-width:105px!important;white-space:normal!important;}"
+        "#reportContent table td:nth-child(n+5)"
+        "{white-space:normal!important;overflow-wrap:anywhere!important;text-overflow:clip!important;}"
+        "#reportContent table td:nth-child(4){overflow:visible!important;}"
+        "#reportContent table td:nth-child(4) .report-quick-editor"
+        "{position:absolute;top:100%;left:0;z-index:30;background:#fff;padding:6px;"
+        "border:1px solid #ced4da;border-radius:4px;box-shadow:0 2px 6px #0003;}"
+        "#reports table,#forecast table,#usagehistory table{font-size:14px!important;}"
+        "#weeklyUsageContent table,#priceReportContent table,#periodUsageContent table,"
+        "#forecast table,#usagehistory table"
+        "{width:max-content!important;min-width:100%;table-layout:auto!important;}"
+        "#weeklyUsageContent table th,#weeklyUsageContent table td,"
+        "#priceReportContent table th,#priceReportContent table td,"
+        "#periodUsageContent table th,#periodUsageContent table td,"
+        "#forecast table th,#forecast table td,#usagehistory table th,#usagehistory table td"
+        "{white-space:normal!important;overflow-wrap:anywhere!important;text-overflow:clip!important;}"
+        "#reports table th,#reports table td,#forecast table th,#forecast table td,"
+        "#usagehistory table th,#usagehistory table td"
+        "{padding:1px 6px!important;line-height:1.1;text-align:center!important;vertical-align:middle!important;}"
+        "@media (max-width:700px){"
+        "#reportContent table th:nth-child(n+2):nth-child(-n+4){left:auto!important;}"
+        "#reportContent table td:nth-child(n+2):nth-child(-n+4){position:relative!important;left:auto!important;}"
+        "}"
+        "@media (pointer:coarse){#reports .report-quick-edit-cell{min-height:32px;}}"
         "</style>"
     )
 
