@@ -17,6 +17,13 @@ services:
         value: 3.13.13
       - key: PYTHONUNBUFFERED
         value: "1"
+      # Limit glibc malloc arenas to curb memory fragmentation in threaded Python.
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      # Stop idle child apps (Manager App / IC3 / Product Mix) to stay under the
+      # 512 MB memory limit; they restart automatically on the next request.
+      - key: DEXTER_APP_IDLE_STOP_MINUTES
+        value: "20"
       - key: PM_OPEN_BROWSER
         value: "0"
       - key: PM_DEBUG

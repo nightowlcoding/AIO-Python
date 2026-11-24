@@ -147,6 +147,17 @@ try:
 except ValueError:
     APP_START_COOLDOWN_SEC = 45.0
 
+# Stop managed child apps after this many minutes without proxied traffic to
+# free memory (they restart automatically on the next request). Defaults to
+# 20 minutes on Render (512 MB instances OOM otherwise) and disabled locally.
+_APP_IDLE_STOP_DEFAULT = "20" if _running_on_render else "0"
+try:
+    APP_IDLE_STOP_MINUTES = float(
+        os.environ.get("DEXTER_APP_IDLE_STOP_MINUTES", _APP_IDLE_STOP_DEFAULT) or _APP_IDLE_STOP_DEFAULT
+    )
+except ValueError:
+    APP_IDLE_STOP_MINUTES = float(_APP_IDLE_STOP_DEFAULT)
+
 _DEXTER_SHUTDOWN_LOCK = threading.Lock()
 _DEXTER_SHUTDOWN_STARTED = False
 MAX_COMPANY_LOGO_BYTES = 2 * 1024 * 1024
@@ -3202,6 +3213,9 @@ class AppManager:
         self._start_cooldown_until: dict[str, float] = {
             name: 0.0 for name in config["apps"].keys()
         }
+        self._last_activity: dict[str, float] = {
+            name: 0.0 for name in config["apps"].keys()
+        }
         RUNTIME_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     def _prune_start_failures(self, name: str, now_ts: float) -> list[float]:
@@ -3346,6 +3360,46 @@ class AppManager:
             proc = self._procs.get(resolved_name)
             return bool(proc is not None and proc.poll() is None)
 
+    def touch(self, name: str) -> None:
+        """Record proxied activity for an app so the idle watcher keeps it alive."""
+        resolved_name = self.resolve_name(name)
+        if resolved_name:
+            self._last_activity[resolved_name] = time.time()
+
+    def stop_idle_apps(self, idle_seconds: float) -> list[str]:
+        """Stop running child apps with no proxied traffic for `idle_seconds`.
+
+        Frees memory on small instances; the proxy restarts an app on its next
+        request, so this only costs a short cold-start delay.
+        """
+        if idle_seconds <= 0:
+            return []
+        now_ts = time.time()
+        with self._lock:
+            candidates = []
+            for name in self.config["apps"].keys():
+                proc = self._procs.get(name)
+                if proc is None or proc.poll() is not None:
+                    continue
+                last = self._last_activity.get(name) or 0.0
+                if now_ts - last >= idle_seconds:
+                    candidates.append(name)
+
+        stopped: list[str] = []
+        for name in candidates:
+            # Re-check in case a request arrived while we were stopping others.
+            last = self._last_activity.get(name) or 0.0
+            if time.time() - last < idle_seconds:
+                continue
+            result = self.stop(name)
+            if result.get("ok"):
+                stopped.append(name)
+                print(
+                    f"[dexter idle] Stopped '{name}' after {int(idle_seconds)}s without traffic to free memory.",
+                    file=sys.stderr,
+                )
+        return stopped
+
     def preflight(self) -> dict[str, Any]:
         issues: dict[str, list[str]] = {}
         for name, app in self.config["apps"].items():
@@ -3488,6 +3542,7 @@ class AppManager:
                     break
                 time.sleep(0.25)
 
+            self._last_activity[resolved_name] = time.time()
             return {"ok": True, "message": f"Started {resolved_name}", "pid": proc.pid, "base_url": runtime_base_url}
 
     def stop(self, name: str) -> dict[str, Any]:
@@ -3661,6 +3716,25 @@ for _sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(_sig, _dexter_signal_handler)
     except Exception:
         pass
+
+# ----- Idle child-app watcher (memory guard for small instances) -----------
+def _idle_app_watcher() -> None:
+    idle_seconds = APP_IDLE_STOP_MINUTES * 60.0
+    while True:
+        time.sleep(60.0)
+        try:
+            MANAGER.stop_idle_apps(idle_seconds)
+        except Exception as exc:
+            print(f"[dexter idle] Watcher error: {exc}", file=sys.stderr)
+
+
+if APP_IDLE_STOP_MINUTES > 0:
+    threading.Thread(target=_idle_app_watcher, name="dexter-idle-app-watcher", daemon=True).start()
+    _startup_log(
+        f"[dexter] Idle app watcher enabled: child apps stop after {APP_IDLE_STOP_MINUTES:g} minutes without traffic"
+    )
+else:
+    _startup_log("[dexter] Idle app watcher disabled (DEXTER_APP_IDLE_STOP_MINUTES=0)")
 
 # ----- Auto-sync git scheduler for database persistence -----
 try:
@@ -6768,6 +6842,8 @@ def _proxy(name: str, path: str) -> ResponseReturnValue:
 
     if _is_proxy_location_scope_violation(resolved_name, path):
         return jsonify({"ok": False, "message": "Location is outside selected company scope"}), 403
+
+    MANAGER.touch(resolved_name)
 
     if not MANAGER.is_running(resolved_name):
         start_result = MANAGER.start(resolved_name)

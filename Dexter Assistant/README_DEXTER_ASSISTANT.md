@@ -118,6 +118,12 @@ product activity reports do not make this zero-count assumption.
 retains signed usage and exposes estimates/unavailable days in `usage_summary`.
 Clients must handle null values when counts cannot establish usage.
 
+In the Product Activity report, select a shortened description to show its full
+text, and scroll horizontally to view the date columns. On narrow screens, only
+the product number stays fixed while scrolling so the dates remain visible.
+In the Dexter portal, the Price Fluctuation report uses the selected location;
+switch locations in the portal to report on another location.
+
 Invalid request parameters return 400, an unknown inventory location returns
 404, unavailable files return 503, and malformed data returns 422 with a server
 log entry. The report does not write inventory, receipts, or saved par settings.
@@ -138,3 +144,19 @@ Use these in production or any HTTPS-backed deployment:
 Suggested defaults:
 - Development over HTTP: leave `DEXTER_SESSION_COOKIE_SECURE` and `DEXTER_ENABLE_HSTS` unset.
 - Production behind HTTPS: set `DEXTER_SESSION_COOKIE_SECURE=1` and `DEXTER_ENABLE_HSTS=1`.
+
+## Memory management on small instances
+The front door launches each portal app (Manager App, Inventory Control 3,
+Product Mix) as its own Python process and proxies to it. On a 512 MB Render
+instance those processes together can exceed the memory limit (Product Mix
+loads pandas on its first report and keeps it resident), causing an
+out-of-memory restart.
+
+To prevent this, child apps with no proxied traffic are stopped automatically
+and restarted on the next request (a short cold-start delay):
+- `DEXTER_APP_IDLE_STOP_MINUTES` - minutes of inactivity before a child app is
+  stopped. Defaults to `20` on Render and `0` (disabled) elsewhere. Set `0` to
+  disable.
+- `MALLOC_ARENA_MAX=2` - recommended on Linux deployments to reduce glibc
+  memory fragmentation in threaded Python (set in `render.yaml`).
+
